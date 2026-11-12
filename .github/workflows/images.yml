@@ -1,0 +1,36 @@
+# Build -> scan -> push. The image is pushed only when Trivy finds no HIGH/CRITICAL
+# vulnerability (the company's Prisma policy kills pods that have one).
+name: images
+on:
+  push:
+    branches: [main]
+    paths: ["apps/**", "skills/**", ".github/workflows/images.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+env:
+  # Pinned by digest: Trivy 0.69.4-0.69.6 images were compromised (2026-03); 0.69.3 is clean.
+  TRIVY: aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [chat-api, parser]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build -f apps/${{ matrix.app }}/Dockerfile -t ghcr.io/${{ github.repository_owner }}/chat-${{ matrix.app }}:${{ github.sha }} .
+      - name: Trivy (fail on HIGH/CRITICAL)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY" image \
+            --quiet --severity HIGH,CRITICAL --exit-code 1 --format table \
+            ghcr.io/${{ github.repository_owner }}/chat-${{ matrix.app }}:${{ github.sha }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push
+        run: docker push ghcr.io/${{ github.repository_owner }}/chat-${{ matrix.app }}:${{ github.sha }}

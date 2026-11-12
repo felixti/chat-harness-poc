@@ -1,0 +1,4 @@
+markitdown[pdf,docx,xlsx,xls,pptx]==0.1.9
+starlette
+uvicorn
+python-multipart

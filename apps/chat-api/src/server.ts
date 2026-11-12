@@ -1,14 +1,15 @@
 import "./no-subprocess.ts"; // first: enforce the "no subprocess" runtime rule
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { config } from "./config.ts";
 import { runTurn, type McpServer } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
-import { MemoryStore, type ConversationStore } from "./store.ts";
+import { openStore } from "./store.ts";
+import { hydrate, listLocal, persistChanges, persistFile, readWorkspaceFile, workspacePath } from "./workspace.ts";
 
-const store: ConversationStore = new MemoryStore();
+const store = await openStore(config.mongoUrl);
 const ID = /^[a-zA-Z0-9-]{8,64}$/;
 
 /** Identity: in the cluster the gateway authenticates (Entra OIDC) and forwards the user. */
@@ -16,10 +17,6 @@ function userOf(req: IncomingMessage): string {
 	const u = (req.headers["x-user-oid"] as string | undefined) ?? config.devUser;
 	if (!u || !ID.test(u)) throw Object.assign(new Error("unauthenticated"), { status: 401 });
 	return u;
-}
-
-function workspaceOf(user: string, conversation: string): string {
-	return join(config.tmpRoot, "ws", user, conversation);
 }
 
 function mcpServersFor(_user: string): McpServer[] {
@@ -34,14 +31,8 @@ function mcpServersFor(_user: string): McpServer[] {
 	return servers;
 }
 
-async function listFiles(dir: string, root = dir): Promise<{ path: string; size: number }[]> {
-	const out: { path: string; size: number }[] = [];
-	for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
-		const full = join(dir, e.name);
-		if (e.isDirectory()) out.push(...(await listFiles(full, root)));
-		else out.push({ path: relative(root, full), size: (await stat(full)).size });
-	}
-	return out;
+async function listFiles(dir: string) {
+	return (await listLocal(dir)).map(({ path, size }) => ({ path, size }));
 }
 
 async function body(req: IncomingMessage, limit: number): Promise<Buffer> {
@@ -64,8 +55,8 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 	const id = input.conversationId ?? randomUUID();
 	if (!ID.test(id) || !input.message) return json(res, 400, { error: "bad request" });
 	const existing = await store.get(user, id);
-	const workspace = workspaceOf(user, id);
-	await mkdir(join(workspace, "uploads"), { recursive: true });
+	const workspace = await hydrate(user, id);
+	const started = Date.now();
 
 	res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
 	const send = (e: unknown) => res.write(`data: ${JSON.stringify(e)}\n\n`);
@@ -82,6 +73,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 			onEvent: send,
 			signal: abort.signal,
 		});
+		await persistChanges(user, id, started);
 		await store.save({ id, user, title: existing?.title ?? input.message.slice(0, 60), entries: result.entries, updatedAt: new Date() });
 		send({ type: "done", conversationId: id, files: await listFiles(workspace) });
 	} catch (e) {
@@ -104,20 +96,22 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
 	const m = url.pathname.match(/^\/api\/conversations\/([^/]+)\/(files|uploads)(?:\/(.+))?$/);
 	if (m && ID.test(m[1])) {
-		const workspace = workspaceOf(user, m[1]);
-		if (m[2] === "files" && !m[3]) return json(res, 200, await listFiles(workspace));
+		const workspace = workspacePath(user, m[1]);
+		if (m[2] === "files" && !m[3]) return json(res, 200, await listFiles(await hydrate(user, m[1])));
 		if (m[2] === "files" && req.method === "GET") {
-			const file = insideWorkspace(workspace, decodeURIComponent(m[3]));
+			const rel = decodeURIComponent(m[3]);
+			const file = insideWorkspace(workspace, rel);
 			const name = file.split("/").pop()!;
 			return res
 				.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": `attachment; filename="${name}"` })
-				.end(await readFile(file));
+				.end(await readWorkspaceFile(user, m[1], rel, file));
 		}
 		if (m[2] === "uploads" && req.method === "POST" && m[3]) {
 			const name = decodeURIComponent(m[3]).replace(/[^\w.\- ]/g, "_");
 			const target = insideWorkspace(workspace, join("uploads", name));
 			await mkdir(join(workspace, "uploads"), { recursive: true });
 			await writeFile(target, await body(req, 100 * 1024 * 1024));
+			await persistFile(user, m[1], `uploads/${name}`);
 			return json(res, 201, { path: `uploads/${name}` });
 		}
 	}

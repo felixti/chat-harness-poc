@@ -19,6 +19,8 @@ export const config = {
 		accountUrl: env.BLOB_ACCOUNT_URL ?? "",
 		container: env.BLOB_CONTAINER ?? "chat-workspaces",
 	},
+	/** mongodb:// URL (FerretDB in the PoC); empty = in-memory history. */
+	mongoUrl: env.MONGO_URL ?? "",
 	parserUrl: env.PARSER_URL ?? "",
 	context7ApiKey: env.CONTEXT7_API_KEY ?? "",
 	/** Dev only: identity when no gateway header is present. */
