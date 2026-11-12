@@ -16,21 +16,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         app: [chat-api, parser]
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: docker build -f apps/${{ matrix.app }}/Dockerfile -t ghcr.io/${{ github.repository_owner }}/chat-${{ matrix.app }}:${{ github.sha }} .
+        run: docker build -f apps/${{ matrix.app }}/Dockerfile -t ghcr.io/${{ github.repository_owner }}/chat-harness-${{ matrix.app }}:${{ github.sha }} .
       - name: Trivy (fail on HIGH/CRITICAL)
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY" image \
             --quiet --severity HIGH,CRITICAL --exit-code 1 --format table \
-            ghcr.io/${{ github.repository_owner }}/chat-${{ matrix.app }}:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/chat-harness-${{ matrix.app }}:${{ github.sha }}
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Push
-        run: docker push ghcr.io/${{ github.repository_owner }}/chat-${{ matrix.app }}:${{ github.sha }}
+        run: docker push ghcr.io/${{ github.repository_owner }}/chat-harness-${{ matrix.app }}:${{ github.sha }}
