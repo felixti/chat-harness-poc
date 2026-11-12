@@ -1,0 +1,143 @@
+# Conversation history: FerretDB 2 (Apache-2.0, MongoDB wire protocol) on Postgres with the
+# DocumentDB extension (MIT). MongoDB Community is SSPL, so it is not used.
+# The password is generated in-cluster by External Secrets (never in git, never in Key Vault).
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: Password
+metadata:
+  name: chat-db-password
+  namespace: chat
+spec:
+  length: 32
+  digits: 6
+  symbols: 0
+  noUpper: false
+  allowRepeat: true
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: chat-db
+  namespace: chat
+spec:
+  refreshInterval: "0"          # generate once; never rotate under a running database
+  target:
+    name: chat-db
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  dataFrom:
+  - sourceRef:
+      generatorRef:
+        apiVersion: generators.external-secrets.io/v1alpha1
+        kind: Password
+        name: chat-db-password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-pg
+  namespace: chat
+spec:
+  selector: {app: chat-pg}
+  ports: [{name: pg, port: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: chat-pg
+  namespace: chat
+spec:
+  serviceName: chat-pg
+  replicas: 1
+  selector: {matchLabels: {app: chat-pg}}
+  template:
+    metadata:
+      labels: {app: chat-pg}
+    spec:
+      nodeSelector: {agentplatform.io/pool: platform}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: postgres
+        image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0@sha256:2386795ec2aa7ae559304361979f1dc5708d383ee9020ae63dadc2940dfe58f7
+        env:
+        - {name: POSTGRES_USER, value: ferret}
+        - {name: POSTGRES_DB, value: postgres}
+        - name: POSTGRES_PASSWORD
+          valueFrom: {secretKeyRef: {name: chat-db, key: password}}
+        - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+        ports: [{name: pg, containerPort: 5432}]
+        readinessProbe:
+          tcpSocket: {port: 5432}   # no exec probes: nothing is run inside the containers
+          periodSeconds: 10
+        resources:
+          requests: {cpu: 50m, memory: 256Mi}
+          limits: {memory: 768Mi}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}
+        volumeMounts:
+        - {name: data, mountPath: /var/lib/postgresql/data}
+        - {name: run, mountPath: /var/run/postgresql}
+        - {name: tmp, mountPath: /tmp}
+      volumes:
+      - {name: run, emptyDir: {}}
+      - {name: tmp, emptyDir: {}}
+  volumeClaimTemplates:
+  - metadata: {name: data}
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: agent-disk
+      resources: {requests: {storage: 4Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ferretdb
+  namespace: chat
+spec:
+  selector: {app: ferretdb}
+  ports: [{name: mongo, port: 27017}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ferretdb
+  namespace: chat
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: ferretdb}}
+  template:
+    metadata:
+      labels: {app: ferretdb}
+    spec:
+      nodeSelector: {agentplatform.io/pool: platform}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: ferretdb
+        image: ghcr.io/ferretdb/ferretdb:2.7.0@sha256:5706414241eb84f0515512c37b46db0f1b1eac9e5ceb7e4c2523211c184b1985
+        env:
+        - name: PG_PASSWORD
+          valueFrom: {secretKeyRef: {name: chat-db, key: password}}
+        - {name: FERRETDB_POSTGRESQL_URL, value: "postgres://ferret:$(PG_PASSWORD)@chat-pg:5432/postgres"}
+        - {name: FERRETDB_TELEMETRY, value: disable}
+        ports: [{name: mongo, containerPort: 27017}]
+        readinessProbe:
+          httpGet: {path: /debug/readyz, port: 8088}
+          periodSeconds: 10
+        resources:
+          requests: {cpu: 20m, memory: 64Mi}
+          limits: {memory: 256Mi}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}

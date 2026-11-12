@@ -1,0 +1,8 @@
+# Restricted PSS: the same bar as the company's Prisma posture rules.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chat
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
