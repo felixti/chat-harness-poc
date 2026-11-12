@@ -141,3 +141,7 @@ spec:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           capabilities: {drop: [ALL]}
+        volumeMounts:
+        - {name: state, mountPath: /state}   # FerretDB writes state.json (instance id) here
+      volumes:
+      - {name: state, emptyDir: {}}

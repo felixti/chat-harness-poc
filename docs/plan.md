@@ -20,3 +20,10 @@ Manual steps for the user (Claude stops and gives exact steps):
 
 Total, phases 1–4 with the cluster on 8 h/day for 5 days: about **R$40–60** on top of the
 current ~R$1.50/h cluster cost.
+
+## Progress
+
+| Date | Phase | Done |
+|---|---|---|
+| 2026-11-12 | 0 | Pi 1.5 SDK confirmed (see `spike.md`); P31 (Envoy 15 s route timeout) fixed in agent-platform-poc. |
+| 2026-11-12 | 1 | History in FerretDB (survives API restarts); Blob workspace sync (workload identity, container-scoped role); chat-api image on distroless debian13 and parser (markitdown) on Wolfi→scratch, both 0 HIGH/CRITICAL; CI build → Trivy → push; `tofu apply` (chat infra: identity, container; platform: Entra redirect URI, 30-day lifecycle) R$0; Argo app `chat-harness`; autoscaler added the 2nd `platform` node (~R$0.66/h while the cluster runs). |
