@@ -6,3 +6,4 @@ metadata:
   labels:
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/warn: restricted
+    agentplatform.io/secrets-access: "true"   # platform-keyvault store: OIDC client secret only
