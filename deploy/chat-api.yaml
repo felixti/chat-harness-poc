@@ -1,0 +1,66 @@
+# Chat API: Pi agent harness. Read-only root, /tmp only, no subprocess (enforced in code too).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chat-api
+  namespace: chat
+  annotations:
+    # infra/ output chat_api_client_id: Blob Data Contributor on container chat-workspaces only.
+    azure.workload.identity/client-id: 43db3c04-6f6a-4873-ac7b-e5d9cd50cf69
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-api
+  namespace: chat
+spec:
+  selector: {app: chat-api}
+  ports: [{name: http, port: 80, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-api
+  namespace: chat
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: chat-api}}
+  template:
+    metadata:
+      labels:
+        app: chat-api
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: chat-api
+      nodeSelector: {agentplatform.io/pool: platform}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: chat-api
+        image: ghcr.io/felixti/chat-harness-chat-api:2021e83aa9366e09e1f547f6e16c090c9e0eaae0
+        env:
+        - name: DB_PASSWORD
+          valueFrom: {secretKeyRef: {name: chat-db, key: password}}
+        - {name: MONGO_URL, value: "mongodb://ferret:$(DB_PASSWORD)@ferretdb:27017/chat"}
+        - {name: BLOB_ACCOUNT_URL, value: "https://stagentpocjt75.blob.core.windows.net"}
+        - {name: BLOB_CONTAINER, value: chat-workspaces}
+        - {name: PARSER_URL, value: "http://parser"}
+        - {name: LLM_BASE_URL, value: "http://llm-gateway.envoy-gateway-system.svc/api/v1"}
+        ports: [{name: http, containerPort: 8080}]
+        readinessProbe:
+          httpGet: {path: /healthz, port: 8080}
+        resources:
+          requests: {cpu: 100m, memory: 384Mi}
+          limits: {memory: 1536Mi}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}
+        volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes:
+      # Workspaces are a cache of Blob: losing the pod loses nothing.
+      - {name: tmp, emptyDir: {sizeLimit: 4Gi}}

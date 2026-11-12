@@ -1,0 +1,92 @@
+# Default deny, then only the paths the chat needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: chat
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: chat
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+  - to:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      podSelector: {matchLabels: {k8s-app: kube-dns}}
+    ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chat-api
+  namespace: chat
+spec:
+  podSelector: {matchLabels: {app: chat-api}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from:   # only the public Envoy (it sets x-user-oid)
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: envoy-gateway-system}}
+      podSelector: {matchLabels: {gateway.envoyproxy.io/owning-gateway-name: public}}
+    ports: [{port: 8080}]
+  egress:
+  - to: [{podSelector: {matchLabels: {app: ferretdb}}}]
+    ports: [{port: 27017}]
+  - to: [{podSelector: {matchLabels: {app: parser}}}]
+    ports: [{port: 8080}]
+  - to:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: envoy-gateway-system}}
+      podSelector: {matchLabels: {gateway.envoyproxy.io/owning-gateway-name: llm-gateway}}
+    ports: [{port: 10080}]
+  - to:     # HTTPS out: Blob, Entra (workload identity), MCP servers (Context7)
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+    ports: [{port: 443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: parser
+  namespace: chat
+spec:
+  podSelector: {matchLabels: {app: parser}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: chat-api}}}]
+    ports: [{port: 8080}]
+  egress: []   # no network at all
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ferretdb
+  namespace: chat
+spec:
+  podSelector: {matchLabels: {app: ferretdb}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: chat-api}}}]
+    ports: [{port: 27017}]
+  egress:
+  - to: [{podSelector: {matchLabels: {app: chat-pg}}}]
+    ports: [{port: 5432}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chat-pg
+  namespace: chat
+spec:
+  podSelector: {matchLabels: {app: chat-pg}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: ferretdb}}}]
+    ports: [{port: 5432}]
+  egress: []

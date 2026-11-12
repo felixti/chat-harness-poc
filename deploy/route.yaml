@@ -1,0 +1,63 @@
+# https://chat.<ip>.sslip.io -> chat-api, behind Entra ID sign-in.
+# A route-level SecurityPolicy replaces the Gateway-level one, so it repeats the OIDC login and
+# adds JWT validation of the Entra ID token, whose `oid` claim becomes x-user-oid (set by Envoy;
+# a client-sent x-user-oid is overwritten). chat-api trusts that header only because the
+# NetworkPolicy lets nothing but the public Envoy reach it.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: chat
+  namespace: chat
+spec:
+  parentRefs:
+  - {name: public, namespace: ingress, sectionName: https}
+  hostnames: [chat.20-121-208-105.sslip.io]
+  rules:
+  - backendRefs:
+    - {name: chat-api, port: 80}
+    timeouts:
+      request: 900s            # SSE turns run for minutes
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: chat-oidc
+  namespace: chat
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: platform-keyvault}
+  target: {name: chat-oidc}
+  data:
+  - secretKey: client-secret
+    remoteRef: {key: ingress-oidc-client-secret}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: chat-auth
+  namespace: chat
+spec:
+  targetRefs:
+  - {group: gateway.networking.k8s.io, kind: HTTPRoute, name: chat}
+  oidc:
+    provider:
+      issuer: https://login.microsoftonline.com/5f9bf155-4fca-4d0c-8201-ca5e6100f66e/v2.0
+    clientID: f1f0c17c-91cb-4f28-9cb1-2362016be1e8
+    clientSecret: {name: chat-oidc}
+    scopes: [openid, profile, email]
+    logoutPath: /oauth2/logout
+    refreshToken: true
+    forwardIDToken: {header: x-id-token}
+  jwt:
+    providers:
+    - name: entra
+      issuer: https://login.microsoftonline.com/5f9bf155-4fca-4d0c-8201-ca5e6100f66e/v2.0
+      audiences: [f1f0c17c-91cb-4f28-9cb1-2362016be1e8]
+      remoteJWKS:
+        uri: https://login.microsoftonline.com/5f9bf155-4fca-4d0c-8201-ca5e6100f66e/discovery/v2.0/keys
+      extractFrom:
+        headers:
+        - {name: x-id-token}
+      claimToHeaders:
+      - {claim: oid, header: x-user-oid}
+      - {claim: name, header: x-user-name}
