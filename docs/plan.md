@@ -27,3 +27,4 @@ current ~R$1.50/h cluster cost.
 |---|---|---|
 | 2026-11-12 | 0 | Pi 1.5 SDK confirmed (see `spike.md`); P31 (Envoy 15 s route timeout) fixed in agent-platform-poc. |
 | 2026-11-12 | 1 | History in FerretDB (survives API restarts); Blob workspace sync (workload identity, container-scoped role); chat-api image on distroless debian13 and parser (markitdown) on Wolfi→scratch, both 0 HIGH/CRITICAL; CI build → Trivy → push; `tofu apply` (chat infra: identity, container; platform: Entra redirect URI, 30-day lifecycle) R$0; Argo app `chat-harness`; autoscaler added the 2nd `platform` node (~R$0.66/h while the cluster runs). |
+| 2026-11-12 | 1 | In-cluster E2E passed: upload → `parse_document` (markitdown pod) → summary → `generate_pdf`; files restored from Blob and history from FerretDB after deleting the chat-api pod; other users see nothing; subprocess guard never fired. Fix on the way: P32 (Blob firewall ignores same-region IPs → AKS subnet service endpoint, R$0). |
