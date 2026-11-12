@@ -5,3 +5,8 @@ node_modules/
 .terraform/
 terraform.tfvars
 *.kubeconfig
+
+# downloaded test files
+testdata/*
+!testdata/README.md
+!testdata/fetch.sh
