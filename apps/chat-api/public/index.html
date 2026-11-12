@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat Harness PoC</title>
+<style>
+  :root { --bg:#fafaf9; --fg:#1c1917; --muted:#78716c; --line:#e7e5e4; --accent:#2563eb; --tool:#f5f5f4; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1c1917; --fg:#f5f5f4; --muted:#a8a29e; --line:#44403c; --accent:#60a5fa; --tool:#292524; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); display:grid; grid-template-columns: 1fr 260px; height:100vh; }
+  main { display:flex; flex-direction:column; min-width:0; }
+  #log { flex:1; overflow:auto; padding:16px; }
+  .msg { max-width:820px; margin:0 auto 14px; white-space:pre-wrap; word-wrap:break-word; }
+  .user { font-weight:600; }
+  .tool { font:12px ui-monospace, monospace; color:var(--muted); background:var(--tool); padding:4px 8px; border-radius:6px; margin:4px auto; max-width:820px; }
+  form { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--line); max-width:852px; width:100%; margin:0 auto; }
+  textarea { flex:1; resize:none; height:56px; font:inherit; padding:8px; border:1px solid var(--line); border-radius:8px; background:transparent; color:inherit; }
+  button, label.btn { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--accent); color:#fff; cursor:pointer; }
+  label.btn { background:transparent; color:var(--fg); }
+  aside { border-left:1px solid var(--line); padding:16px; overflow:auto; font-size:13px; }
+  aside a { color:var(--accent); display:block; word-break:break-all; margin:4px 0; }
+  input[type=text] { width:100%; font:inherit; padding:6px; border:1px solid var(--line); border-radius:6px; background:transparent; color:inherit; }
+  @media (max-width: 700px) { body { grid-template-columns: 1fr; } aside { display:none; } }
+</style>
+</head>
+<body>
+<main>
+  <div id="log"></div>
+  <form id="f">
+    <label class="btn" title="Enviar arquivo">📎<input id="file" type="file" hidden></label>
+    <textarea id="q" placeholder="Pergunte algo… (Enter envia, Shift+Enter quebra linha)"></textarea>
+    <button>Enviar</button>
+  </form>
+</main>
+<aside>
+  <strong>Skills fixadas</strong>
+  <input id="skills" type="text" placeholder="ex.: pdf, research">
+  <p><strong>Arquivos</strong></p>
+  <div id="files"><em>nenhum</em></div>
+  <p><button id="new" type="button">Nova conversa</button></p>
+</aside>
+<script>
+let conv = null;
+const log = document.getElementById("log");
+const add = (cls, text) => { const d = document.createElement("div"); d.className = cls; d.textContent = text; log.append(d); log.scrollTop = log.scrollHeight; return d; };
+const renderFiles = (files) => {
+  const box = document.getElementById("files"); box.innerHTML = "";
+  if (!files.length) return box.innerHTML = "<em>nenhum</em>";
+  for (const f of files) {
+    const a = document.createElement("a");
+    a.href = `api/conversations/${conv}/files/${encodeURIComponent(f.path)}`;
+    a.textContent = `${f.path} (${Math.ceil(f.size/1024)} KB)`;
+    box.append(a);
+  }
+};
+document.getElementById("new").onclick = () => { conv = null; log.innerHTML = ""; renderFiles([]); };
+document.getElementById("file").onchange = async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  conv ??= crypto.randomUUID();
+  add("tool", `enviando ${file.name}…`);
+  const r = await fetch(`api/conversations/${conv}/uploads/${encodeURIComponent(file.name)}`, { method: "POST", body: file });
+  const j = await r.json();
+  add("tool", r.ok ? `arquivo em ${j.path}` : `erro: ${j.error}`);
+  const q = document.getElementById("q"); q.value = (q.value ? q.value + "\n" : "") + `(arquivo enviado: ${j.path}) `;
+  e.target.value = "";
+};
+const q = document.getElementById("q");
+q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("f").requestSubmit(); } });
+document.getElementById("f").onsubmit = async (e) => {
+  e.preventDefault();
+  const message = q.value.trim(); if (!message) return;
+  q.value = "";
+  add("msg user", message);
+  const skills = document.getElementById("skills").value.split(",").map(s => s.trim()).filter(Boolean);
+  const out = add("msg", "");
+  const res = await fetch("api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ conversationId: conv ?? undefined, message, skills }) });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const line = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (!line.startsWith("data: ")) continue;
+      const ev = JSON.parse(line.slice(6));
+      if (ev.type === "start") conv = ev.conversationId;
+      else if (ev.type === "delta") { out.textContent += ev.text; log.scrollTop = log.scrollHeight; }
+      else if (ev.type === "tool") log.insertBefore(Object.assign(document.createElement("div"), { className: "tool", textContent: `⚙ ${ev.name} ${JSON.stringify(ev.args).slice(0, 160)}` }), out);
+      else if (ev.type === "done") renderFiles(ev.files);
+      else if (ev.type === "error") add("tool", `erro: ${ev.message}`);
+    }
+  }
+};
+</script>
+</body>
+</html>

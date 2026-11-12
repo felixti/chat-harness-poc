@@ -1,0 +1,22 @@
+# Chat harness PoC: plan
+
+Prices: Azure retail API, eastus, 2026-11-12, USD-BRL 5.58. Every `tofu apply` is approved
+separately with its cost.
+
+| Phase | What | Time | Infra cost |
+|---|---|---|---|
+| 0. Spike | Laptop only: Pi 1.5 SDK vs deepagents JS, same scenario (pinned skill + discovered skill, Context7 MCP, read a 50-page PDF via markdown slices, `generate_pdf` fallback). Pick the harness. | 1 day | R$0 (LLM tokens: cents) |
+| 1. Core | Repo, CI (build + Trivy), chat-api (Pi SDK, SSE, just-bash, Blob workspace, history), FerretDB on CNPG, markitdown parser, Blob container + lifecycle + SAS upload, minimal web page, Entra app + HTTPRoute | 1.5 days | ~R$0.66/h while the cluster runs (likely a 2nd `platform` node; the first is at 97 % CPU requests). Storage, Entra: ~R$0 |
+| 2. MCP + tokens | Own MCP (Entra OBO), GitHub OAuth App + per-user connect flow, token encryption (explicit FLE, local master key), 4 skills in `skills/` published to Blob | 1 day | R$0 (small pod on the same node) |
+| 3A. Sandbox A | ACA dynamic sessions, built-in Python code interpreter pool, egress off, managed identity → Session Executor role; `run_code` tool + file sync | 0.5 day | R$0.17 per session-hour (USD 0.03). Custom container pool avoided: Dedicated E16 ≈ R$9/h |
+| 3B. Sandbox B | agent-sandbox `SandboxTemplate` + `SandboxWarmPool` (size 1) on the Kata pool, default-deny egress, same `run_code` tool | 1 day | R$0.13 (Spot) to R$0.61 (on-demand) per hour while the warm sandbox exists |
+| 4. Benchmark | 7 metrics of design §5, report in `docs/benchmark.md` | 0.5 day | Within 3A/3B |
+
+Manual steps for the user (Claude stops and gives exact steps):
+
+1. Phase 1: approve the Entra app registration / consent if the CLI asks.
+2. Phase 2: create the GitHub OAuth App (Settings → Developer settings → OAuth Apps), ~3 min.
+3. Phase 2: approve the Entra API permission for the OBO MCP.
+
+Total, phases 1–4 with the cluster on 8 h/day for 5 days: about **R$40–60** on top of the
+current ~R$1.50/h cluster cost.

@@ -1,0 +1,30 @@
+{
+  "name": "chat-api",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --experimental-strip-types src/server.ts",
+    "start": "node --experimental-strip-types src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "1.5.2",
+    "@earendil-works/pi-coding-agent": "1.5.2",
+    "just-bash": "3.6.0",
+    "marked": "16.4.1",
+    "pdfmake": "0.2.20",
+    "typebox": "1.3.27"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "guarded-fetch": {
+      "undici": "7.30.1"
+    }
+  }
+}
