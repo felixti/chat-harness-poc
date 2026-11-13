@@ -42,7 +42,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
       - name: brave-mcp
-        image: ghcr.io/felixti/chat-harness-brave-mcp:IMAGE_TAG
+        image: ghcr.io/felixti/chat-harness-brave-mcp:4be5e0270a2b9c500c48233b791f8e0ea02afce1
         env:
         # Host header check: only the in-cluster service names.
         - {name: BRAVE_MCP_ALLOWED_HOSTS, value: "brave-mcp,brave-mcp.chat,brave-mcp.chat.svc,brave-mcp.chat.svc.cluster.local"}
