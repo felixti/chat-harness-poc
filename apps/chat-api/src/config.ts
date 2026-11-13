@@ -14,6 +14,8 @@ export const config = {
 		model: env.LLM_MODEL ?? "deepseek/deepseek-v4.1-flash-1017",
 		contextWindow: Number(env.LLM_CONTEXT_WINDOW ?? 200000),
 	},
+	/** OpenRouter image-output model for generate_image (through the same gateway). */
+	imageModel: env.IMAGE_MODEL ?? "google/gemini-3.1-flash-lite-image",
 	blob: {
 		/** e.g. https://stagentpocjt75.blob.core.windows.net ; empty = local-only workspaces */
 		accountUrl: env.BLOB_ACCOUNT_URL ?? "",

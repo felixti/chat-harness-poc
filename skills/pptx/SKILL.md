@@ -27,6 +27,11 @@ scale, themes, charts), so never try to position things yourself. Also read the 
 4. **Pick a layout per slide** (table below) and write the spec to `outputs/<name>.json`.
    Full field reference with examples: `reference.md` in this skill folder. Read it before the
    first spec of the conversation.
+4b. **Cover image (optional).** For the title slide and at most 2 section openers you may call
+   `generate_image` (`theme` = the deck theme, `aspect_ratio` 16:9) with a prompt describing a
+   calm, abstract or photographic scene about the topic, and set `"background_image": "<path>"`
+   on that slide. Never generate charts, numbers, diagrams, logos or people. Look at the image
+   it returns; if it shows text or clutter, generate once more with a clearer prompt or skip it.
 5. **Render:** `generate_pptx` with `spec: outputs/<name>.json`, `output: outputs/<name>.pptx`.
    The result has the lint warnings and **one preview image per slide**.
 6. **Review like a designer.** Fix every lint warning ("(measured)" ones come from the real

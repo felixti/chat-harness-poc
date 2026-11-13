@@ -86,3 +86,52 @@ test("xlsx with formulas, totals and csv", async () => {
 	assert.ok(zip(r.bytes));
 	assert.deepEqual(r.warnings, []);
 });
+
+test("background_image: full-bleed photo under a scrim on cover layouts, linted elsewhere", async () => {
+	const { mkdtemp, writeFile } = await import("node:fs/promises");
+	const { tmpdir } = await import("node:os");
+	const { join } = await import("node:path");
+	const PImage = await import("pureimage/dist/index.js");
+	const { PassThrough } = await import("node:stream");
+	// A busy, bright test picture: worst case for title contrast.
+	const img = PImage.make(320, 240);
+	const g = img.getContext("2d");
+	for (let x = 0; x < 320; x += 20) {
+		g.fillStyle = x % 40 ? "#FFFFFF" : "#F5C542";
+		g.fillRect(x, 0, 20, 240);
+	}
+	const chunks: Buffer[] = [];
+	const out = new PassThrough();
+	out.on("data", (d) => chunks.push(d));
+	await PImage.encodePNGToStream(img, out);
+	const dir = await mkdtemp(join(tmpdir(), "bgimg-"));
+	await writeFile(join(dir, "cover.png"), Buffer.concat(chunks));
+	const resolve = (p: string) => join(dir, p);
+	for (const theme of ["executive", "tech_night"]) {
+		const r = await renderDeck(
+			{
+				title: "t",
+				theme,
+				slides: [
+					{ layout: "title", title: "Mercado de IA no Brasil", subtitle: "Panorama 2026", background_image: "cover.png" },
+					{ layout: "section", number: 1, title: "Contexto", background_image: "cover.png" },
+					{ layout: "bullets", title: "Pontos", bullets: ["um", "dois"], background_image: "cover.png", notes: "n" },
+				],
+			},
+			{ workspace: dir, resolve, themes },
+		);
+		assert.equal(r.warnings.length, 1, `${theme}: ${r.warnings.join(" | ")}`);
+		assert.match(r.warnings[0], /slide 3: background_image works on/);
+		assert.ok(r.previews.every(png));
+	}
+});
+
+test("generate_image helpers: guardrails in the prompt, data URL parsing", async () => {
+	const { buildPrompt, firstImage } = await import("../src/office/image.ts");
+	const p = buildPrompt("calm port at dusk", ["1D2939", "0E9384"]);
+	assert.match(p, /#1D2939, #0E9384/);
+	assert.match(p, /Do not draw any text/);
+	const ok = firstImage({ choices: [{ message: { images: [{ image_url: { url: "data:image/jpeg;base64,/9j/AA==" } }] } }] });
+	assert.equal(ok.mime, "jpeg");
+	assert.throws(() => firstImage({ choices: [{ message: { content: "sorry" } }] }), /no image.*sorry/);
+});

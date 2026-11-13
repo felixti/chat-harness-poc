@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { config } from "../config.ts";
 import { renderDeck, loadThemes, LAYOUT_NAMES } from "./pptx.ts";
 import { contactSheet } from "./preview.ts";
+import { imageTool } from "./image.ts";
 import { markdownToDocx } from "./docx.ts";
 import { renderWorkbook } from "./xlsx.ts";
 
@@ -139,5 +140,5 @@ export function officeTools(workspace: string) {
 		},
 	});
 
-	return [pptx, docx, xlsx];
+	return [pptx, docx, xlsx, imageTool(workspace, themesDir)];
 }

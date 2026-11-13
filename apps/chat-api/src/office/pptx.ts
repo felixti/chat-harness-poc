@@ -160,6 +160,8 @@ interface Ctx {
 	workspace: string;
 	warn: (slide: number, msg: string) => void;
 	resolve: (p: string) => string;
+	/** Data URI of the current slide's background_image (cover layouts only). */
+	bgImage?: string;
 }
 
 function bg(slide: any, color: string) {
@@ -244,6 +246,14 @@ function badge(c: Ctx, slide: any, n: number, name: unknown, x: number, y: numbe
 
 /** Background + colors for full-bleed slides (title, section, statement, closing). */
 function cover(c: Ctx, slide: any): { fg: string; hi: string } {
+	if (c.bgImage) {
+		// Photo/illustration full bleed under a strong scrim of the cover color: text keeps its contrast.
+		const base = c.t.darkCover ? c.t.bg : c.t.accent;
+		bg(slide, base);
+		slide.addImage({ data: c.bgImage, x: 0, y: 0, w: W, h: H, sizing: { type: "cover", w: W, h: H } });
+		slide.addShape(c.pptx.ShapeType.rect, { x: 0, y: 0, w: W, h: H, fill: { color: base, transparency: 30 }, line: { type: "none" } });
+		return c.t.darkCover ? { fg: c.t.ink, hi: c.t.accent } : { fg: c.t.onAccent, hi: c.t.onAccent };
+	}
 	if (c.t.darkCover) {
 		bg(slide, c.t.bg);
 		rings(c, slide, c.t.accent);
@@ -395,7 +405,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 	},
 
 	statement(c, slide, s, n) {
-		const dark = s.dark !== false;
+		const dark = s.dark !== false || !!c.bgImage;
 		let color = c.t.ink;
 		let hi = c.t.accent;
 		if (dark) ({ fg: color, hi } = cover(c, slide));
@@ -474,7 +484,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 
 	big_number(c, slide, s, n) {
 		// One number that carries the slide: 120 pt hero figure, label, context.
-		const dark = !!s.dark;
+		const dark = !!s.dark || !!c.bgImage;
 		let ink = c.t.ink;
 		let hi = c.t.accent;
 		if (dark) ({ fg: ink, hi } = cover(c, slide));
@@ -743,9 +753,12 @@ export async function renderDeck(deck: DeckSpec, opts: RenderOptions): Promise<R
 	const recs: Recorded[] = [];
 	const c: Ctx = { pptx, t, deck, workspace: opts.workspace, resolve: opts.resolve, warn: (n, m) => warnings.push(`slide ${n}: ${m}`) };
 
+	const withImage = deck.slides.filter((s) => s.background_image).length;
+	if (withImage > 3) warnings.push(`${withImage} slides with background_image; use at most 3 (cover, section openers) so they stay special`);
 	for (const [i, s] of deck.slides.entries()) {
 		const n = i + 1;
 		const layout = LAYOUTS[s.layout];
+		c.bgImage = s.background_image ? await bgImage(c, s, n) : undefined;
 		const slide = pptx.addSlide();
 		recs.push(record(slide));
 		bg(slide, t.bg);
@@ -773,6 +786,27 @@ export async function renderDeck(deck: DeckSpec, opts: RenderOptions): Promise<R
 	}
 	const bytes = (await pptx.write({ outputType: "nodebuffer", compression: true })) as Buffer;
 	return { bytes, slides: deck.slides.length, warnings, previews };
+}
+
+const IMAGE_COVERS = new Set(["title", "section", "statement", "closing", "big_number"]);
+
+async function bgImage(c: Ctx, s: SlideSpec, n: number): Promise<string | undefined> {
+	const path = String(s.background_image);
+	if (!IMAGE_COVERS.has(s.layout)) {
+		c.warn(n, `background_image works on ${[...IMAGE_COVERS].join(", ")}; for "${s.layout}" use the image layout`);
+		return undefined;
+	}
+	const ext = extname(path).slice(1).toLowerCase().replace("jpg", "jpeg");
+	if (ext !== "png" && ext !== "jpeg") {
+		c.warn(n, `background_image must be .png or .jpg (got ${path})`);
+		return undefined;
+	}
+	try {
+		return `image/${ext};base64,${(await readFile(c.resolve(path))).toString("base64")}`;
+	} catch (e) {
+		c.warn(n, `background_image ${path} not loaded: ${(e as Error).message}`);
+		return undefined;
+	}
 }
 
 export const LAYOUT_NAMES = Object.keys(LAYOUTS);

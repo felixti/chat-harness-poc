@@ -87,6 +87,15 @@ title, e.g. the section name), `subtitle`, `notes` (speaker notes), `source` (fo
 {"layout": "closing", "title": "Próximos passos", "bullets": ["Aprovar teto de desconto (Ana, 15/12)"], "subtitle": "Contato: fpa@empresa.com"}
 ```
 
+`background_image` (title, section, statement, closing, big_number): a `.png`/`.jpg` from the
+workspace, usually made by `generate_image`. It fills the slide under a strong scrim of the cover
+color, so the text stays readable. Use it on at most 3 slides; on other layouts it is ignored
+with a warning (use the `image` layout there).
+
+```json
+{"layout": "title", "title": "IA generativa no Brasil em 2026", "subtitle": "Onde está o valor", "background_image": "outputs/img/cover.jpg"}
+```
+
 ## Icons
 
 Lucide icon names (2,275 available, https://lucide.dev/icons). Common ones:

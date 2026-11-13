@@ -579,6 +579,13 @@ async function drawImage(c: any, o: Opts) {
 	s.end(buf);
 	const img = m[1] === "png" ? await PImage.decodePNGFromStream(s) : await PImage.decodeJPEGFromStream(s);
 	const bx = (o.x ?? 0) * PX, by = (o.y ?? 0) * PX, bw = (o.w ?? 1) * PX, bh = (o.h ?? 1) * PX;
+	if (o.sizing?.type === "cover") {
+		// Fill the box and crop the overflow: take the centered source window with the box's aspect.
+		const k = Math.max(bw / img.width, bh / img.height);
+		const sw = bw / k, sh = bh / k;
+		c.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, bx, by, bw, bh);
+		return;
+	}
 	const k = Math.min(bw / img.width, bh / img.height);
 	const dw = img.width * k, dh = img.height * k;
 	c.drawImage(img, 0, 0, img.width, img.height, bx + (bw - dw) / 2, by + (bh - dh) / 2, dw, dh);
