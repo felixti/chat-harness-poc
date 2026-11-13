@@ -92,6 +92,20 @@ resource "azurerm_role_assignment" "chat_api_blob" {
   principal_id         = azurerm_user_assigned_identity.chat_api.principal_id
 }
 
+# Read-only access for the operator in the portal Storage Browser (shared keys are disabled,
+# and Owner is control plane only). Empty variable = no assignment.
+variable "operator_object_id" {
+  type    = string
+  default = ""
+}
+
+resource "azurerm_role_assignment" "operator_blob_reader" {
+  count                = var.operator_object_id == "" ? 0 : 1
+  scope                = azurerm_storage_container.workspaces.id
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = var.operator_object_id
+}
+
 output "chat_api_client_id" {
   value = azurerm_user_assigned_identity.chat_api.client_id
 }

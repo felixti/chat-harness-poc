@@ -1,1 +1,2 @@
 subscription_id = "00000000-0000-0000-0000-000000000000"
+# operator_object_id = "<your Entra user object id>"  # az ad signed-in-user show --query id -o tsv
