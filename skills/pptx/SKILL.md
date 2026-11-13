@@ -71,4 +71,7 @@ scale, themes, charts), so never try to position things yourself. Also read the 
   never decorative-only. List in `reference.md`; unknown names come back in the lint with options.
 - **Open strong, close strong**: `title` with the main message, `big_number` or `statement` early
   for the stakes, `closing` with owners and dates.
-- Write in the user's language, including dates and number formats (pt-BR: 1.234,5).
+- Write in the user's language with **correct accents and punctuation** (não, já, três, ação),
+  dates and number formats (pt-BR: 1.234,5). The lint flags text written without accents.
+- `big_number`: the `title` continues the number ("é o custo anual..."); never repeat the value.
+- `source`: only the origin ("Zendesk CX Trends 2026"); the footer adds "Fonte:".

@@ -169,7 +169,8 @@ function bg(slide: any, color: string) {
 
 function footer(c: Ctx, slide: any, s: SlideSpec, n: number, onDark = false) {
 	const color = onDark ? c.t.onAccent : c.t.muted;
-	const left = [s.source ? `Fonte: ${s.source}` : "", c.deck.footer ?? ""].filter(Boolean).join("   ·   ");
+	const src = s.source ? String(s.source).replace(/^\s*(fontes?|sources?)\s*:\s*/i, "") : "";
+	const left = [src ? `Fonte: ${src}` : "", c.deck.footer ?? ""].filter(Boolean).join("   ·   ");
 	if (left) slide.addText(left, { x: MX, y: FOOT_Y, w: CW - 1, h: 0.3, fontFace: c.t.bodyFont, fontSize: 9, color, margin: 0 });
 	slide.addText(String(n), { x: W - MX - 0.8, y: FOOT_Y, w: 0.8, h: 0.3, fontFace: c.t.bodyFont, fontSize: 9, color, align: "right", margin: 0 });
 }
@@ -482,6 +483,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		const value = String(s.value ?? "");
 		if (s.kicker) slide.addText(String(s.kicker).toUpperCase(), { x: MX, y: 0.9, w: 11, h: 0.4, fontFace: c.t.bodyFont, fontSize: 13, bold: true, color: hi, charSpacing: 3, margin: 0 });
 		const f = fit([value], 11.5, 2.4, 150, 72, 0, 0.55);
+		if (value && String(s.title ?? "").includes(value)) c.warn(n, `big_number title repeats the value "${value}"; the title should continue the number ("é o mercado...")`);
 		slide.addText(value, { x: MX - 0.05, y: 1.35, w: 11.8, h: 2.5, fontFace: c.t.headFont, fontSize: f.pt, bold: true, color: hi, margin: 0, valign: "bottom" });
 		slide.addText(String(s.title ?? ""), { x: MX, y: 4.0, w: 10.5, h: 1.1, fontFace: c.t.headFont, fontSize: 28, bold: true, color: ink, valign: "top", margin: 0, fit: "shrink" });
 		if (s.text) paragraph(c, slide, n, String(s.text), MX, 5.15, 9.5, 1.3, 18, dark ? ink : c.t.muted);
@@ -499,11 +501,17 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		const rows = Math.ceil(k / cols);
 		const gap = 0.3;
 		const cw = (CW - gap * (cols - 1)) / cols;
-		const chh = (BODY_H - 0.1 - gap * (rows - 1)) / rows;
 		const textMax = rows > 1 ? 15 : 17;
+		// Card height follows the fullest card instead of filling the slide.
+		const hasIcon = items.some((it) => it.icon);
+		const textH = Math.max(0, ...items.slice(0, 6).map((it) => (it.text ? (lines(it.text, textMax, cw - 0.6) * textMax * 1.22) / 72 : 0)));
+		const need = 0.3 + (hasIcon ? 0.85 : 0) + 0.55 + textH + 0.45;
+		const chh = Math.min((BODY_H - 0.1 - gap * (rows - 1)) / rows, Math.max(need, 2.2));
+		// Short grids sit a little above the optical centre of the body instead of hugging the title.
+		const top = BODY_Y + Math.max(0, (BODY_H - (rows * chh + (rows - 1) * gap)) * 0.4);
 		items.slice(0, 6).forEach((it, i) => {
 			const x = MX + (i % cols) * (cw + gap);
-			const y = BODY_Y + Math.floor(i / cols) * (chh + gap);
+			const y = top + Math.floor(i / cols) * (chh + gap);
 			card(c, slide, x, y, cw, chh);
 			let ty = y + 0.3;
 			if (it.icon && badge(c, slide, n, it.icon, x + 0.3, y + 0.3, 0.7)) ty = y + 1.15;
@@ -635,6 +643,17 @@ function addChart(c: Ctx, slide: any, n: number, ch: ChartSpec | undefined, x: n
 	});
 }
 
+// Common pt-BR words that are only written without accents by mistake (ASCII-only output).
+const ACCENTLESS = new Set("nao ja voce voces sao entao tambem ate apos acao acoes solucao solucoes informacao decisao operacao integracao satisfacao mitigacao recomendacao regulatorio relatorio rapido rapida tres mes paises negocio negocios area areas inteligencia experiencia estrategia estrategico estrategica historico unico unica proximo proximos proxima ultimo ultimos ultima possivel disponivel periodo previsao projecao gestao reducao producao".split(" "));
+
+function accentlessWords(deck: DeckSpec): string[] {
+	const text = JSON.stringify(deck.slides).toLowerCase();
+	if (!/[ãõçáéíóúâêô]/.test(text) && !/\b(de|para|com|que|em)\b/.test(text)) return [];
+	const found = new Set<string>();
+	for (const w of text.match(/[a-zà-ú]+/g) ?? []) if (ACCENTLESS.has(w)) found.add(w);
+	return [...found];
+}
+
 export interface RenderResult {
 	bytes: Buffer;
 	slides: number;
@@ -680,6 +699,8 @@ export async function renderDeck(deck: DeckSpec, opts: { workspace: string; reso
 		if (s.notes) slide.addNotes(String(s.notes));
 		else if (!["title", "section", "closing"].includes(s.layout)) noNotes.push(n);
 	}
+	const plain = accentlessWords(deck);
+	if (plain.length) warnings.push(`text without Portuguese accents (${plain.slice(0, 8).join(", ")}): rewrite with correct accents (não, já, ação, três, rápido...)`);
 	if (noNotes.length) warnings.push(`slides ${noNotes.join(", ")}: no speaker notes (add "notes")`);
 	const bytes = (await pptx.write({ outputType: "nodebuffer", compression: true })) as Buffer;
 	return { bytes, slides: deck.slides.length, warnings };
