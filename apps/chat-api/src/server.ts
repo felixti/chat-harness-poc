@@ -28,6 +28,13 @@ function mcpServersFor(_user: string): McpServer[] {
 		description: "Up-to-date documentation and code examples for software libraries and frameworks.",
 		headers: config.context7ApiKey ? { CONTEXT7_API_KEY: config.context7ApiKey } : undefined,
 	});
+	// In-cluster Brave Search MCP (the API key lives in that pod, not here).
+	if (config.braveMcpUrl)
+		servers.push({
+			name: "brave",
+			url: config.braveMcpUrl,
+			description: "Web and news search (Brave): current facts, statistics, sources and LLM-ready page context for research.",
+		});
 	return servers;
 }
 

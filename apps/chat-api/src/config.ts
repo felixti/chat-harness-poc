@@ -22,6 +22,8 @@ export const config = {
 	/** mongodb:// URL (FerretDB in the PoC); empty = in-memory history. */
 	mongoUrl: env.MONGO_URL ?? "",
 	parserUrl: env.PARSER_URL ?? "",
+	/** In-cluster Brave Search MCP (http://brave-mcp/mcp); empty = no web search. */
+	braveMcpUrl: env.BRAVE_MCP_URL ?? "",
 	context7ApiKey: env.CONTEXT7_API_KEY ?? "",
 	/** Dev only: identity when no gateway header is present. */
 	devUser: env.DEV_USER ?? "",

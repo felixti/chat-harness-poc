@@ -12,6 +12,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY apps/chat-api/package.json ./
 COPY apps/chat-api/src ./src
 COPY apps/chat-api/public ./public
+COPY apps/chat-api/assets ./assets
 COPY skills /app/skills
 ENV NODE_ENV=production \
     SKILLS_DIR=/app/skills \

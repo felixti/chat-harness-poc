@@ -28,6 +28,19 @@ test("lint flags overloaded slides", async () => {
 	assert.match(all, /unknown layout "nope"/);
 });
 
+test("icons, cards and big_number render; unknown icon is linted", async () => {
+	const r = await renderDeck(
+		{ title: "t", theme: "tech_night", slides: [
+			{ layout: "big_number", value: "R$ 42 mi", title: "x", notes: "n" },
+			{ layout: "cards", title: "x", items: [{ icon: "rocket", title: "a" }, { icon: "rockett", title: "b" }, { icon: "timer", title: "c" }], notes: "n" },
+		] },
+		{ workspace: ".", resolve: (p) => p },
+	);
+	assert.ok(zip(r.bytes));
+	assert.equal(r.warnings.length, 1);
+	assert.match(r.warnings[0], /unknown icon "rockett" \(try: .*rocket/);
+});
+
 test("docx from markdown", async () => {
 	const b = await markdownToDocx("## A\n\n| x | y |\n|--|--:|\n| a | 1 |\n\n- one\n  - two\n\n> quote", { title: "T", toc: true });
 	assert.ok(zip(b));

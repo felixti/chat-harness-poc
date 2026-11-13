@@ -1,0 +1,66 @@
+# Brave Search MCP (upstream MIT server, image built in CI and scanned by Trivy).
+# The API key comes from Key Vault through External Secrets and is mounted as a file.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: brave-search
+  namespace: chat
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: platform-keyvault}
+  target: {name: brave-search, creationPolicy: Owner}
+  data:
+  - secretKey: api-key
+    remoteRef: {key: brave-search-api-key}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: brave-mcp
+  namespace: chat
+spec:
+  selector: {app: brave-mcp}
+  ports: [{name: http, port: 80, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: brave-mcp
+  namespace: chat
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: brave-mcp}}
+  template:
+    metadata:
+      labels: {app: brave-mcp}
+    spec:
+      nodeSelector: {agentplatform.io/pool: platform}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: brave-mcp
+        image: ghcr.io/felixti/chat-harness-brave-mcp:IMAGE_TAG
+        env:
+        # Host header check: only the in-cluster service names.
+        - {name: BRAVE_MCP_ALLOWED_HOSTS, value: "brave-mcp,brave-mcp.chat,brave-mcp.chat.svc,brave-mcp.chat.svc.cluster.local"}
+        ports: [{name: http, containerPort: 8080}]
+        readinessProbe:
+          httpGet: {path: /ping, port: 8080}
+          periodSeconds: 10
+        resources:
+          requests: {cpu: 10m, memory: 64Mi}
+          limits: {memory: 256Mi}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}
+        volumeMounts:
+        - {name: key, mountPath: /var/run/secrets/brave, readOnly: true}
+        - {name: tmp, mountPath: /tmp}
+      volumes:
+      - name: key
+        secret: {secretName: brave-search, items: [{key: api-key, path: api-key}]}
+      - {name: tmp, emptyDir: {}}

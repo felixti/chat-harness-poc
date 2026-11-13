@@ -56,36 +56,5 @@ interpreter.
 | H22 | Probes | HTTP/TCP probes only, no `exec` probes | Nothing is executed inside containers (same rule as the agent). |
 | H23 | CI | Build → Trivy (pinned by digest, 0.69.3) → push with buildx; push only if the scan is clean | Plain `docker push` tried cross-repo blob mounts that ghcr denied. Trivy 0.69.4–0.69.6 images were compromised in 2026-03. |
 | H24 | Office output (pptx/docx/xlsx) | In-process pure-JS writers: `pptxgenjs` 4.0.1, `docx` 9.14.0, `exceljs` 4.4.0 (all MIT) as tools `generate_pptx`/`generate_docx`/`generate_xlsx`. Design quality lives in the renderer (16:9 grid, type scale, 5 themes + brand override, 14 layouts, chart highlight, text fitting) plus lint warnings fed back to the model; skills `pptx` + `design` teach storyline and choices. Overrides `image-size` 2.0.4 and `uuid` 11.1.1 clear 2 HIGH + 2 moderate advisories | OfficeCli (Apache-2.0) is a CLI binary with embedded .NET: needs a binary download and a subprocess, both forbidden. Kept as a candidate for editing existing files inside the phase 3 sandboxes. Anthropic’s pptx skill is not open source, so ours is written from scratch. Editing existing docx/pptx is not covered (xlsx can be re-read with exceljs). |
-
-## 4. Architecture
-
-```
-browser ──OIDC──► Envoy Gateway ──► chat-api (Node, Pi SDK, stateless, N replicas)
-   │                                   │  skills  ◄── Blob /skills/ (CI publishes from Git)
-   │ SAS upload                        │  files   ◄─► Blob chat-workspaces/<oid>/<conv>/  (+ /tmp copy)
-   ▼                                   │  history ◄─► FerretDB (CNPG) conversations, encrypted tokens
- Blob ──► parser (markitdown) ──md──►  │  LLM     ──► llm-gateway ──► OpenRouter
-                                       │  MCP     ──► Context7 | own MCP (Entra OBO) | GitHub (OAuth)
-                                       │  bash    = just-bash (in process)
-                                       └─ code    ──► sandbox A: ACA dynamic sessions
-                                                      sandbox B: agent-sandbox + Kata (no egress)
-```
-
-## 5. Benchmark A vs B
-
-| Metric | How |
-|---|---|
-| Ready time | First `run` on a new conversation: cold and warm (pool) |
-| Execution latency | Same pandas script (100k rows groupby + chart) |
-| Document generation | 20-page PDF with tables and charts |
-| Cost | R$/h idle and in use |
-| Isolation | Egress blocked? IMDS reachable? Other conversations' files reachable? |
-| Operations | Moving parts, upgrades, failure modes |
-| Prisma visibility | What runtime defense sees in each (in B the microVM is opaque to node agents) |
-
-## 6. Open risks
-
-- Pi 1.5 SDK API changes between minor releases: pin versions.
-- just-bash is beta: keep it to file operations; real work runs in the sandbox.
-- ACA dynamic sessions is in preview and custom containers need Dedicated E16 compute (expensive).
-- FerretDB compatibility with the driver's explicit encryption: verified in phase 1.
+| H25 | Web research | Brave Search MCP (upstream `@brave/brave-search-mcp-server` 2.1.4, MIT) as its own pod `brave-mcp`: HTTP transport, stateless, only `brave_web_search`, `brave_news_search`, `brave_llm_context` enabled; API key from Key Vault (`brave-search-api-key`) via External Secrets, mounted as a file; only chat-api may call it, it only reaches 443 out. Overrides `@modelcontextprotocol/sdk` 1.32.2 and `zod` 4.6.7 clear 2 HIGH advisories | Key stays out of chat-api; MCP keeps search swappable (company search, Bing) without code changes. The model loads the tools through `tool_search` (deferred). |
+| H26 | Deck design upgrades | Lucide icons (ISC, 2,275, vendored as JSON + tags) drawn as native PowerPoint custom geometry (SVG paths, arcs and circles converted to cubics); 8 more palettes adapted from minimax-ai/skills (MIT); layouts `big_number` and `cards`; dark themes keep dark covers; storylines adapted from ui-ux-pro-max-skill (MIT) | pptxgenjs cannot embed SVG from Node (broken PNG fallback) and resvg-wasm is MPL-2.0, so icons are vectors the renderer draws itself: they render in PowerPoint, Keynote, Google Slides and LibreOffice and take theme colors. Model stays `muse-spark-1.3-contributor` (~R$0,10 per deck): quality comes from the harness (renderer, lint, skills, research), not a pricier model. |

@@ -1,0 +1,12 @@
+{
+  "name": "brave-mcp",
+  "private": true,
+  "description": "Brave Search MCP server (MIT, upstream package) packaged for the cluster: HTTP transport, no subprocess.",
+  "dependencies": {
+    "@brave/brave-search-mcp-server": "2.1.4"
+  },
+  "overrides": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  }
+}

@@ -50,6 +50,7 @@ spec:
         - {name: BLOB_CONTAINER, value: chat-workspaces}
         - {name: PARSER_URL, value: "http://parser"}
         - {name: LLM_BASE_URL, value: "http://llm-gateway.envoy-gateway-system.svc/api/v1"}
+        - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
         ports: [{name: http, containerPort: 8080}]
         readinessProbe:
           httpGet: {path: /healthz, port: 8080}

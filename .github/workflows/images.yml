@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [chat-api, parser]
+        app: [chat-api, parser, brave-mcp]
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/chat-harness-${{ matrix.app }}:${{ github.sha }}
     steps:

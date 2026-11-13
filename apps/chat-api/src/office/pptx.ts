@@ -5,6 +5,7 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { createRequire } from "node:module";
+import { addIcon, hasIcon, suggestIcons } from "./icons.ts";
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,6 +25,8 @@ export interface Theme {
 	chart: string[]; // series colors, in order
 	headFont: string;
 	bodyFont: string;
+	/** Dark themes: covers stay on the dark background with accent details (a bright full-bleed accent is too loud). */
+	darkCover?: boolean;
 }
 
 export const THEMES: Record<string, Theme> = {
@@ -35,7 +38,7 @@ export const THEMES: Record<string, Theme> = {
 	midnight: {
 		bg: "0F172A", surface: "1E293B", ink: "E2E8F0", muted: "94A3B8", accent: "38BDF8", accent2: "A78BFA",
 		onAccent: "0F172A", line: "334155", chart: ["38BDF8", "A78BFA", "34D399", "FBBF24", "F472B6", "94A3B8"],
-		headFont: "Aptos Display", bodyFont: "Aptos",
+		headFont: "Aptos Display", bodyFont: "Aptos", darkCover: true,
 	},
 	warm: {
 		bg: "FFFBF5", surface: "F5EDE3", ink: "292524", muted: "78716C", accent: "C2410C", accent2: "0F766E",
@@ -50,6 +53,47 @@ export const THEMES: Record<string, Theme> = {
 	fresh: {
 		bg: "FFFFFF", surface: "ECFDF3", ink: "101828", muted: "475467", accent: "067647", accent2: "2E90FA",
 		onAccent: "FFFFFF", line: "D0D5DD", chart: ["067647", "2E90FA", "FDB022", "9E77ED", "F04438", "98A2B3"],
+		headFont: "Aptos Display", bodyFont: "Aptos",
+	},
+	// Palettes below adapted from minimax-ai/skills pptx-generator design-system.md (MIT).
+	tech_night: {
+		bg: "000814", surface: "001D3D", ink: "E8EEF6", muted: "8DA2BC", accent: "FFC300", accent2: "4CC9F0",
+		onAccent: "000814", line: "17325A", chart: ["FFC300", "4CC9F0", "F72585", "7BD389", "B8C0FF", "8DA2BC"],
+		headFont: "Aptos Display", bodyFont: "Aptos", darkCover: true,
+	},
+	authority: {
+		bg: "FFFFFF", surface: "EDF2F4", ink: "2B2D42", muted: "6C7489", accent: "2B2D42", accent2: "EF233C",
+		onAccent: "FFFFFF", line: "D5DBE1", chart: ["2B2D42", "EF233C", "8D99AE", "F4A261", "2A9D8F", "C0C7D1"],
+		headFont: "Georgia", bodyFont: "Aptos",
+	},
+	wellness: {
+		bg: "FFFFFF", surface: "EDF6F9", ink: "1F3B40", muted: "5E7C80", accent: "006D77", accent2: "E29578",
+		onAccent: "FFFFFF", line: "CFE3E6", chart: ["006D77", "E29578", "83C5BE", "FFDDD2", "3D5A80", "A3B8BB"],
+		headFont: "Georgia", bodyFont: "Aptos",
+	},
+	eco: {
+		bg: "FBFAF5", surface: "ECEFE4", ink: "263A2E", muted: "66755F", accent: "344E41", accent2: "DDA15E",
+		onAccent: "FFFFFF", line: "DAD7CD", chart: ["344E41", "588157", "A3B18A", "DDA15E", "BC6C25", "B7B7A4"],
+		headFont: "Georgia", bodyFont: "Aptos",
+	},
+	luxury: {
+		bg: "F7F3F0", surface: "EDE4DF", ink: "22223B", muted: "6E6A80", accent: "22223B", accent2: "B08968",
+		onAccent: "F2E9E4", line: "DCD2CC", chart: ["22223B", "B08968", "4A4E69", "9A8C98", "C9ADA7", "D6CCC2"],
+		headFont: "Georgia", bodyFont: "Aptos",
+	},
+	coastal: {
+		bg: "FFFFFF", surface: "F1FAF9", ink: "123B47", muted: "5B7C85", accent: "0081A7", accent2: "F07167",
+		onAccent: "FFFFFF", line: "D3E9EC", chart: ["0081A7", "F07167", "00AFB9", "FED9B7", "FDB833", "9FB7BD"],
+		headFont: "Aptos Display", bodyFont: "Aptos",
+	},
+	insight: {
+		bg: "FFFFFF", surface: "F4F1EA", ink: "1E2F36", muted: "5F6F75", accent: "264653", accent2: "E76F51",
+		onAccent: "FFFFFF", line: "DDD8CC", chart: ["264653", "2A9D8F", "E9C46A", "F4A261", "E76F51", "9AA5A8"],
+		headFont: "Aptos Display", bodyFont: "Aptos",
+	},
+	platinum: {
+		bg: "FFFFFF", surface: "F5F5F5", ink: "0A0A0A", muted: "737373", accent: "0A0A0A", accent2: "D4AF37",
+		onAccent: "FFFFFF", line: "E5E5E5", chart: ["0A0A0A", "0070F3", "D4AF37", "737373", "A3A3A3", "D4D4D4"],
 		headFont: "Aptos Display", bodyFont: "Aptos",
 	},
 };
@@ -180,24 +224,62 @@ function card(c: Ctx, slide: any, x: number, y: number, w: number, h: number, fi
 	slide.addShape(c.pptx.ShapeType.roundRect, { x, y, w, h, fill: { color: fill }, line: { color: fill }, rectRadius: 0.08 });
 }
 
+/** Lucide icon by name; unknown names become a lint warning with suggestions. */
+function icon(c: Ctx, slide: any, n: number, name: unknown, x: number, y: number, size: number, color: string): boolean {
+	if (!name) return false;
+	const nm = String(name);
+	if (!hasIcon(nm)) {
+		c.warn(n, `unknown icon "${nm}"${suggestIcons(nm).length ? ` (try: ${suggestIcons(nm).join(", ")})` : ""}`);
+		return false;
+	}
+	return addIcon(c.pptx, slide, nm, x, y, size, color);
+}
+
+/** Icon inside a soft round badge (accent tint), used by cards, kpis, timeline. */
+function badge(c: Ctx, slide: any, n: number, name: unknown, x: number, y: number, d: number, onDark = false) {
+	if (!name) return false;
+	slide.addShape(c.pptx.ShapeType.ellipse, { x, y, w: d, h: d, fill: { color: onDark ? c.t.onAccent : c.t.accent, transparency: onDark ? 80 : 88 }, line: { type: "none" } });
+	return icon(c, slide, n, name, x + d * 0.25, y + d * 0.25, d * 0.5, onDark ? c.t.onAccent : c.t.accent);
+}
+
+/** Background + colors for full-bleed slides (title, section, statement, closing). */
+function cover(c: Ctx, slide: any): { fg: string; hi: string } {
+	if (c.t.darkCover) {
+		bg(slide, c.t.bg);
+		rings(c, slide, c.t.accent);
+		return { fg: c.t.ink, hi: c.t.accent };
+	}
+	bg(slide, c.t.accent);
+	rings(c, slide, c.t.onAccent);
+	return { fg: c.t.onAccent, hi: c.t.onAccent };
+}
+
+/** Large translucent rings bleeding off the right edge: depth without clip art. */
+function rings(c: Ctx, slide: any, color: string) {
+	slide.addShape(c.pptx.ShapeType.ellipse, { x: 8.6, y: -1.6, w: 7.2, h: 7.2, fill: { color, transparency: 90 }, line: { type: "none" } });
+	slide.addShape(c.pptx.ShapeType.ellipse, { x: 10.4, y: 3.3, w: 5.2, h: 5.2, fill: { color, transparency: 93 }, line: { type: "none" } });
+	slide.addShape(c.pptx.ShapeType.ellipse, { x: 9.3, y: -0.9, w: 5.8, h: 5.8, fill: { type: "none" }, line: { color, width: 1, transparency: 70 } });
+}
+
 const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => Promise<void> | void> = {
 	title(c, slide, s) {
-		bg(slide, c.t.accent);
-		slide.addShape(c.pptx.ShapeType.rect, { x: MX, y: 2.05, w: 1.1, h: 0.09, fill: { color: c.t.onAccent }, line: { color: c.t.onAccent } });
+		const { fg, hi } = cover(c, slide);
+		if (s.kicker) slide.addText(String(s.kicker).toUpperCase(), { x: MX, y: 1.4, w: 11, h: 0.45, fontFace: c.t.bodyFont, fontSize: 13, bold: true, color: hi, charSpacing: 2, margin: 0 });
+		slide.addShape(c.pptx.ShapeType.rect, { x: MX, y: 2.05, w: 1.1, h: 0.09, fill: { color: hi }, line: { color: hi } });
 		const f = fit([s.title ?? c.deck.title], 10.5, 2.2, 48, 32, 0);
-		slide.addText(s.title ?? c.deck.title, { x: MX, y: 2.35, w: 10.5, h: 2.3, fontFace: c.t.headFont, fontSize: f.pt, bold: true, color: c.t.onAccent, valign: "top", margin: 0, fit: "shrink" });
-		if (s.subtitle) slide.addText(String(s.subtitle), { x: MX, y: 4.75, w: 10.5, h: 0.9, fontFace: c.t.bodyFont, fontSize: 20, color: c.t.onAccent, valign: "top", margin: 0, transparency: 10 });
+		slide.addText(s.title ?? c.deck.title, { x: MX, y: 2.35, w: 10.5, h: 2.3, fontFace: c.t.headFont, fontSize: f.pt, bold: true, color: fg, valign: "top", margin: 0, fit: "shrink" });
+		if (s.subtitle) slide.addText(String(s.subtitle), { x: MX, y: 4.75, w: 10.5, h: 0.9, fontFace: c.t.bodyFont, fontSize: 20, color: fg, valign: "top", margin: 0, transparency: 10 });
 		const meta = [c.deck.author, c.deck.date].filter(Boolean).join("   ·   ");
-		if (meta) slide.addText(meta, { x: MX, y: 6.55, w: 10, h: 0.35, fontFace: c.t.bodyFont, fontSize: 12, color: c.t.onAccent, margin: 0 });
+		if (meta) slide.addText(meta, { x: MX, y: 6.55, w: 10, h: 0.35, fontFace: c.t.bodyFont, fontSize: 12, color: fg, margin: 0 });
 	},
 
 	section(c, slide, s, n) {
-		bg(slide, c.t.accent);
+		const { fg, hi } = cover(c, slide);
 		const num = (s.number as string | number | undefined) ?? "";
-		if (num !== "") slide.addText(String(num).padStart(2, "0"), { x: MX, y: 1.9, w: 3, h: 1.3, fontFace: c.t.headFont, fontSize: 72, bold: true, color: c.t.onAccent, margin: 0, transparency: 35 });
-		slide.addText(s.title ?? "", { x: MX, y: 3.25, w: 11, h: 1.4, fontFace: c.t.headFont, fontSize: 40, bold: true, color: c.t.onAccent, valign: "top", margin: 0, fit: "shrink" });
-		if (s.subtitle) slide.addText(String(s.subtitle), { x: MX, y: 4.7, w: 11, h: 0.8, fontFace: c.t.bodyFont, fontSize: 18, color: c.t.onAccent, margin: 0 });
-		footer(c, slide, { layout: "section" }, n, true);
+		if (num !== "") slide.addText(String(num).padStart(2, "0"), { x: MX, y: 1.9, w: 3, h: 1.3, fontFace: c.t.headFont, fontSize: 72, bold: true, color: hi, margin: 0, transparency: c.t.darkCover ? 0 : 35 });
+		slide.addText(s.title ?? "", { x: MX, y: 3.25, w: 11, h: 1.4, fontFace: c.t.headFont, fontSize: 40, bold: true, color: fg, valign: "top", margin: 0, fit: "shrink" });
+		if (s.subtitle) slide.addText(String(s.subtitle), { x: MX, y: 4.7, w: 11, h: 0.8, fontFace: c.t.bodyFont, fontSize: 18, color: fg, margin: 0 });
+		footer(c, slide, { layout: "section" }, n, !c.t.darkCover);
 	},
 
 	agenda(c, slide, s, n) {
@@ -242,19 +324,20 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 
 	kpis(c, slide, s, n) {
 		header(c, slide, s, n);
-		const items = (s.items as { value: string; label: string; delta?: string; trend?: "up" | "down" | "flat"; good?: boolean }[]) ?? [];
+		const items = (s.items as { value: string; label: string; delta?: string; trend?: "up" | "down" | "flat"; good?: boolean; icon?: string }[]) ?? [];
 		if (items.length < 2 || items.length > 4) c.warn(n, `kpis works with 2 to 4 items, got ${items.length}`);
 		const k = Math.max(1, Math.min(items.length, 4));
 		const gap = 0.35;
 		const cw = (CW - gap * (k - 1)) / k;
 		const ch = s.takeaway ? 2.6 : 3.0;
 		// One size for every value, so the cards read as a set.
-		const vpt = Math.min(...items.slice(0, 4).map((it) => fit([it.value], cw - 0.6, 0.85, 54, 22, 0, 0.5).pt));
+		const vpt = Math.min(...items.slice(0, 4).map((it) => fit([it.value], cw - (it.icon ? 1.05 : 0.6), 0.85, 54, 22, 0, 0.6).pt));
 		items.slice(0, 4).forEach((it, i) => {
 			const x = MX + i * (cw + gap);
 			card(c, slide, x, BODY_Y + 0.2, cw, ch);
 			slide.addShape(c.pptx.ShapeType.rect, { x, y: BODY_Y + 0.2, w: 0.09, h: ch, fill: { color: c.t.accent }, line: { color: c.t.accent } });
-			slide.addText(it.value, { x: x + 0.35, y: BODY_Y + 0.45, w: cw - 0.6, h: 1.0, fontFace: c.t.headFont, fontSize: vpt, bold: true, color: c.t.ink, margin: 0, valign: "bottom" });
+			if (it.icon) icon(c, slide, n, it.icon, x + cw - 0.75, BODY_Y + 0.45, 0.42, c.t.accent);
+			slide.addText(it.value, { x: x + 0.35, y: BODY_Y + 0.45, w: cw - (it.icon ? 1.05 : 0.6), h: 1.0, fontFace: c.t.headFont, fontSize: vpt, bold: true, color: c.t.ink, margin: 0, valign: "bottom" });
 			slide.addText(it.label, { x: x + 0.35, y: BODY_Y + 1.5, w: cw - 0.6, h: 0.8, fontFace: c.t.bodyFont, fontSize: 15, color: c.t.muted, margin: 0, valign: "top", fit: "shrink" });
 			if (it.delta) {
 				const good = it.good ?? it.trend !== "down";
@@ -313,8 +396,11 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 
 	statement(c, slide, s, n) {
 		const dark = s.dark !== false;
-		bg(slide, dark ? c.t.accent : c.t.bg);
-		const color = dark ? c.t.onAccent : c.t.ink;
+		let color = c.t.ink;
+		let hi = c.t.accent;
+		if (dark) ({ fg: color, hi } = cover(c, slide));
+		else bg(slide, c.t.bg);
+		if (s.icon) icon(c, slide, n, s.icon, MX, 1.0, 0.75, hi);
 		const text = String(s.title ?? "");
 		const f = fit([text], 11, 3, 44, 28, 0);
 		if (f.overflow) c.warn(n, "statement too long; it should be one sentence");
@@ -333,7 +419,10 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		steps.forEach((st, i) => {
 			const x = MX + i * sw;
 			if (st.label) slide.addText(st.label, { x, y: lineY - 0.85, w: sw - 0.2, h: 0.5, fontFace: c.t.headFont, fontSize: 20, bold: true, color: c.t.accent, margin: 0 });
-			slide.addShape(c.pptx.ShapeType.ellipse, { x, y: lineY - 0.14, w: 0.28, h: 0.28, fill: { color: c.t.accent }, line: { color: c.t.bg, width: 2 } });
+			if ((st as { icon?: string }).icon) {
+				slide.addShape(c.pptx.ShapeType.ellipse, { x, y: lineY - 0.3, w: 0.6, h: 0.6, fill: { color: c.t.accent }, line: { color: c.t.bg, width: 3 } });
+				icon(c, slide, n, (st as { icon?: string }).icon, x + 0.15, lineY - 0.15, 0.3, c.t.onAccent);
+			} else slide.addShape(c.pptx.ShapeType.ellipse, { x, y: lineY - 0.14, w: 0.28, h: 0.28, fill: { color: c.t.accent }, line: { color: c.t.bg, width: 2 } });
 			slide.addText(st.title, { x, y: lineY + 0.45, w: sw - 0.25, h: 0.8, fontFace: c.t.headFont, fontSize: 20, bold: true, color: c.t.ink, valign: "top", margin: 0, fit: "shrink" });
 			if (st.text) paragraph(c, slide, n, st.text, x, lineY + 1.3, sw - 0.25, 2.2, 16, c.t.muted);
 		});
@@ -341,24 +430,29 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 
 	comparison(c, slide, s, n) {
 		header(c, slide, s, n);
-		const opts = (s.options as { name: string; points: string[]; highlight?: boolean; verdict?: string }[]) ?? [];
+		const opts = (s.options as { name: string; points: string[]; highlight?: boolean; verdict?: string; icon?: string }[]) ?? [];
 		if (opts.length < 2 || opts.length > 4) c.warn(n, `comparison works with 2 to 4 options, got ${opts.length}`);
 		const k = Math.max(1, Math.min(opts.length, 4));
 		const gap = 0.35;
 		const cw = (CW - gap * (k - 1)) / k;
+		// Cards as tall as the fullest option (no big empty boxes), same height for all.
+		const pt = Math.min(...opts.slice(0, 4).map((o) => fit(o.points, cw - 0.9, BODY_H - 2.2, 19, 12).pt));
+		const textH = Math.max(...opts.slice(0, 4).map((o) => o.points.reduce((h, p) => h + lines(p, pt, cw - 0.9) * pt * 1.22 + 6, 0) / 72));
+		const cardH = Math.min(BODY_H - 0.1, 1.0 + textH + 1.15);
 		opts.slice(0, 4).forEach((o, i) => {
 			const x = MX + i * (cw + gap);
 			const hi = !!o.highlight;
-			card(c, slide, x, BODY_Y, cw, BODY_H - 0.1, hi ? c.t.accent : c.t.surface);
+			card(c, slide, x, BODY_Y, cw, cardH, hi ? c.t.accent : c.t.surface);
 			const ink = hi ? c.t.onAccent : c.t.ink;
-			slide.addText(o.name, { x: x + 0.3, y: BODY_Y + 0.25, w: cw - 0.6, h: 0.6, fontFace: c.t.headFont, fontSize: 20, bold: true, color: ink, margin: 0, fit: "shrink" });
-			const f = fit(o.points, cw - 0.9, BODY_H - 2.2, 19, 12);
+			const ix = o.icon && icon(c, slide, n, o.icon, x + 0.3, BODY_Y + 0.33, 0.42, hi ? c.t.onAccent : c.t.accent) ? 0.6 : 0;
+			slide.addText(o.name, { x: x + 0.3 + ix, y: BODY_Y + 0.25, w: cw - 0.6 - ix, h: 0.6, fontFace: c.t.headFont, fontSize: 20, bold: true, color: ink, margin: 0, fit: "shrink" });
+			const f = { pt, overflow: 1.0 + textH + 1.15 > BODY_H };
 			if (f.overflow) c.warn(n, `option "${o.name}" has too much text`);
 			slide.addText(
 				o.points.map((p) => ({ text: richless(p), options: { bullet: { code: "2022", indent: 14 }, breakLine: true, paraSpaceAfter: 6 } })),
-				{ x: x + 0.3, y: BODY_Y + 1.0, w: cw - 0.6, h: BODY_H - 2.2, fontFace: c.t.bodyFont, fontSize: f.pt, color: ink, valign: "top", margin: 0, fit: "shrink" },
+				{ x: x + 0.3, y: BODY_Y + 1.0, w: cw - 0.6, h: cardH - 2.0, fontFace: c.t.bodyFont, fontSize: f.pt, color: ink, valign: "top", margin: 0, fit: "shrink" },
 			);
-			if (o.verdict) slide.addText(o.verdict, { x: x + 0.3, y: BODY_Y + BODY_H - 1.0, w: cw - 0.6, h: 0.65, fontFace: c.t.bodyFont, fontSize: 14, bold: true, color: hi ? c.t.onAccent : c.t.accent, margin: 0, valign: "bottom", fit: "shrink" });
+			if (o.verdict) slide.addText(o.verdict, { x: x + 0.3, y: BODY_Y + cardH - 0.85, w: cw - 0.6, h: 0.6, fontFace: c.t.bodyFont, fontSize: 14, bold: true, color: hi ? c.t.onAccent : c.t.accent, margin: 0, valign: "bottom", fit: "shrink" });
 		});
 	},
 
@@ -378,17 +472,57 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		if (bullets) bulletsBox(c, slide, n, bullets, MX + CW * 0.64, BODY_Y, CW * 0.36, BODY_H, 18);
 	},
 
+	big_number(c, slide, s, n) {
+		// One number that carries the slide: 120 pt hero figure, label, context.
+		const dark = !!s.dark;
+		let ink = c.t.ink;
+		let hi = c.t.accent;
+		if (dark) ({ fg: ink, hi } = cover(c, slide));
+		else bg(slide, c.t.bg);
+		const value = String(s.value ?? "");
+		if (s.kicker) slide.addText(String(s.kicker).toUpperCase(), { x: MX, y: 0.9, w: 11, h: 0.4, fontFace: c.t.bodyFont, fontSize: 13, bold: true, color: hi, charSpacing: 3, margin: 0 });
+		const f = fit([value], 11.5, 2.4, 150, 72, 0, 0.55);
+		slide.addText(value, { x: MX - 0.05, y: 1.35, w: 11.8, h: 2.5, fontFace: c.t.headFont, fontSize: f.pt, bold: true, color: hi, margin: 0, valign: "bottom" });
+		slide.addText(String(s.title ?? ""), { x: MX, y: 4.0, w: 10.5, h: 1.1, fontFace: c.t.headFont, fontSize: 28, bold: true, color: ink, valign: "top", margin: 0, fit: "shrink" });
+		if (s.text) paragraph(c, slide, n, String(s.text), MX, 5.15, 9.5, 1.3, 18, dark ? ink : c.t.muted);
+		if (!dark) slide.addShape(c.pptx.ShapeType.rect, { x: MX, y: 3.92, w: 1.2, h: 0.07, fill: { color: c.t.accent2 }, line: { type: "none" } });
+		if (s.source || c.deck.footer) footer(c, slide, s, n, dark && !c.t.darkCover);
+	},
+
+	cards(c, slide, s, n) {
+		// 3 to 6 cards: icon badge, short heading, one or two lines of text.
+		header(c, slide, s, n);
+		const items = (s.items as { icon?: string; title: string; text?: string }[]) ?? [];
+		if (items.length < 2 || items.length > 6) c.warn(n, `cards works with 2 to 6 items, got ${items.length}`);
+		const k = Math.max(1, Math.min(items.length, 6));
+		const cols = k <= 3 ? k : k === 4 ? 2 : 3;
+		const rows = Math.ceil(k / cols);
+		const gap = 0.3;
+		const cw = (CW - gap * (cols - 1)) / cols;
+		const chh = (BODY_H - 0.1 - gap * (rows - 1)) / rows;
+		const textMax = rows > 1 ? 15 : 17;
+		items.slice(0, 6).forEach((it, i) => {
+			const x = MX + (i % cols) * (cw + gap);
+			const y = BODY_Y + Math.floor(i / cols) * (chh + gap);
+			card(c, slide, x, y, cw, chh);
+			let ty = y + 0.3;
+			if (it.icon && badge(c, slide, n, it.icon, x + 0.3, y + 0.3, 0.7)) ty = y + 1.15;
+			slide.addText(it.title, { x: x + 0.3, y: ty, w: cw - 0.6, h: 0.5, fontFace: c.t.headFont, fontSize: rows > 1 ? 17 : 20, bold: true, color: c.t.ink, margin: 0, valign: "top", fit: "shrink" });
+			if (it.text) paragraph(c, slide, n, it.text, x + 0.3, ty + 0.55, cw - 0.6, y + chh - (ty + 0.55) - 0.2, textMax, c.t.muted);
+		});
+	},
+
 	closing(c, slide, s, n) {
-		bg(slide, c.t.accent);
-		slide.addText(s.title ?? "Obrigado", { x: MX, y: 1.5, w: 11, h: 1.4, fontFace: c.t.headFont, fontSize: 40, bold: true, color: c.t.onAccent, margin: 0, fit: "shrink" });
+		const { fg } = cover(c, slide);
+		slide.addText(s.title ?? "Obrigado", { x: MX, y: 1.5, w: 11, h: 1.4, fontFace: c.t.headFont, fontSize: 40, bold: true, color: fg, margin: 0, fit: "shrink" });
 		const items = (s.bullets as Bullet[]) ?? [];
-		if (items.length) slide.addText(bulletRuns(c, items, 20, c.t.onAccent), { x: MX, y: 3.1, w: 11, h: 3.2, fontFace: c.t.bodyFont, valign: "top", margin: 0, fit: "shrink" });
-		if (s.subtitle) slide.addText(String(s.subtitle), { x: MX, y: 6.4, w: 11, h: 0.5, fontFace: c.t.bodyFont, fontSize: 14, color: c.t.onAccent, margin: 0 });
-		footer(c, slide, { layout: "closing" }, n, true);
+		if (items.length) slide.addText(bulletRuns(c, items, 20, fg), { x: MX, y: 3.1, w: 11, h: 3.2, fontFace: c.t.bodyFont, valign: "top", margin: 0, fit: "shrink" });
+		if (s.subtitle) slide.addText(String(s.subtitle), { x: MX, y: 6.4, w: 11, h: 0.5, fontFace: c.t.bodyFont, fontSize: 14, color: fg, margin: 0 });
+		footer(c, slide, { layout: "closing" }, n, !c.t.darkCover);
 	},
 };
 
-const NO_FOOTER = new Set(["title", "section", "closing", "statement", "quote"]);
+const NO_FOOTER = new Set(["title", "section", "closing", "statement", "quote", "big_number"]);
 
 function paragraph(c: Ctx, slide: any, n: number, text: string, x: number, y: number, w: number, h: number, max: number, color = c.t.ink) {
 	const f = fit([text], w, h, max, 12, 0);
