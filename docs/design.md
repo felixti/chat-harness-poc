@@ -55,6 +55,7 @@ interpreter.
 | H21 | History database | FerretDB 2.7 + `postgres-documentdb` in its own StatefulSet (4 GiB disk); password generated in-cluster by an External Secrets `Password` generator | The existing CNPG cluster has no DocumentDB extension. No secret in git or Key Vault. Company: their MongoDB, same driver. |
 | H22 | Probes | HTTP/TCP probes only, no `exec` probes | Nothing is executed inside containers (same rule as the agent). |
 | H23 | CI | Build → Trivy (pinned by digest, 0.69.3) → push with buildx; push only if the scan is clean | Plain `docker push` tried cross-repo blob mounts that ghcr denied. Trivy 0.69.4–0.69.6 images were compromised in 2026-03. |
+| H24 | Office output (pptx/docx/xlsx) | In-process pure-JS writers: `pptxgenjs` 4.0.1, `docx` 9.14.0, `exceljs` 4.4.0 (all MIT) as tools `generate_pptx`/`generate_docx`/`generate_xlsx`. Design quality lives in the renderer (16:9 grid, type scale, 5 themes + brand override, 14 layouts, chart highlight, text fitting) plus lint warnings fed back to the model; skills `pptx` + `design` teach storyline and choices. Overrides `image-size` 2.0.4 and `uuid` 11.1.1 clear 2 HIGH + 2 moderate advisories | OfficeCli (Apache-2.0) is a CLI binary with embedded .NET: needs a binary download and a subprocess, both forbidden. Kept as a candidate for editing existing files inside the phase 3 sandboxes. Anthropic’s pptx skill is not open source, so ours is written from scratch. Editing existing docx/pptx is not covered (xlsx can be re-read with exceljs). |
 
 ## 4. Architecture
 

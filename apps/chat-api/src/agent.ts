@@ -14,6 +14,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { config } from "./config.ts";
 import { bashTool, generatePdfTool, parseDocumentTool } from "./tools.ts";
+import { officeTools } from "./office/tools.ts";
 
 const agentDir = join(config.tmpRoot, "agent");
 const PROVIDER = "gateway";
@@ -141,7 +142,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		// Built-in grep/find run rg/fd (subprocesses): excluded, the emulated bash has grep/find.
 		// The built-in bash is replaced by our just-bash tool of the same name (custom tools win).
 		excludeTools: ["grep", "find", "powershell"],
-		customTools: [bashTool(cwd), generatePdfTool(cwd), parseDocumentTool(cwd), ...(input.extraTools ?? [])],
+		customTools: [bashTool(cwd), generatePdfTool(cwd), parseDocumentTool(cwd), ...officeTools(cwd), ...(input.extraTools ?? [])],
 	});
 
 	const unsubscribe = session.subscribe((event) => {

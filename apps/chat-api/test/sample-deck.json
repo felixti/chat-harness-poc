@@ -1,0 +1,26 @@
+{
+  "title": "Resultados 2014: lucro concentrado em 2 mercados",
+  "author": "Time de FP&A", "date": "Novembro 2026", "theme": "executive",
+  "footer": "Confidencial",
+  "slides": [
+    {"layout": "title", "title": "Resultados 2014: o lucro está concentrado em dois mercados", "subtitle": "Análise do Financial Sample por país, segmento e produto"},
+    {"layout": "agenda", "title": "Agenda", "items": ["Visão geral do ano", "Lucro por país", "Segmentos e produtos", "Riscos", "Próximos passos"], "notes": "Agenda rápida."},
+    {"layout": "kpis", "kicker": "Visão geral", "title": "Receita cresceu 18% e margem ficou estável em 14%", "items": [
+      {"value": "R$ 118,7 mi", "label": "Receita líquida", "delta": "+18% vs 2013", "trend": "up"},
+      {"value": "R$ 16,9 mi", "label": "Lucro", "delta": "+15% vs 2013", "trend": "up"},
+      {"value": "14,2%", "label": "Margem", "delta": "-0,4 p.p.", "trend": "down"},
+      {"value": "700", "label": "Transações", "delta": "estável", "trend": "flat"}],
+      "takeaway": "O crescimento veio de **volume**, não de preço: o desconto médio subiu 2 p.p.", "notes": "Destacar volume vs preço.", "source": "Financial Sample (Microsoft)"},
+    {"layout": "section", "number": 1, "title": "Lucro por país", "subtitle": "Onde ganhamos dinheiro"},
+    {"layout": "chart", "kicker": "Lucro por país", "title": "EUA e Canadá respondem por 45% do lucro total", "chart": {"type": "bar", "categories": ["Estados Unidos", "Canadá", "França", "Alemanha", "México"], "series": [{"name": "Lucro (R$ mi)", "values": [4.1, 3.5, 3.4, 3.3, 2.6]}], "number_format": "0.0", "highlight": "Estados Unidos"}, "takeaway": "Concentrar o time comercial em **EUA e Canadá** protege quase metade do lucro.", "notes": "x", "source": "Financial Sample"},
+    {"layout": "chart", "title": "Lucro mensal cresceu no 2º semestre", "chart": {"type": "line", "categories": ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"], "series": [{"name": "2013", "values": [1.1,1.0,1.2,1.3,1.2,1.4,1.3,1.2,1.5,1.6,1.7,1.9]}, {"name": "2014", "values": [1.2,1.1,1.3,1.5,1.4,1.6,1.7,1.8,1.9,2.1,2.2,2.4]}], "number_format": "0.0"}, "notes": "x"},
+    {"layout": "chart", "title": "Governo é o maior segmento em receita", "chart": {"type": "doughnut", "categories": ["Governo","Pequenas empresas","Canal","Enterprise","Mid-market"], "series": [{"name": "Receita", "values": [52, 42, 9, 20, 5]}]}, "takeaway": "Governo + pequenas empresas = **73%** da receita.", "notes": "x"},
+    {"layout": "table", "title": "Paseo lidera em lucro, VTT em margem", "columns": ["Produto", "Receita (R$ mi)", "Lucro (R$ mi)", "Margem"], "rows": [["Paseo", 33.0, 4.8, "14,5%"], ["VTT", 20.5, 3.0, "14,6%"], ["Velo", 18.3, 2.3, "12,6%"], ["Amarilla", 17.7, 2.8, "15,8%"], ["Montana", 15.4, 2.1, "13,6%"], ["Carretera", 13.8, 1.8, "13,0%"]], "highlight_row": 0, "notes": "x"},
+    {"layout": "two_column", "title": "Riscos e mitigação", "left": {"heading": "Riscos", "bullets": ["Dependência de dois mercados", "Descontos crescentes corroem margem", {"text": "Segmento Enterprise com prejuízo", "sub": ["3 de 5 produtos negativos"]}]}, "right": {"heading": "Mitigação", "bullets": ["Teto de desconto por segmento", "Revisão de preço Enterprise no Q1", "Expandir México com parceiro"]}, "notes": "x"},
+    {"layout": "comparison", "title": "Três caminhos para 2015", "options": [{"name": "Manter", "points": ["Sem investimento novo", "Lucro estável"], "verdict": "Baixo risco"}, {"name": "Focar EUA/Canadá", "points": ["+2 vendedores", "Campanha regional", "Payback 9 meses"], "highlight": true, "verdict": "Recomendado"}, {"name": "Expandir México", "points": ["Parceiro local", "Payback 18 meses"], "verdict": "Alto risco"}], "notes": "x"},
+    {"layout": "timeline", "title": "Plano de 2015 em quatro etapas", "steps": [{"label": "Q1", "title": "Revisar preços", "text": "Teto de desconto e preço Enterprise"}, {"label": "Q2", "title": "Contratar", "text": "2 vendedores para EUA/Canadá"}, {"label": "Q3", "title": "Campanha", "text": "Campanha regional para Governo"}, {"label": "Q4", "title": "Medir", "text": "Revisar margem e decidir México"}], "notes": "x"},
+    {"layout": "statement", "title": "Recomendação: **focar EUA e Canadá** e limitar descontos em 2015", "subtitle": "Proteger 45% do lucro com investimento de R$ 0,8 mi"},
+    {"layout": "quote", "quote": "Crescer volume com desconto é comprar receita; o que importa é o lucro por cliente.", "author": "Diretoria Financeira"},
+    {"layout": "closing", "title": "Próximos passos", "bullets": ["Aprovar teto de desconto até 15/12", "Abrir 2 vagas comerciais", "Revisão em março"], "subtitle": "Dúvidas: fpa@empresa.com"}
+  ]
+}

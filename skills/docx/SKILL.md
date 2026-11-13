@@ -11,22 +11,17 @@ description: Create Word documents (.docx) - reports, memos, proposals, minutes 
 
 ## Creating
 
-With `run_code` (Python sandbox, `python-docx`):
+1. Write the content as markdown in `outputs/<name>.md`: `#` for chapters, `##`/`###` for
+   sections, pipe tables (align numbers right with `--:`), lists, `>` for callouts. Do not repeat
+   the document title as `#` at the top: pass it as `title`.
+2. `generate_docx` with `source`, `output: outputs/<name>.docx`, `title`, `subtitle`, `author`,
+   `date`; `toc: true` for documents over ~5 pages; `header: "Confidencial"` when relevant;
+   `accent` with the brand color (hex) if known.
+3. Tell the user the file name. The document uses real Word styles (Heading 1-3, lists), so they
+   can keep editing it and refresh the table of contents.
 
-```python
-from docx import Document
-from docx.shared import Pt
-doc = Document()
-doc.add_heading("Title", level=0)
-doc.add_paragraph("Summary paragraph.")
-table = doc.add_table(rows=1, cols=3, style="Light List Accent 1")
-for cell, text in zip(table.rows[0].cells, ["Item", "Qty", "Total"]):
-    cell.text = text
-doc.save("/workspace/outputs/report.docx")
-```
+## Style
 
-- One heading per section, short paragraphs, tables for numbers.
-- Save under `/workspace/outputs/`; tell the user the file name.
-
-Without `run_code`: say that editable Word files need the code sandbox, and offer a PDF instead
-(skill `pdf`, fallback path).
+- Start with a 3 to 5 line summary (the answer first), then the detail.
+- Short paragraphs (up to 4 sentences), one idea each. Tables for numbers.
+- Read the `design` skill for emphasis and number formatting.
