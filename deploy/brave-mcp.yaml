@@ -36,6 +36,9 @@ spec:
     spec:
       nodeSelector: {agentplatform.io/pool: platform}
       automountServiceAccountToken: false
+      # The Service is called brave-mcp, so Kubernetes would inject BRAVE_MCP_PORT=tcp://...,
+      # which collides with the server's own BRAVE_MCP_PORT setting.
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -45,6 +48,7 @@ spec:
         image: ghcr.io/felixti/chat-harness-brave-mcp:4be5e0270a2b9c500c48233b791f8e0ea02afce1
         env:
         # Host header check: only the in-cluster service names.
+        - {name: BRAVE_MCP_PORT, value: "8080"}
         - {name: BRAVE_MCP_ALLOWED_HOSTS, value: "brave-mcp,brave-mcp.chat,brave-mcp.chat.svc,brave-mcp.chat.svc.cluster.local"}
         ports: [{name: http, containerPort: 8080}]
         readinessProbe:
