@@ -1,0 +1,23 @@
+{
+  "look": "teal + peach, serif titles",
+  "good_for": "health, HR, wellbeing",
+  "credit": "Palette adapted from minimax-ai/skills (MIT)",
+  "bg": "FFFFFF",
+  "surface": "EDF6F9",
+  "ink": "1F3B40",
+  "muted": "5E7C80",
+  "accent": "006D77",
+  "accent2": "E29578",
+  "onAccent": "FFFFFF",
+  "line": "CFE3E6",
+  "chart": [
+    "006D77",
+    "E29578",
+    "83C5BE",
+    "FFDDD2",
+    "3D5A80",
+    "A3B8BB"
+  ],
+  "headFont": "Georgia",
+  "bodyFont": "Aptos"
+}

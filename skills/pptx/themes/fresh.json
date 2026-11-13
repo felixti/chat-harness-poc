@@ -1,0 +1,22 @@
+{
+  "look": "green + blue",
+  "good_for": "people, operations, internal comms",
+  "bg": "FFFFFF",
+  "surface": "ECFDF3",
+  "ink": "101828",
+  "muted": "475467",
+  "accent": "067647",
+  "accent2": "2E90FA",
+  "onAccent": "FFFFFF",
+  "line": "D0D5DD",
+  "chart": [
+    "067647",
+    "2E90FA",
+    "FDB022",
+    "9E77ED",
+    "F04438",
+    "98A2B3"
+  ],
+  "headFont": "Aptos Display",
+  "bodyFont": "Aptos"
+}

@@ -2,10 +2,11 @@
 // Design quality lives here, not in the model: a fixed 16:9 grid, a type scale, curated themes,
 // layout recipes, text fitting and lint warnings. The model only chooses content and layouts
 // (skills `pptx` and `design` teach it how).
-import { readFile } from "node:fs/promises";
-import { extname } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
 import { createRequire } from "node:module";
 import { addIcon, hasIcon, suggestIcons } from "./icons.ts";
+import { record, renderSlide, type Recorded } from "./preview.ts";
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -27,76 +28,73 @@ export interface Theme {
 	bodyFont: string;
 	/** Dark themes: covers stay on the dark background with accent details (a bright full-bleed accent is too loud). */
 	darkCover?: boolean;
+	/** Positive / negative deltas. Default: readable green/red for the background (light or dark). */
+	good?: string;
+	bad?: string;
 }
 
-export const THEMES: Record<string, Theme> = {
-	executive: {
-		bg: "FFFFFF", surface: "F2F4F7", ink: "1D2939", muted: "667085", accent: "0B3B75", accent2: "0E9384",
-		onAccent: "FFFFFF", line: "D0D5DD", chart: ["0B3B75", "0E9384", "F79009", "7A5AF8", "EE46BC", "98A2B3"],
-		headFont: "Aptos Display", bodyFont: "Aptos",
-	},
-	midnight: {
-		bg: "0F172A", surface: "1E293B", ink: "E2E8F0", muted: "94A3B8", accent: "38BDF8", accent2: "A78BFA",
-		onAccent: "0F172A", line: "334155", chart: ["38BDF8", "A78BFA", "34D399", "FBBF24", "F472B6", "94A3B8"],
-		headFont: "Aptos Display", bodyFont: "Aptos", darkCover: true,
-	},
-	warm: {
-		bg: "FFFBF5", surface: "F5EDE3", ink: "292524", muted: "78716C", accent: "C2410C", accent2: "0F766E",
-		onAccent: "FFFFFF", line: "E7DCCF", chart: ["C2410C", "0F766E", "CA8A04", "6D28D9", "BE185D", "A8A29E"],
-		headFont: "Georgia", bodyFont: "Aptos",
-	},
-	mono: {
-		bg: "FFFFFF", surface: "F4F4F5", ink: "18181B", muted: "71717A", accent: "18181B", accent2: "E11D48",
-		onAccent: "FFFFFF", line: "E4E4E7", chart: ["18181B", "E11D48", "71717A", "A1A1AA", "D4D4D8", "F43F5E"],
-		headFont: "Aptos Display", bodyFont: "Aptos",
-	},
-	fresh: {
-		bg: "FFFFFF", surface: "ECFDF3", ink: "101828", muted: "475467", accent: "067647", accent2: "2E90FA",
-		onAccent: "FFFFFF", line: "D0D5DD", chart: ["067647", "2E90FA", "FDB022", "9E77ED", "F04438", "98A2B3"],
-		headFont: "Aptos Display", bodyFont: "Aptos",
-	},
-	// Palettes below adapted from minimax-ai/skills pptx-generator design-system.md (MIT).
-	tech_night: {
-		bg: "000814", surface: "001D3D", ink: "E8EEF6", muted: "8DA2BC", accent: "FFC300", accent2: "4CC9F0",
-		onAccent: "000814", line: "17325A", chart: ["FFC300", "4CC9F0", "F72585", "7BD389", "B8C0FF", "8DA2BC"],
-		headFont: "Aptos Display", bodyFont: "Aptos", darkCover: true,
-	},
-	authority: {
-		bg: "FFFFFF", surface: "EDF2F4", ink: "2B2D42", muted: "6C7489", accent: "2B2D42", accent2: "EF233C",
-		onAccent: "FFFFFF", line: "D5DBE1", chart: ["2B2D42", "EF233C", "8D99AE", "F4A261", "2A9D8F", "C0C7D1"],
-		headFont: "Georgia", bodyFont: "Aptos",
-	},
-	wellness: {
-		bg: "FFFFFF", surface: "EDF6F9", ink: "1F3B40", muted: "5E7C80", accent: "006D77", accent2: "E29578",
-		onAccent: "FFFFFF", line: "CFE3E6", chart: ["006D77", "E29578", "83C5BE", "FFDDD2", "3D5A80", "A3B8BB"],
-		headFont: "Georgia", bodyFont: "Aptos",
-	},
-	eco: {
-		bg: "FBFAF5", surface: "ECEFE4", ink: "263A2E", muted: "66755F", accent: "344E41", accent2: "DDA15E",
-		onAccent: "FFFFFF", line: "DAD7CD", chart: ["344E41", "588157", "A3B18A", "DDA15E", "BC6C25", "B7B7A4"],
-		headFont: "Georgia", bodyFont: "Aptos",
-	},
-	luxury: {
-		bg: "F7F3F0", surface: "EDE4DF", ink: "22223B", muted: "6E6A80", accent: "22223B", accent2: "B08968",
-		onAccent: "F2E9E4", line: "DCD2CC", chart: ["22223B", "B08968", "4A4E69", "9A8C98", "C9ADA7", "D6CCC2"],
-		headFont: "Georgia", bodyFont: "Aptos",
-	},
-	coastal: {
-		bg: "FFFFFF", surface: "F1FAF9", ink: "123B47", muted: "5B7C85", accent: "0081A7", accent2: "F07167",
-		onAccent: "FFFFFF", line: "D3E9EC", chart: ["0081A7", "F07167", "00AFB9", "FED9B7", "FDB833", "9FB7BD"],
-		headFont: "Aptos Display", bodyFont: "Aptos",
-	},
-	insight: {
-		bg: "FFFFFF", surface: "F4F1EA", ink: "1E2F36", muted: "5F6F75", accent: "264653", accent2: "E76F51",
-		onAccent: "FFFFFF", line: "DDD8CC", chart: ["264653", "2A9D8F", "E9C46A", "F4A261", "E76F51", "9AA5A8"],
-		headFont: "Aptos Display", bodyFont: "Aptos",
-	},
-	platinum: {
-		bg: "FFFFFF", surface: "F5F5F5", ink: "0A0A0A", muted: "737373", accent: "0A0A0A", accent2: "D4AF37",
-		onAccent: "FFFFFF", line: "E5E5E5", chart: ["0A0A0A", "0070F3", "D4AF37", "737373", "A3A3A3", "D4D4D4"],
-		headFont: "Aptos Display", bodyFont: "Aptos",
-	},
+/** Fallback when the skill's theme folder is missing (tests, local runs). Real themes live in skills/pptx/themes/*.json. */
+export const DEFAULT_THEME: Theme = {
+	bg: "FFFFFF", surface: "F2F4F7", ink: "1D2939", muted: "667085", accent: "0B3B75", accent2: "0E9384",
+	onAccent: "FFFFFF", line: "D0D5DD", chart: ["0B3B75", "0E9384", "F79009", "7A5AF8", "EE46BC", "98A2B3"],
+	headFont: "Aptos Display", bodyFont: "Aptos", good: "067647", bad: "C01048",
 };
+
+const COLOR_KEYS = ["bg", "surface", "ink", "muted", "accent", "accent2", "onAccent", "line"] as const;
+
+/** Reads every <name>.json in a theme folder (the `pptx` skill owns them: add a file, get a theme). */
+export async function loadThemes(dir: string): Promise<Record<string, Theme>> {
+	const out: Record<string, Theme> = {};
+	let files: string[] = [];
+	try {
+		files = (await readdir(dir)).filter((f) => f.endsWith(".json"));
+	} catch {
+		return { executive: DEFAULT_THEME };
+	}
+	for (const f of files) {
+		try {
+			const t = JSON.parse(await readFile(join(dir, f), "utf8"));
+			const problems = themeProblems(t);
+			if (problems.length) console.warn(`theme ${f} ignored: ${problems.join("; ")}`);
+			else out[basename(f, ".json")] = normalizeTheme(t);
+		} catch (e) {
+			console.warn(`theme ${f} ignored: ${(e as Error).message}`);
+		}
+	}
+	if (!out.executive) out.executive = DEFAULT_THEME;
+	return out;
+}
+
+function normalizeTheme(t: Record<string, any>): Theme {
+	const o = { ...t } as Theme;
+	for (const k of COLOR_KEYS) o[k] = hex(t[k])!;
+	o.chart = (t.chart as string[]).map((c) => hex(c)!);
+	const dark = contrast(o.bg, "000000") < contrast(o.bg, "FFFFFF");
+	o.good = hex(t.good) ?? (dark ? "34D399" : "067647");
+	o.bad = hex(t.bad) ?? (dark ? "F87171" : "C01048");
+	return o;
+}
+
+function themeProblems(t: Record<string, any>): string[] {
+	const p: string[] = [];
+	for (const k of COLOR_KEYS) if (!hex(t?.[k])) p.push(`${k} must be a hex color like "#1D2939"`);
+	if (!Array.isArray(t?.chart) || t.chart.length < 3 || t.chart.some((c: unknown) => !hex(c as string))) p.push("chart needs 3+ hex colors");
+	if (typeof t?.headFont !== "string" || typeof t?.bodyFont !== "string") p.push("headFont and bodyFont are required");
+	return p;
+}
+
+/** WCAG contrast ratio between two hex colors. */
+function contrast(a: string, b: string): number {
+	const lum = (h: string) => {
+		const [r, g, bl] = [0, 2, 4].map((i) => {
+			const v = parseInt(h.slice(i, i + 2), 16) / 255;
+			return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+		});
+		return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+	};
+	const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+	return (x + 0.05) / (y + 0.05);
+}
 
 type Bullet = string | { text: string; sub?: string[] };
 type ChartType = "bar" | "column" | "stacked_bar" | "stacked_column" | "line" | "area" | "pie" | "doughnut";
@@ -115,7 +113,8 @@ export interface DeckSpec {
 	title: string;
 	author?: string;
 	date?: string;
-	theme?: string;
+	/** Theme name (skills/pptx/themes), a workspace .json file with a theme, or an inline theme ({extends?, ...fields}). */
+	theme?: string | (Partial<Theme> & { extends?: string });
 	brand?: { accent?: string; accent2?: string; headFont?: string; bodyFont?: string; dark?: boolean };
 	footer?: string;
 	slides: SlideSpec[];
@@ -343,7 +342,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 			if (it.delta) {
 				const good = it.good ?? it.trend !== "down";
 				const arrow = it.trend === "down" ? "▼ " : it.trend === "flat" ? "■ " : "▲ ";
-				slide.addText(arrow + it.delta, { x: x + 0.35, y: BODY_Y + ch - 0.4, w: cw - 0.6, h: 0.4, fontFace: c.t.bodyFont, fontSize: 14, bold: true, color: good ? "12B76A" : "F04438", margin: 0 });
+				slide.addText(arrow + it.delta, { x: x + 0.35, y: BODY_Y + ch - 0.4, w: cw - 0.6, h: 0.4, fontFace: c.t.bodyFont, fontSize: 14, bold: true, color: good ? c.t.good : c.t.bad, margin: 0 });
 			}
 		});
 		if (s.takeaway) paragraph(c, slide, n, String(s.takeaway), MX, BODY_Y + ch + 0.6, CW, 1.3, 18, c.t.ink);
@@ -374,7 +373,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 				options: {
 					align: numeric[j] ? "right" : "left",
 					bold: i === hi,
-					fill: { color: i === hi ? tint(c.t.accent2) : i % 2 ? c.t.surface : c.t.bg },
+					fill: { color: i === hi ? tint(c.t.accent2, 0.78, c.t.bg) : i % 2 ? c.t.surface : c.t.bg },
 					color: c.t.ink,
 				},
 			})),
@@ -552,10 +551,17 @@ function fmt(v: unknown, decimals = 0): string {
 }
 
 /** Light tint of a color (mix with white), for highlighted table rows. */
-function tint(color: string, k = 0.82): string {
+/** Mixes a color toward `toward` (the slide background, so tints stay readable on dark themes). */
+function tint(color: string, k = 0.82, toward = "FFFFFF"): string {
 	const c = parseInt(color, 16);
-	const mix = (v: number) => Math.round(v + (255 - v) * k);
-	return [(c >> 16) & 255, (c >> 8) & 255, c & 255].map((v) => mix(v).toString(16).padStart(2, "0")).join("").toUpperCase();
+	const t = parseInt(toward, 16);
+	return [16, 8, 0]
+		.map((sh) => {
+			const v = (c >> sh) & 255;
+			return Math.round(v + (((t >> sh) & 255) - v) * k).toString(16).padStart(2, "0");
+		})
+		.join("")
+		.toUpperCase();
 }
 
 interface ChartSpec {
@@ -596,7 +602,7 @@ function addChart(c: Ctx, slide: any, n: number, ch: ChartSpec | undefined, x: n
 	if (ch.highlight !== undefined && ch.series.length === 1 && !pie) {
 		const idx = typeof ch.highlight === "number" ? ch.highlight : ch.categories.indexOf(String(ch.highlight));
 		if (idx < 0) c.warn(n, `highlight "${ch.highlight}" is not a category`);
-		colors = ch.categories.map((_, i) => (i === idx ? c.t.accent : tint(c.t.muted, 0.45)));
+		colors = ch.categories.map((_, i) => (i === idx ? c.t.accent : tint(c.t.muted, 0.45, c.t.bg)));
 		legend = false;
 	}
 	// Horizontal bars read top-down in category order.
@@ -658,21 +664,74 @@ export interface RenderResult {
 	bytes: Buffer;
 	slides: number;
 	warnings: string[];
+	/** One PNG per slide (when preview was requested), for the model to look at. */
+	previews: Buffer[];
 }
 
-export async function renderDeck(deck: DeckSpec, opts: { workspace: string; resolve: (p: string) => string }): Promise<RenderResult> {
+export interface RenderOptions {
+	workspace: string;
+	resolve: (p: string) => string;
+	themes?: Record<string, Theme>;
+	/** Draw slide PNGs and measure the real layout (overflow, collisions). Default true. */
+	preview?: boolean;
+}
+
+async function resolveTheme(deck: DeckSpec, themes: Record<string, Theme>, opts: RenderOptions, warnings: string[]): Promise<Theme> {
+	const names = Object.keys(themes).join(", ");
+	let spec: unknown = deck.theme ?? "executive";
+	if (typeof spec === "string" && spec.endsWith(".json")) {
+		try {
+			spec = JSON.parse(await readFile(opts.resolve(spec), "utf8"));
+		} catch (e) {
+			warnings.push(`theme file ${deck.theme}: ${(e as Error).message}; used executive`);
+			spec = "executive";
+		}
+	}
+	if (typeof spec === "string") {
+		if (!themes[spec]) warnings.push(`unknown theme "${spec}" (use one of ${names}, a .json theme file, or an inline theme object); used executive`);
+		return themes[spec] ?? themes.executive ?? DEFAULT_THEME;
+	}
+	const custom = (spec ?? {}) as Record<string, any>;
+	const base = themes[custom.extends ?? "executive"] ?? DEFAULT_THEME;
+	if (custom.extends && !themes[custom.extends]) warnings.push(`theme.extends "${custom.extends}" unknown (use one of ${names})`);
+	const merged = { ...base, ...custom };
+	const problems = themeProblems(merged);
+	if (problems.length) {
+		warnings.push(`custom theme invalid (${problems.join("; ")}); used ${custom.extends ?? "executive"}`);
+		return base;
+	}
+	return normalizeTheme(merged);
+}
+
+/** Readability lint for the final palette (custom themes and brand colors can break it). */
+function paletteWarnings(t: Theme): string[] {
+	const w: string[] = [];
+	const check = (fg: string, bg: string, what: string, min: number) => {
+		const r = contrast(fg, bg);
+		if (r < min) w.push(`theme: ${what} contrast ${r.toFixed(1)}:1 is below ${min}:1; pick a darker/lighter color`);
+	};
+	check(t.ink, t.bg, "text on background", 4.5);
+	check(t.muted, t.bg, "muted text on background", 3);
+	check(t.ink, t.surface, "text on cards", 4.5);
+	check(t.onAccent, t.accent, "text on accent (covers, headers)", 4.5);
+	return w;
+}
+
+export async function renderDeck(deck: DeckSpec, opts: RenderOptions): Promise<RenderResult> {
 	if (!deck || !Array.isArray(deck.slides) || deck.slides.length === 0) throw new Error("spec needs {title, slides:[...]}");
-	const base = THEMES[deck.theme ?? "executive"] ?? THEMES.executive;
+	const warnings: string[] = [];
+	const base = await resolveTheme(deck, opts.themes ?? { executive: DEFAULT_THEME }, opts, warnings);
 	const b = deck.brand ?? {};
 	const t: Theme = {
 		...base,
-		...(b.dark ? { bg: "0F172A", surface: "1E293B", ink: "E2E8F0", muted: "94A3B8", line: "334155" } : {}),
+		...(b.dark ? { bg: "0F172A", surface: "1E293B", ink: "E2E8F0", muted: "94A3B8", line: "334155", good: "34D399", bad: "F87171" } : {}),
 		accent: hex(b.accent) ?? base.accent,
 		accent2: hex(b.accent2) ?? base.accent2,
 		headFont: b.headFont ?? base.headFont,
 		bodyFont: b.bodyFont ?? base.bodyFont,
 	};
 	if (hex(b.accent)) t.chart = [t.accent, t.accent2, ...base.chart.slice(2)];
+	warnings.push(...paletteWarnings(t));
 
 	const pptx = new PptxGenJS();
 	pptx.layout = "LAYOUT_WIDE";
@@ -680,14 +739,15 @@ export async function renderDeck(deck: DeckSpec, opts: { workspace: string; reso
 	if (deck.author) pptx.author = deck.author;
 	pptx.theme = { headFontFace: t.headFont, bodyFontFace: t.bodyFont };
 
-	const warnings: string[] = [];
 	const noNotes: number[] = [];
+	const recs: Recorded[] = [];
 	const c: Ctx = { pptx, t, deck, workspace: opts.workspace, resolve: opts.resolve, warn: (n, m) => warnings.push(`slide ${n}: ${m}`) };
 
 	for (const [i, s] of deck.slides.entries()) {
 		const n = i + 1;
 		const layout = LAYOUTS[s.layout];
 		const slide = pptx.addSlide();
+		recs.push(record(slide));
 		bg(slide, t.bg);
 		if (!layout) {
 			warnings.push(`slide ${n}: unknown layout "${s.layout}" (use one of ${Object.keys(LAYOUTS).join(", ")}); rendered as bullets`);
@@ -702,8 +762,17 @@ export async function renderDeck(deck: DeckSpec, opts: { workspace: string; reso
 	const plain = accentlessWords(deck);
 	if (plain.length) warnings.push(`text without Portuguese accents (${plain.slice(0, 8).join(", ")}): rewrite with correct accents (não, já, ação, três, rápido...)`);
 	if (noNotes.length) warnings.push(`slides ${noNotes.join(", ")}: no speaker notes (add "notes")`);
+
+	const previews: Buffer[] = [];
+	if (opts.preview !== false) {
+		for (const [i, r] of recs.entries()) {
+			const p = await renderSlide(r);
+			previews.push(p.png);
+			for (const m of p.issues) warnings.push(`slide ${i + 1} (measured): ${m}`);
+		}
+	}
 	const bytes = (await pptx.write({ outputType: "nodebuffer", compression: true })) as Buffer;
-	return { bytes, slides: deck.slides.length, warnings };
+	return { bytes, slides: deck.slides.length, warnings, previews };
 }
 
 export const LAYOUT_NAMES = Object.keys(LAYOUTS);

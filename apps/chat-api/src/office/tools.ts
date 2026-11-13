@@ -6,11 +6,15 @@ import { dirname } from "node:path";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { insideWorkspace } from "../tools.ts";
-import { renderDeck, LAYOUT_NAMES, THEMES } from "./pptx.ts";
+import { join } from "node:path";
+import { config } from "../config.ts";
+import { renderDeck, loadThemes, LAYOUT_NAMES } from "./pptx.ts";
+import { contactSheet } from "./preview.ts";
 import { markdownToDocx } from "./docx.ts";
 import { renderWorkbook } from "./xlsx.ts";
 
 const MAX_SPEC = 2_000_000;
+const MAX_PREVIEWS = 20; // images per tool result
 
 function text(t: string) {
 	return { content: [{ type: "text" as const, text: t }], details: undefined };
@@ -41,23 +45,51 @@ const report = (what: string, output: string, bytes: number, warnings: string[])
 		: "\n\nDesign lint: clean.");
 
 export function officeTools(workspace: string) {
+	const themesDir = join(config.skillsDir, "pptx", "themes");
 	const pptx = defineTool({
 		name: "generate_pptx",
 		label: "generate_pptx",
 		description:
 			"Render a PowerPoint deck from a JSON spec file in the workspace. Read the `pptx` and `design` skills " +
-			`first. Layouts: ${LAYOUT_NAMES.join(", ")}. Themes: ${Object.keys(THEMES).join(", ")}. ` +
-			"Returns design lint warnings (overflowing text, too many bullets, bad charts): fix them and render again.",
-		promptSnippet: "generate_pptx: deck spec JSON -> .pptx with built-in design system (read skill pptx)",
+			`first. Layouts: ${LAYOUT_NAMES.join(", ")}. Themes: the files in the pptx skill's themes/ folder, ` +
+			"a .json theme file, or an inline theme. Returns design lint warnings (measured overflow, collisions, " +
+			"contrast, bad charts) and a PNG preview of every slide: look at them, fix the spec and render again.",
+		promptSnippet: "generate_pptx: deck spec JSON -> .pptx + slide previews to review (read skill pptx)",
 		parameters: Type.Object({
 			spec: Type.String({ description: "Deck spec JSON file, relative to the workspace (e.g. outputs/deck.json)" }),
 			output: Type.String({ description: ".pptx path to create, e.g. outputs/deck.pptx" }),
+			preview_slides: Type.Optional(
+				Type.Array(Type.Integer({ minimum: 1 }), {
+					description: "Slide numbers whose preview image you want back (default: all). After a fix, ask only for the slides you changed.",
+				}),
+			),
 		}),
 		async execute(_id, params) {
 			const deck = (await readSpec(workspace, params.spec)) as Parameters<typeof renderDeck>[0];
-			const r = await renderDeck(deck, { workspace, resolve: (p) => insideWorkspace(workspace, p) });
+			const themes = await loadThemes(themesDir);
+			const r = await renderDeck(deck, { workspace, resolve: (p) => insideWorkspace(workspace, p), themes });
 			await save(workspace, params.output, r.bytes, ".pptx");
-			return text(report(`Deck (${r.slides} slides)`, params.output, r.bytes.length, r.warnings));
+			const sheet = params.output.replace(/\.pptx$/i, ".preview.png");
+			if (r.previews.length) await save(workspace, sheet, await contactSheet(r.previews), ".png");
+			const want = new Set(params.preview_slides?.length ? params.preview_slides : r.previews.map((_, i) => i + 1));
+			const images = r.previews
+				.map((png, i) => ({ png, n: i + 1 }))
+				.filter((p) => want.has(p.n))
+				.slice(0, MAX_PREVIEWS);
+			const head =
+				report(`Deck (${r.slides} slides)`, params.output, r.bytes.length, r.warnings) +
+				(images.length
+					? `\n\nPreview (approximate rendering, open fonts): ${images.map((p) => `image ${images.indexOf(p) + 1} = slide ${p.n}`).join(", ")}. ` +
+						"Review each image with the checklist in the pptx skill (step 6) before you answer. " +
+						`Thumbnails for the user: ${sheet}.`
+					: "");
+			return {
+				content: [
+					{ type: "text" as const, text: head },
+					...images.map((p) => ({ type: "image" as const, data: p.png.toString("base64"), mimeType: "image/png" })),
+				],
+				details: undefined,
+			};
 		},
 	});
 

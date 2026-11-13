@@ -16,6 +16,9 @@ they cannot make: what to emphasize, what to cut, which form fits the data.
   board/finance -> `executive` or `authority`; research and data stories -> `insight`;
   AI/tech keynote -> `tech_night`; engineering -> `midnight`; premium -> `platinum` or `luxury`;
   health/HR -> `wellness`; ESG -> `eco`; consumer/CX -> `coastal`; culture -> `warm`.
+- No theme fits (a brand, a mood the user asked for): write an inline theme in the spec,
+  `{"extends": "<closest theme>", "accent": "#...", "accent2": "#..."}`, or a full theme file
+  (fields in the `pptx` skill `reference.md`). Keep text on background at 4.5:1 contrast.
 - One deck, one theme. Never mix.
 
 ## 2. Hierarchy: one thing first

@@ -1,0 +1,23 @@
+{
+  "look": "dark slate + sky blue",
+  "good_for": "engineering, product, data platforms",
+  "bg": "0F172A",
+  "surface": "1E293B",
+  "ink": "E2E8F0",
+  "muted": "94A3B8",
+  "accent": "38BDF8",
+  "accent2": "A78BFA",
+  "onAccent": "0F172A",
+  "line": "334155",
+  "chart": [
+    "38BDF8",
+    "A78BFA",
+    "34D399",
+    "FBBF24",
+    "F472B6",
+    "94A3B8"
+  ],
+  "headFont": "Aptos Display",
+  "bodyFont": "Aptos",
+  "darkCover": true
+}

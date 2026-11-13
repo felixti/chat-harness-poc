@@ -28,9 +28,19 @@ scale, themes, charts), so never try to position things yourself. Also read the 
    Full field reference with examples: `reference.md` in this skill folder. Read it before the
    first spec of the conversation.
 5. **Render:** `generate_pptx` with `spec: outputs/<name>.json`, `output: outputs/<name>.pptx`.
-6. **Fix every lint warning** by editing the spec (cut text, split slides, change layout), then
-   render again. Repeat until "Design lint: clean" or only deliberate warnings remain.
-7. Answer with the file name, the slide count and the storyline in 3 to 5 lines.
+   The result has the lint warnings and **one preview image per slide**.
+6. **Review like a designer.** Fix every lint warning ("(measured)" ones come from the real
+   layout: overflow, collisions, low contrast). Then look at each preview image and check:
+   - Nothing overlaps, nothing is cut, no text runs into the footer.
+   - One focal point per slide; the eye lands on the number/bar/option that proves the title.
+   - Balance: no big empty area beside a crowded one; cards and columns look even.
+   - Readable from the back of the room: no tiny text, no wall of bullets.
+   - Rhythm across the deck: layouts vary, a breathing slide every 4 to 5.
+   Edit the spec and render again with `preview_slides` set to the slides you changed (saves
+   context). Stop after 3 renders; mention anything you could not fix.
+7. Answer with the file name, the slide count and the storyline in 3 to 5 lines. The user also
+   gets `outputs/<name>.preview.png` (thumbnails); the preview uses open fonts, so PowerPoint
+   looks slightly different.
 
 ## Layouts
 

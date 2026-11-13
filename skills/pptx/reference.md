@@ -13,7 +13,10 @@ Top level:
 }
 ```
 
-- `theme` (pick by topic and audience; see the `design` skill):
+- `theme` (pick by topic and audience; see the `design` skill). Three forms:
+  1. A name: one of the files in `themes/` in this skill folder (each has `look` and `good_for`).
+  2. An inline theme that starts from one: `{"extends": "insight", "accent": "#7A1F5C"}`.
+  3. A theme file in the workspace: `"outputs/brand-theme.json"` (same fields as `themes/*.json`).
 
 | Theme | Look | Good for |
 |---|---|---|
@@ -30,6 +33,12 @@ Top level:
 | `luxury` | ink + bronze on ivory | consulting, hospitality, high-end |
 | `mono` | black + one red highlight | design audiences, minimal decks |
 | `fresh` | green + blue | people, operations, internal comms |
+
+Theme fields (hex colors): `bg` (slides), `surface` (cards, zebra rows), `ink` (text), `muted`
+(secondary text), `accent` (titles bar, highlights, covers), `accent2` (second highlight),
+`onAccent` (text on accent), `line` (hairlines), `chart` (3+ series colors), `headFont`,
+`bodyFont`, optional `darkCover` (dark themes), `good`/`bad` (delta colors). The renderer checks
+contrast (text 4.5:1, muted 3:1) and warns; a custom theme must pass before you answer.
 
 - `brand` overrides the theme: company colors (hex) and fonts. Use it when the user names a brand
   color or uploads a template. `dark: true` switches content slides to a dark background.

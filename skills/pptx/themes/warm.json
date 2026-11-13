@@ -1,0 +1,22 @@
+{
+  "look": "orange + teal, serif titles",
+  "good_for": "culture, marketing, storytelling",
+  "bg": "FFFBF5",
+  "surface": "F5EDE3",
+  "ink": "292524",
+  "muted": "78716C",
+  "accent": "C2410C",
+  "accent2": "0F766E",
+  "onAccent": "FFFFFF",
+  "line": "E7DCCF",
+  "chart": [
+    "C2410C",
+    "0F766E",
+    "CA8A04",
+    "6D28D9",
+    "BE185D",
+    "A8A29E"
+  ],
+  "headFont": "Georgia",
+  "bodyFont": "Aptos"
+}

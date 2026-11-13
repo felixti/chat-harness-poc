@@ -1,0 +1,22 @@
+{
+  "look": "navy + teal, white",
+  "good_for": "board, finance, strategy",
+  "bg": "FFFFFF",
+  "surface": "F2F4F7",
+  "ink": "1D2939",
+  "muted": "667085",
+  "accent": "0B3B75",
+  "accent2": "0E9384",
+  "onAccent": "FFFFFF",
+  "line": "D0D5DD",
+  "chart": [
+    "0B3B75",
+    "0E9384",
+    "F79009",
+    "7A5AF8",
+    "EE46BC",
+    "98A2B3"
+  ],
+  "headFont": "Aptos Display",
+  "bodyFont": "Aptos"
+}

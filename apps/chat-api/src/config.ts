@@ -11,7 +11,7 @@ export const config = {
 		baseUrl: env.LLM_BASE_URL ?? "http://llm-gateway.envoy-gateway-system.svc/api/v1",
 		/** The platform gateway injects the real key; this placeholder never leaves the cluster. */
 		apiKey: env.LLM_API_KEY ?? "injected-by-platform-gateway",
-		model: env.LLM_MODEL ?? "meta/muse-spark-1.3-contributor",
+		model: env.LLM_MODEL ?? "deepseek/deepseek-v4.1-flash-1017",
 		contextWindow: Number(env.LLM_CONTEXT_WINDOW ?? 200000),
 	},
 	blob: {
