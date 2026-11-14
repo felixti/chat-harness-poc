@@ -25,7 +25,7 @@ browser; Ctrl+P prints it (A4).
    Use `query_data` to test the numbers you plan to show.
 3. **Pick 3 to 5 messages** and write them as titles that state the finding ("Sudeste concentra
    45% da receita"), each backed by a `query_data` result.
-4. **Spec** in `outputs/<name>.json` (reference below), then `generate_dashboard` with
+4. **Spec** in `work/<name>.json` (reference below), then `generate_dashboard` with
    `output: outputs/<name>.html`.
 5. **Check the result.** Fix every lint warning. Then read the "Computed values" list: every
    title must match its numbers (if the title says "lidera" and the value is second, rewrite the

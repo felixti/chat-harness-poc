@@ -16,7 +16,7 @@ Top level:
 - `theme` (choose with the `design` skill: sober or modern, light or dark). Three forms:
   1. A name: one of the files in `themes/` in this skill folder.
   2. An inline theme that starts from one: `{"extends": "ivory", "accent": "#7A1F5C"}`.
-  3. A theme file in the workspace: `"outputs/brand-theme.json"` (same fields as `themes/*.json`).
+  3. A theme file in the workspace: `"work/brand-theme.json"` (same fields as `themes/*.json`).
 
 | Theme | Style | Look | Good for |
 |---|---|---|---|
@@ -93,7 +93,7 @@ title; when to use it is in the `pptx` skill), `subtitle`, `notes` (speaker note
 {"layout": "quote", "quote": "...", "author": "Diretoria Financeira"}
 {"layout": "image", "title": "...", "path": "uploads/fabrica.jpg", "caption": "...", "bullets": ["..."]}
 {"layout": "split", "title": "Clientes querem resposta em minutos", "bullets": ["68% esperam resposta no mesmo dia"],
- "path": "outputs/img/atendimento.jpg", "side": "right", "caption": "Imagem ilustrativa", "source": "Pesquisa interna"}
+ "path": "work/img/atendimento.jpg", "side": "right", "caption": "Imagem ilustrativa", "source": "Pesquisa interna"}
 {"layout": "numbered", "title": "Três prioridades para 2015",
  "items": [{"title": "Teto de desconto", "text": "Limitar descontos a 12% no varejo"}, {"title": "Foco em EUA e Canadá", "text": "Realocar o time comercial"}]}
 {"layout": "closing", "title": "Próximos passos", "bullets": ["Aprovar teto de desconto (Ana, 15/12)"], "subtitle": "Contato: fpa@empresa.com"}
@@ -105,7 +105,7 @@ and modern themes show it as a half-page picture beside the text. On other layou
 with a warning. A deck has at most 3 large pictures (`background_image` plus `split`).
 
 ```json
-{"layout": "title", "title": "IA generativa no Brasil em 2026", "subtitle": "Onde está o valor", "background_image": "outputs/img/cover.jpg"}
+{"layout": "title", "title": "IA generativa no Brasil em 2026", "subtitle": "Onde está o valor", "background_image": "work/img/cover.jpg"}
 ```
 
 ## Icons

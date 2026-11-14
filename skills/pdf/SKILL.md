@@ -22,9 +22,9 @@ Preferred, when the `run_code` tool exists (Python sandbox):
 
 Fallback, always available:
 
-1. Write the content as markdown in `outputs/<name>.md`: `#` title, `##` sections, tables in pipe
+1. Write the content as markdown in `work/<name>.md`: `#` title, `##` sections, tables in pipe
    syntax, bullet lists. No HTML, no images.
-2. `generate_pdf` with `source: outputs/<name>.md`, `output: outputs/<name>.pdf`.
+2. `generate_pdf` with `source: work/<name>.md`, `output: outputs/<name>.pdf`.
 3. Tell the user the file name; the chat shows a download link.
 
 ## Style

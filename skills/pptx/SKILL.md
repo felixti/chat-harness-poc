@@ -21,10 +21,10 @@ emphasis, chart choice, icons, pictures and words. This skill adds only what is 
    library). For a topic without uploads, research it: `tool_search` "brave" loads the web search
    tools; run 3 to 6 searches (`brave_web_search`, `brave_news_search` for recent facts,
    `brave_llm_context` to read the best pages). Write each number with its source and year in
-   `outputs/notes.md`. Never invent numbers.
+   `work/notes.md`. Never invent numbers.
 3. **Storyline.** Pick a structure in `storylines.md` (this folder) and write every action title
    as a list. Read only the titles: they must tell the story.
-4. **Spec.** Pick a layout per slide (table below) and write `outputs/<name>.json`. Read
+4. **Spec.** Pick a layout per slide (table below) and write `work/<name>.json`. Read
    `reference.md` (this folder) before the first spec of the conversation.
 5. **Pictures (optional, at most 3 per deck).** For the `title` slide, `section` slides or a `split` slide, call
    `generate_image` with `theme` = the deck theme and a prompt for a calm scene about the topic

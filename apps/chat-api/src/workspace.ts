@@ -208,6 +208,12 @@ export async function openTurn(user: string, conversation: string): Promise<Turn
 	}
 }
 
+/** What the user sees: their uploads and the deliverables. work/ (agent notes, specs, images) stays
+ *  in Blob for later turns but is not listed. */
+export function userVisible<T extends { path: string }>(files: T[]): T[] {
+	return files.filter((f) => f.path.startsWith("uploads/") || f.path.startsWith("outputs/"));
+}
+
 /** Files of a conversation, from Blob. */
 export async function listFiles(user: string, conversation: string): Promise<FileInfo[]> {
 	return (await objectStore().list(prefixOf(user, conversation))).map(({ path, size }) => ({ path, size }));

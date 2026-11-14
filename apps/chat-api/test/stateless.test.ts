@@ -66,3 +66,15 @@ test("history saves are versioned: a stale writer gets a conflict", async () => 
 	await assert.rejects(s.save({ ...base }), ConflictError); // a second "new" conversation with the same id
 	assert.deepEqual((await s.get(U, "c1"))!.entries, ["a"]);
 });
+
+test("the user sees uploads and outputs; work/ is kept but hidden", async () => {
+	const { userVisible } = await import("../src/workspace.ts");
+	const t = await openTurn(U, "conv-0009");
+	for (const p of ["outputs/deck.pptx", "work/deck.json", "work/img/cover.jpg", "work/notes.md"]) {
+		await mkdir(join(t.dir, p, ".."), { recursive: true });
+		await writeFile(join(t.dir, p), "x");
+	}
+	const all = await t.finish();
+	assert.deepEqual(userVisible(all).map((f) => f.path).sort(), ["outputs/deck.pptx", "uploads/a.csv"].filter((p) => all.some((f) => f.path === p)).sort());
+	assert.equal((await listFiles(U, "conv-0009")).filter((f) => f.path.startsWith("work/")).length, 3); // still persisted
+});

@@ -13,7 +13,7 @@ import { curate } from "./curator.ts";
 import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } from "./library.ts";
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
-import { listFiles, openTurn, readFileFromStore, workspacePath, writeFileToStore } from "./workspace.ts";
+import { listFiles, openTurn, readFileFromStore, userVisible, workspacePath, writeFileToStore } from "./workspace.ts";
 
 const store = await openStore(config.mongoUrl);
 const ID = /^[a-zA-Z0-9-]{8,64}$/;
@@ -111,7 +111,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				console.log(`[curator] saved ${cur.saved.length}${cur.summary ? ", summary updated" : ""}`);
 			}
 			await store.save({ id, user, title: existing?.title ?? input.message.slice(0, 60), entries: result.entries, updatedAt: new Date(), summary, version: existing?.version });
-			send({ type: "done", conversationId: id, files });
+			send({ type: "done", conversationId: id, files: userVisible(files) });
 		} catch (e) {
 			send({ type: "error", message: (e as Error).message });
 		}
@@ -161,7 +161,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	const m = url.pathname.match(/^\/api\/conversations\/([^/]+)\/(files|uploads)(?:\/(.+))?$/);
 	if (m && ID.test(m[1])) {
 		const workspace = workspacePath(user, m[1]);
-		if (m[2] === "files" && !m[3]) return json(res, 200, await listFiles(user, m[1]));
+		if (m[2] === "files" && !m[3]) return json(res, 200, userVisible(await listFiles(user, m[1])));
 		if (m[2] === "files" && req.method === "GET") {
 			// Validates the path (no ../ into another prefix), then reads straight from Blob.
 			const rel = relative(workspace, insideWorkspace(workspace, decodeURIComponent(m[3])));

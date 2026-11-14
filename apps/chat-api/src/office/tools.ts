@@ -58,7 +58,7 @@ export function officeTools(workspace: string) {
 			"contrast, bad charts) and a PNG preview of every slide: look at them, fix the spec and render again.",
 		promptSnippet: "generate_pptx: deck spec JSON -> .pptx + slide previews to review (read skill pptx)",
 		parameters: Type.Object({
-			spec: Type.String({ description: "Deck spec JSON file, relative to the workspace (e.g. outputs/deck.json)" }),
+			spec: Type.String({ description: "Deck spec JSON file, relative to the workspace (e.g. work/deck.json)" }),
 			output: Type.String({ description: ".pptx path to create, e.g. outputs/deck.pptx" }),
 			preview_slides: Type.Optional(
 				Type.Array(Type.Integer({ minimum: 1 }), {
@@ -150,7 +150,7 @@ export function officeTools(workspace: string) {
 			"(works offline). Read skill `dashboard` first. Returns lint warnings and the computed numbers to check.",
 		promptSnippet: "generate_dashboard: spec JSON + xlsx/csv -> interactive .html dashboard or one-pager (read skill dashboard)",
 		parameters: Type.Object({
-			spec: Type.String({ description: "Dashboard spec JSON file, relative to the workspace (e.g. outputs/painel.json)" }),
+			spec: Type.String({ description: "Dashboard spec JSON file, relative to the workspace (e.g. work/painel.json)" }),
 			output: Type.String({ description: ".html path to create, e.g. outputs/painel.html" }),
 		}),
 		async execute(_id, params) {
@@ -214,7 +214,7 @@ export function officeTools(workspace: string) {
 			),
 			sort: Type.Optional(Type.Union([Type.Literal("desc"), Type.Literal("asc"), Type.Literal("x")], { description: "By the first measure (default desc), or by the group (x)" })),
 			top: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, description: "Default 50" })),
-			output_csv: Type.Optional(Type.String({ description: "Also save the result as CSV, e.g. outputs/receita-regiao.csv" })),
+			output_csv: Type.Optional(Type.String({ description: "Also save the result as CSV, e.g. outputs/receita-regiao.csv (a deliverable) or work/receita-regiao.csv (intermediate)" })),
 		}),
 		async execute(_id, p) {
 			const f = await loadTable(insideWorkspace(workspace, p.path), p.sheet, p.header_row);

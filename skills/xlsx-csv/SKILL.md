@@ -29,7 +29,7 @@ description: Analyze spreadsheets and tabular data (XLSX, CSV) - summaries, filt
 
 ## Creating a workbook
 
-`generate_xlsx` renders a formatted workbook from a JSON spec (`outputs/<name>.json`):
+`generate_xlsx` renders a formatted workbook from a JSON spec (`work/<name>.json`):
 
 ```json
 {"currency": "R$", "accent": "#0B3B75", "sheets": [{
@@ -42,7 +42,7 @@ description: Analyze spreadsheets and tabular data (XLSX, CSV) - summaries, filt
 
 - `format`: `text`, `integer`, `decimal`, `currency`, `percent` (fractions: 0.12 = 12%), `date`
   (ISO `2026-11-13`).
-- Many rows: save them as CSV (`query_data` `output_csv`, or `bash`/python) and use `"rows_csv": "outputs/data.csv"`
+- Many rows: save them as CSV (`query_data` `output_csv`, or `bash`/python) and use `"rows_csv": "work/data.csv"`
   (first line is the header and is skipped) instead of `rows`.
 - Formulas: strings starting with `=` in A1 notation. With `title`, the header is row 3 and
   data starts at row 4; without it, header row 1, data from row 2.

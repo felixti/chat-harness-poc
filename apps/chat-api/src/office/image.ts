@@ -69,7 +69,7 @@ export function imageTool(workspace: string, themesDir: string) {
 		promptSnippet: "generate_image: prompt -> PNG/JPEG in the workspace for deck covers (read skill pptx)",
 		parameters: Type.Object({
 			prompt: Type.String({ description: "What to show: subject, mood, composition (e.g. 'abstract aerial view of a port at dusk, wide, calm sky on the left'). English works best." }),
-			output: Type.String({ description: "Path without extension or with .png/.jpg, e.g. outputs/img/cover. The real extension follows the model's format." }),
+			output: Type.String({ description: "Path without extension or with .png/.jpg, e.g. work/img/cover. The real extension follows the model's format." }),
 			aspect_ratio: Type.Optional(Type.Union(RATIOS.map((r) => Type.Literal(r)), { description: "Default 16:9 (full-slide background)" })),
 			theme: Type.Optional(Type.String({ description: "Deck theme name; its colors go into the prompt" })),
 		}),

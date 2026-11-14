@@ -11,7 +11,7 @@ description: Create Word documents (.docx) - reports, memos, proposals, minutes 
 
 ## Creating
 
-1. Write the content as markdown in `outputs/<name>.md`: `#` for chapters, `##`/`###` for
+1. Write the content as markdown in `work/<name>.md`: `#` for chapters, `##`/`###` for
    sections, pipe tables (align numbers right with `--:`), lists, `>` for callouts. Do not repeat
    the document title as `#` at the top: pass it as `title`.
 2. `generate_docx` with `source`, `output: outputs/<name>.docx`, `title`, `subtitle`, `author`,
