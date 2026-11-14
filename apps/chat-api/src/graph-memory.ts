@@ -300,6 +300,8 @@ export interface FactRow {
 	at: string;
 	src: string;
 	note: string;
+	subjectKind?: string;
+	objectKind?: string;
 	forgotten?: string;
 }
 
@@ -320,16 +322,30 @@ export class FactGraph {
 		return this.loaded;
 	}
 
+	/** Returns the new fact id, or "" when the same live fact already exists (curator and agent
+	 *  may both save it). */
 	async remember(s: { name: string; kind: Kind }, rel: string, o: { name: string; kind: Kind }, note?: string): Promise<string> {
 		for (const t of [s.name, rel, o.name, note ?? "x"]) {
 			const bad = checkEntry(t);
 			if (bad) throw new Error(bad);
 		}
+		const { g } = await this.open();
+		const dup = g
+			.q("MATCH (a:Entity {key: $sk})-[f:FACT]->(b:Entity {key: $ok}) WHERE f.forgotten_at IS NULL RETURN f.rel AS rel", { sk: keyOf(s), ok: keyOf(o) })
+			.some((r) => fold(String(r.rel)) === fold(rel));
+		if (dup) return "";
 		const ev: FactEvent = { v: 1, op: "remember", id: randomUUID().slice(0, 8), at: Date.now(), src: this.conversation, s, rel: rel.trim(), o, ...(note ? { note } : {}) };
 		await logStore().append(this.user, month(ev.at), seal(ev, `${this.user}/events`, graphKey()));
-		if (this.loaded) apply((await this.loaded).g, ev);
+		apply(g, ev);
 		this.added++;
 		return ev.id;
+	}
+
+	/** For the Memória panel: totals and the newest live facts. */
+	async overview(limit = 100): Promise<{ entities: number; facts: number; recent: FactRow[] }> {
+		const { g } = await this.open();
+		const [c] = g.q("MATCH (e:Entity) WITH count(e) AS entities OPTIONAL MATCH ()-[f:FACT]->() WHERE f.forgotten_at IS NULL RETURN entities, count(f) AS facts");
+		return { entities: Number(c?.entities ?? 0), facts: Number(c?.facts ?? 0), recent: (await this.recall(undefined, undefined, limit)).facts };
 	}
 
 	async forget(fact: string, reason?: string): Promise<void> {
@@ -353,7 +369,7 @@ export class FactGraph {
 		const facts = g
 			.q(
 				`MATCH (a:Entity)-[f:FACT]->(b:Entity) WHERE ${where} ` +
-					"RETURN f.id AS id, a.name AS subject, f.rel AS relation, b.name AS object, f.at AS at, f.src AS src, f.note AS note ORDER BY f.at DESC LIMIT $limit",
+					"RETURN f.id AS id, a.name AS subject, a.kind AS subjectKind, f.rel AS relation, b.name AS object, b.kind AS objectKind, f.at AS at, f.src AS src, f.note AS note ORDER BY f.at DESC LIMIT $limit",
 				{ keys, at, limit },
 			)
 			.map((r) => ({ ...(r as unknown as FactRow), at: new Date(Number(r.at)).toISOString().slice(0, 10) }));
@@ -403,6 +419,7 @@ export function graphTools(fg: FactGraph): ToolDefinition[] {
 			}),
 			async execute(_id, p) {
 				const id = await fg.remember({ name: p.subject, kind: p.subject_kind }, p.relation, { name: p.object, kind: p.object_kind }, p.note);
+				if (!id) return text(`Already remembered: ${p.subject} — ${p.relation} → ${p.object}`);
 				return text(`Remembered (fact ${id}): ${p.subject} — ${p.relation} → ${p.object}${p.note ? ` (${p.note})` : ""}`);
 			},
 		}),

@@ -68,7 +68,11 @@ export const config = {
 		/** Long-term memory (docs/architecture.md §6); sealed per user, the agent only reaches it via tools. */
 		container: env.MEMORY_CONTAINER ?? "chat-memory",
 		enabled: env.MEMORY_ENABLED !== "false",
+		/** Turn-end curator that saves what the user said worth keeping; "false" turns it off. */
+		curator: env.MEMORY_CURATOR !== "false",
 	},
+	/** Model for the memory curator (one small JSON call per turn). */
+	curatorModel: env.CURATOR_MODEL ?? env.LLM_MODEL ?? "deepseek/deepseek-v4.1-flash-1017",
 	/** Dev only: identity when no gateway header is present. */
 	devUser: env.DEV_USER ?? "",
 };

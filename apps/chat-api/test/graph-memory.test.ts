@@ -73,3 +73,12 @@ test("sealed at rest, isolated per user, rejects instructions and secrets", asyn
 	await assert.rejects(other.remember(J("x"), "tem", P("y"), "token: ghp_abcdefghijklmnop1234"), /rejected/);
 	await other.dispose();
 });
+
+test("duplicates are skipped; overview counts live facts", async () => {
+	const g = new FactGraph("user-graph-0003", "conv-1");
+	assert.ok(await g.remember(J("Atlas"), "depende de", J("Data Lake")));
+	assert.equal(await g.remember(J("atlas"), "Depende de", J("data lake")), ""); // same fact, other spelling
+	const o = await g.overview();
+	assert.deepEqual([o.entities, o.facts, o.recent[0].subjectKind], [2, 1, "project"]);
+	await g.dispose();
+});

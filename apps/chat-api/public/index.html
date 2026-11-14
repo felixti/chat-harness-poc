@@ -35,6 +35,15 @@
   .mem li span { flex:1; }
   .mem li button, .mem .clear { background:transparent; color:var(--muted); border:none; padding:0 4px; font-size:13px; cursor:pointer; }
   .mem .clear { text-decoration:underline; padding:0; margin-top:6px; }
+  .mem .rel { color:var(--muted); }
+  .mem .subj { margin:6px 0 1px; font-weight:600; }
+  .mem .meta { font-size:11px; color:var(--muted); }
+  #graphbtn { background:transparent; color:var(--accent); border:1px solid var(--line); padding:3px 8px; font-size:12px; margin-top:4px; }
+  dialog#graph { width:min(960px, 94vw); height:min(680px, 88vh); padding:0; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--fg); }
+  dialog#graph header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid var(--line); font-size:13px; }
+  dialog#graph svg { width:100%; height:calc(100% - 46px); display:block; }
+  dialog#graph .legend span { margin-right:10px; }
+  dialog#graph .legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align:middle; }
   @media (max-width: 700px) { body { grid-template-columns: 1fr; } aside { display:none; } }
 </style>
 </head>
@@ -53,12 +62,17 @@
   <div id="connectors"><em>carregando…</em></div>
   <p><strong>Memória</strong></p>
   <div id="memory" class="mem"><em>carregando…</em></div>
+  <div id="graphmem" class="mem"></div>
   <p><strong>Skills fixadas</strong></p>
   <input id="skills" type="text" placeholder="ex.: pdf, research">
   <p><strong>Arquivos</strong></p>
   <div id="files"><em>nenhum</em></div>
   <p><button id="new" type="button">Nova conversa</button></p>
 </aside>
+<dialog id="graph">
+  <header><strong>Grafo da memória</strong><span class="legend" id="legend"></span><button type="button" id="graphclose" class="off" style="background:transparent;color:var(--fg)">Fechar</button></header>
+  <svg id="graphsvg" role="img" aria-label="Grafo de entidades e relações lembradas"></svg>
+</dialog>
 <script>
 let conv = null;
 const log = document.getElementById("log");
@@ -123,7 +137,65 @@ async function loadMemory() {
   clear.onclick = async () => { if (confirm("Apagar tudo o que o assistente lembra sobre você?")) { await fetch("api/memory", { method: "DELETE" }); loadMemory(); } };
   box.append(clear);
 }
-loadMemory();
+const KIND_COLORS = { person:"#2563eb", team:"#7c3aed", project:"#059669", company:"#d97706", product:"#0891b2", topic:"#db2777", document:"#64748b", decision:"#dc2626", other:"#78716c" };
+let graphData = { recent: [] };
+async function loadGraph() {
+  const box = document.getElementById("graphmem");
+  const r = await fetch("api/memory/graph"); graphData = r.ok ? await r.json() : { entities: 0, facts: 0, recent: [] };
+  box.textContent = "";
+  if (!graphData.facts) return;
+  const h = document.createElement("h4"); h.textContent = `Relações (${graphData.facts} fatos, ${graphData.entities} entidades)`; box.append(h);
+  const btn = document.createElement("button"); btn.type = "button"; btn.id = "graphbtn"; btn.textContent = "Ver grafo"; btn.onclick = showGraph; box.append(btn);
+  const bySubj = new Map();
+  for (const f of graphData.recent.slice(0, 30)) { if (!bySubj.has(f.subject)) bySubj.set(f.subject, []); bySubj.get(f.subject).push(f); }
+  for (const [subj, facts] of bySubj) {
+    const d = document.createElement("div"); d.className = "subj"; d.textContent = subj; box.append(d);
+    const ul = document.createElement("ul");
+    for (const f of facts) {
+      const li = document.createElement("li");
+      const t = document.createElement("span");
+      const rel = document.createElement("span"); rel.className = "rel"; rel.textContent = `${f.relation} → `;
+      const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = f.note ? `${f.note} · ${f.at}` : f.at;
+      t.append(rel, document.createTextNode(f.object), meta);
+      const del = document.createElement("button"); del.type = "button"; del.title = "Esquecer este fato"; del.textContent = "×";
+      del.onclick = async () => { await fetch(`api/memory/graph/${f.id}`, { method: "DELETE" }); loadGraph(); };
+      li.append(t, del); ul.append(li);
+    }
+    box.append(ul);
+  }
+}
+function showGraph() {
+  const dlg = document.getElementById("graph"); dlg.showModal();
+  const svg = document.getElementById("graphsvg"); svg.textContent = "";
+  const W = svg.clientWidth || 900, H = svg.clientHeight || 600, NS = "http://www.w3.org/2000/svg";
+  const nodes = new Map(), edges = [];
+  const node = (name) => { if (!nodes.has(name)) nodes.set(name, { name, kind: "other", x: W/2 + (Math.random()-0.5)*W*0.6, y: H/2 + (Math.random()-0.5)*H*0.6, vx: 0, vy: 0, deg: 0 }); return nodes.get(name); };
+  for (const f of graphData.recent) { const a = node(f.subject), b = node(f.object); a.deg++; b.deg++; edges.push({ a, b, rel: f.relation }); }
+  for (const f of graphData.recent) { if (f.subjectKind) nodes.get(f.subject).kind = f.subjectKind; if (f.objectKind) nodes.get(f.object).kind = f.objectKind; }
+  const list = [...nodes.values()];
+  for (let it = 0; it < 300; it++) {   // small force layout: repulsion, springs, centering
+    for (const p of list) for (const q of list) { if (p === q) continue; let dx = p.x - q.x, dy = p.y - q.y, d2 = dx*dx + dy*dy + 0.01; const f = 2400 / d2; p.vx += dx * f / Math.sqrt(d2); p.vy += dy * f / Math.sqrt(d2); }
+    for (const e of edges) { const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, d = Math.sqrt(dx*dx + dy*dy) + 0.01, f = (d - 140) * 0.02; e.a.vx += dx/d*f; e.a.vy += dy/d*f; e.b.vx -= dx/d*f; e.b.vy -= dy/d*f; }
+    for (const p of list) { p.vx += (W/2 - p.x) * 0.004; p.vy += (H/2 - p.y) * 0.004; p.x = Math.max(60, Math.min(W-60, p.x + p.vx * 0.5)); p.y = Math.max(30, Math.min(H-30, p.y + p.vy * 0.5)); p.vx *= 0.6; p.vy *= 0.6; }
+  }
+  const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text) e.textContent = text; svg.append(e); return e; };
+  const defs = el("defs", {}); const mk = document.createElementNS(NS, "marker");
+  for (const [k, v] of Object.entries({ id: "arr", viewBox: "0 0 10 10", refX: "20", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" })) mk.setAttribute(k, v);
+  const path = document.createElementNS(NS, "path"); path.setAttribute("d", "M0,0 L10,5 L0,10 z"); path.setAttribute("fill", "currentColor"); path.setAttribute("opacity", "0.45"); mk.append(path); defs.append(mk);
+  for (const e of edges) {
+    el("line", { x1: e.a.x, y1: e.a.y, x2: e.b.x, y2: e.b.y, stroke: "currentColor", "stroke-opacity": "0.25", "marker-end": "url(#arr)" });
+    el("text", { x: (e.a.x + e.b.x)/2, y: (e.a.y + e.b.y)/2 - 4, "text-anchor": "middle", "font-size": "10", fill: "currentColor", opacity: "0.6" }, e.rel);
+  }
+  for (const p of list) {
+    el("circle", { cx: p.x, cy: p.y, r: 6 + Math.min(p.deg, 8) * 1.5, fill: KIND_COLORS[p.kind] ?? KIND_COLORS.other, stroke: "var(--bg)", "stroke-width": "2" });
+    el("text", { x: p.x, y: p.y + 22 + Math.min(p.deg, 8), "text-anchor": "middle", "font-size": "12", fill: "currentColor" }, p.name);
+  }
+  const kinds = [...new Set(list.map((p) => p.kind))];
+  const legend = document.getElementById("legend"); legend.textContent = "";
+  for (const k of kinds) { const sp = document.createElement("span"); const i = document.createElement("i"); i.style.background = KIND_COLORS[k] ?? KIND_COLORS.other; sp.append(i, document.createTextNode(k)); legend.append(sp); }
+}
+document.getElementById("graphclose").onclick = () => document.getElementById("graph").close();
+loadMemory(); loadGraph();
 {
   const p = new URLSearchParams(location.search);
   if (p.get("connector")) {
@@ -166,7 +238,8 @@ document.getElementById("f").onsubmit = async (e) => {
       if (ev.type === "start") conv = ev.conversationId;
       else if (ev.type === "delta") { out.textContent += ev.text; log.scrollTop = log.scrollHeight; }
       else if (ev.type === "tool") log.insertBefore(Object.assign(document.createElement("div"), { className: "tool", textContent: `⚙ ${ev.name} ${JSON.stringify(ev.args).slice(0, 160)}` }), out);
-      else if (ev.type === "done") { renderFiles(ev.files); loadMemory(); }
+      else if (ev.type === "memory") add("tool", `memória: ${ev.saved.join(" · ")}`);
+      else if (ev.type === "done") { renderFiles(ev.files); loadMemory(); loadGraph(); }
       else if (ev.type === "error") add("tool", `erro: ${ev.message}`);
     }
   }

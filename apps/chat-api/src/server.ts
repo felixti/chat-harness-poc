@@ -9,6 +9,7 @@ import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
 import { clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
 import { FactGraph, graphTools } from "./graph-memory.ts";
+import { curate } from "./curator.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
 import { listFiles, openTurn, readFileFromStore, workspacePath, writeFileToStore } from "./workspace.ts";
 
@@ -71,6 +72,11 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 		const existing = await store.get(user, id);
 		res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
 		const send = (e: unknown) => res.write(`data: ${JSON.stringify(e)}\n\n`);
+		const savedByAgent: string[] = [];
+		const onEvent = (e: { type: string; [k: string]: unknown }) => {
+			if (e.type === "tool" && (e.name === "memory" || e.name === "remember")) savedByAgent.push(JSON.stringify(e.args));
+			send(e);
+		};
 		const abort = new AbortController();
 		res.on("close", () => abort.abort());
 		send({ type: "start", conversationId: id });
@@ -84,11 +90,19 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				...(memoryOn && facts
 					? { systemAppend: await corePrompt(user), extraTools: [...memoryTools(user), ...graphTools(facts), sessionSearchTool(user, id, store)] }
 					: { extraTools: [sessionSearchTool(user, id, store)] }),
-				onEvent: send,
+				onEvent,
 				signal: abort.signal,
 			});
 			const files = await turn.finish();
 			finished = true;
+			// The answer is already on screen; the curator runs before "done" so the panel refreshes.
+			if (memoryOn && config.memory.curator && !abort.signal.aborted) {
+				const saved = await curate({ user, userMessage: input.message, assistantReply: result.text, alreadySaved: savedByAgent }, facts).catch((e) => {
+					console.warn(`[curator] ${(e as Error).message}`);
+					return [];
+				});
+				if (saved.length) send({ type: "memory", saved });
+			}
 			await store.save({ id, user, title: existing?.title ?? input.message.slice(0, 60), entries: result.entries, updatedAt: new Date(), version: existing?.version });
 			send({ type: "done", conversationId: id, files });
 		} catch (e) {
@@ -116,6 +130,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
 
 	if (url.pathname === "/api/memory") return memoryRoute(req, res, user, url);
+	const gm = url.pathname.match(/^\/api\/memory\/graph(?:\/([a-f0-9-]{8}))?$/);
+	if (gm) return graphRoute(req, res, user, gm[1]);
 
 	const k = url.pathname.match(/^\/api\/connectors(?:\/([a-z0-9-]+)\/(connect|callback))?(?:\/([a-z0-9-]+))?$/);
 	if (k) return connectorRoute(req, res, user, url, k);
@@ -153,6 +169,22 @@ async function memoryRoute(req: IncomingMessage, res: ServerResponse, user: stri
 		return json(res, 200, await coreEntries(user));
 	}
 	json(res, 405, { error: "method not allowed" });
+}
+
+/** Memory graph in the panel: overview, and "forget" for one fact. */
+async function graphRoute(req: IncomingMessage, res: ServerResponse, user: string, factId?: string) {
+	if (!config.connectors.masterKey) return json(res, 200, { entities: 0, facts: 0, recent: [] });
+	const g = new FactGraph(user, "memory-panel");
+	try {
+		if (req.method === "GET" && !factId) return json(res, 200, await g.overview(100));
+		if (req.method === "DELETE" && factId) {
+			await g.forget(factId, "removed in the Memória panel");
+			return json(res, 200, await g.overview(100));
+		}
+		json(res, 405, { error: "method not allowed" });
+	} finally {
+		await g.dispose();
+	}
 }
 
 async function connectorRoute(req: IncomingMessage, res: ServerResponse, user: string, url: URL, k: RegExpMatchArray) {
