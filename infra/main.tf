@@ -70,6 +70,14 @@ resource "azurerm_storage_container" "workspaces" {
   container_access_type = "private"
 }
 
+# Connector tokens (sealed with AES-256-GCM by chat-api). Separate from the workspaces so the
+# agent's file tools can never reach them, and no operator reader role here.
+resource "azurerm_storage_container" "credentials" {
+  name                  = "chat-credentials"
+  storage_account_id    = data.azurerm_storage_account.artifacts.id
+  container_access_type = "private"
+}
+
 resource "azurerm_user_assigned_identity" "chat_api" {
   name                = "id-${var.cluster_name}-chat-api"
   location            = data.azurerm_kubernetes_cluster.main.location
@@ -88,6 +96,12 @@ resource "azurerm_federated_identity_credential" "chat_api" {
 # Container scope only: chat-api cannot read the agents' containers in the same account.
 resource "azurerm_role_assignment" "chat_api_blob" {
   scope                = azurerm_storage_container.workspaces.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.chat_api.principal_id
+}
+
+resource "azurerm_role_assignment" "chat_api_credentials" {
+  scope                = azurerm_storage_container.credentials.id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = azurerm_user_assigned_identity.chat_api.principal_id
 }

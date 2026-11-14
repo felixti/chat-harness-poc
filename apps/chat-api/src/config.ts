@@ -28,6 +28,20 @@ export const config = {
 	/** In-cluster Brave Search MCP (http://brave-mcp/mcp); empty = no web search. */
 	braveMcpUrl: env.BRAVE_MCP_URL ?? "",
 	context7ApiKey: env.CONTEXT7_API_KEY ?? "",
+	/** Public origin of the chat, for OAuth redirect URIs. */
+	publicUrl: (env.PUBLIC_URL ?? "http://localhost:8080").replace(/\/$/, ""),
+	connectors: {
+		/** 32 random bytes, base64, from Key Vault (connectors-master-key). Seals tokens and OAuth state. */
+		masterKey: env.CONNECTORS_MASTER_KEY ?? "",
+		/** Separate from the workspaces: the agent never sees this container. */
+		container: env.CONNECTORS_CONTAINER ?? "chat-credentials",
+		github: {
+			clientId: env.GITHUB_CLIENT_ID ?? "",
+			clientSecret: env.GITHUB_CLIENT_SECRET ?? "",
+			/** GitHub MCP read-only mode; "false" lets the agent open issues and PRs. */
+			readOnly: env.GITHUB_MCP_READONLY !== "false",
+		},
+	},
 	/** Dev only: identity when no gateway header is present. */
 	devUser: env.DEV_USER ?? "",
 };

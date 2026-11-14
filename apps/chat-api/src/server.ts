@@ -7,6 +7,7 @@ import { config } from "./config.ts";
 import { runTurn, type McpServer } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
+import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
 import { hydrate, listLocal, persistChanges, persistFile, readWorkspaceFile, workspacePath } from "./workspace.ts";
 
 const store = await openStore(config.mongoUrl);
@@ -19,7 +20,7 @@ function userOf(req: IncomingMessage): string {
 	return u;
 }
 
-function mcpServersFor(_user: string): McpServer[] {
+async function mcpServersFor(user: string): Promise<McpServer[]> {
 	const servers: McpServer[] = [];
 	// App-level key (optional: Context7 also serves anonymous clients at a lower rate limit).
 	servers.push({
@@ -35,6 +36,8 @@ function mcpServersFor(_user: string): McpServer[] {
 			url: config.braveMcpUrl,
 			description: "Web and news search (Brave): current facts, statistics, sources and LLM-ready page context for research.",
 		});
+	// Per-user connectors (GitHub, ...): token from the sealed vault, never from the workspace.
+	servers.push(...(await connectedServers(user)));
 	return servers;
 }
 
@@ -76,7 +79,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 			entries: existing?.entries ?? [],
 			message: input.message,
 			pinnedSkills: input.skills,
-			mcpServers: mcpServersFor(user),
+			mcpServers: await mcpServersFor(user),
 			onEvent: send,
 			signal: abort.signal,
 		});
@@ -101,6 +104,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (url.pathname === "/api/conversations" && req.method === "GET") return json(res, 200, await store.list(user));
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
 
+	const k = url.pathname.match(/^\/api\/connectors(?:\/([a-z0-9-]+)\/(connect|callback))?(?:\/([a-z0-9-]+))?$/);
+	if (k) return connectorRoute(req, res, user, url, k);
+
 	const m = url.pathname.match(/^\/api\/conversations\/([^/]+)\/(files|uploads)(?:\/(.+))?$/);
 	if (m && ID.test(m[1])) {
 		const workspace = workspacePath(user, m[1]);
@@ -121,6 +127,29 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 			await persistFile(user, m[1], `uploads/${name}`);
 			return json(res, 201, { path: `uploads/${name}` });
 		}
+	}
+	json(res, 404, { error: "not found" });
+}
+
+async function connectorRoute(req: IncomingMessage, res: ServerResponse, user: string, url: URL, k: RegExpMatchArray) {
+	const [, id, step, single] = k;
+	if (!id && !single && req.method === "GET") return json(res, 200, await listFor(user));
+	if (single && req.method === "DELETE") {
+		await disconnect(user, single);
+		return json(res, 200, { ok: true });
+	}
+	if (id && step === "connect" && req.method === "GET") return res.writeHead(302, { location: authorizeRedirect(user, id) }).end();
+	if (id && step === "callback" && req.method === "GET") {
+		const code = url.searchParams.get("code");
+		const state = url.searchParams.get("state") ?? "";
+		let status = "ok";
+		if (!code) status = url.searchParams.get("error") ?? "denied";
+		else
+			await completeAuthorization(user, id, code, state).catch((e) => {
+				console.warn(`[connectors] ${id} callback: ${(e as Error).message}`);
+				status = "error";
+			});
+		return res.writeHead(302, { location: `/?connector=${id}&status=${encodeURIComponent(status)}` }).end();
 	}
 	json(res, 404, { error: "not found" });
 }

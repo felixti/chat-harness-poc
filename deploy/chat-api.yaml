@@ -1,11 +1,28 @@
 # Chat API: Pi agent harness. Read-only root, /tmp only, no subprocess (enforced in code too).
+# Connector secrets from Key Vault: the master key that seals user tokens, and the GitHub OAuth
+# App client secret. Optional so the pod still starts before they exist (connectors hidden).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: chat-connectors
+  namespace: chat
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: platform-keyvault}
+  target: {name: chat-connectors, creationPolicy: Owner}
+  data:
+  - secretKey: master-key
+    remoteRef: {key: connectors-master-key}
+  - secretKey: github-client-secret
+    remoteRef: {key: github-oauth-client-secret}
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: chat-api
   namespace: chat
   annotations:
-    # infra/ output chat_api_client_id: Blob Data Contributor on container chat-workspaces only.
+    # infra/ output chat_api_client_id: Blob Data Contributor on chat-workspaces and chat-credentials only.
     azure.workload.identity/client-id: 43db3c04-6f6a-4873-ac7b-e5d9cd50cf69
 automountServiceAccountToken: false
 ---
@@ -53,6 +70,13 @@ spec:
         - {name: LLM_MODEL, value: "deepseek/deepseek-v4.1-flash-1017"}   # vision: reviews slide previews
         - {name: IMAGE_MODEL, value: "minimax/minimax-h3-image"}   # generate_image at 1K; fallback google/gemini-3.1-flash-lite-image
         - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
+        - {name: PUBLIC_URL, value: "https://chat.20-121-208-105.sslip.io"}
+        - {name: CONNECTORS_CONTAINER, value: chat-credentials}
+        - name: CONNECTORS_MASTER_KEY
+          valueFrom: {secretKeyRef: {name: chat-connectors, key: master-key, optional: true}}
+        - {name: GITHUB_CLIENT_ID, value: ""}   # GitHub OAuth App client ID (public)
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom: {secretKeyRef: {name: chat-connectors, key: github-client-secret, optional: true}}
         ports: [{name: http, containerPort: 8080}]
         readinessProbe:
           httpGet: {path: /healthz, port: 8080}

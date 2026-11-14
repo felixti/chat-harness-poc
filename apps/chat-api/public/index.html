@@ -21,6 +21,14 @@
   aside { border-left:1px solid var(--line); padding:16px; overflow:auto; font-size:13px; }
   aside a { color:var(--accent); display:block; word-break:break-all; margin:4px 0; }
   input[type=text] { width:100%; font:inherit; padding:6px; border:1px solid var(--line); border-radius:6px; background:transparent; color:inherit; }
+  .conn { border:1px solid var(--line); border-radius:8px; padding:10px; margin:6px 0; }
+  .conn header { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .conn p { margin:4px 0; color:var(--muted); }
+  .conn .state { font-size:12px; }
+  .conn .on { color:#15803d; }
+  .conn button { padding:4px 10px; font-size:13px; }
+  .conn button.off { background:transparent; color:var(--fg); }
+  #notice { font-size:12px; margin:4px 0; }
   @media (max-width: 700px) { body { grid-template-columns: 1fr; } aside { display:none; } }
 </style>
 </head>
@@ -34,7 +42,10 @@
   </form>
 </main>
 <aside>
-  <strong>Skills fixadas</strong>
+  <strong>Conectores</strong>
+  <div id="notice"></div>
+  <div id="connectors"><em>carregando…</em></div>
+  <p><strong>Skills fixadas</strong></p>
   <input id="skills" type="text" placeholder="ex.: pdf, research">
   <p><strong>Arquivos</strong></p>
   <div id="files"><em>nenhum</em></div>
@@ -54,6 +65,41 @@ const renderFiles = (files) => {
     box.append(a);
   }
 };
+const notice = (t) => { document.getElementById("notice").textContent = t; };
+async function loadConnectors() {
+  const box = document.getElementById("connectors");
+  const r = await fetch("api/connectors"); const list = r.ok ? await r.json() : [];
+  box.textContent = "";
+  if (!list.length) { box.innerHTML = "<em>nenhum disponível</em>"; return; }
+  for (const c of list) {
+    const card = document.createElement("div"); card.className = "conn";
+    const head = document.createElement("header");
+    const name = document.createElement("strong"); name.textContent = c.name;
+    const btn = document.createElement("button"); btn.type = "button";
+    btn.textContent = c.connected ? "Desconectar" : "Conectar";
+    if (c.connected) btn.className = "off";
+    btn.onclick = async () => {
+      if (!c.connected) { location.href = `api/connectors/${c.id}/connect`; return; }
+      if (!confirm(`Desconectar ${c.name}? O acesso será revogado.`)) return;
+      btn.disabled = true;
+      await fetch(`api/connectors/${c.id}`, { method: "DELETE" });
+      notice(`${c.name} desconectado.`); loadConnectors();
+    };
+    head.append(name, btn);
+    const desc = document.createElement("p"); desc.textContent = c.summary;
+    const st = document.createElement("div"); st.className = "state" + (c.connected ? " on" : "");
+    st.textContent = c.connected ? `Conectado ${c.account}${c.readOnly ? " · somente leitura" : ""}` : "Não conectado";
+    card.append(head, desc, st); box.append(card);
+  }
+}
+{
+  const p = new URLSearchParams(location.search);
+  if (p.get("connector")) {
+    notice(p.get("status") === "ok" ? `${p.get("connector")} conectado. As tools aparecem na próxima mensagem.` : `Falha ao conectar ${p.get("connector")}: ${p.get("status")}`);
+    history.replaceState(null, "", location.pathname);
+  }
+  loadConnectors();
+}
 document.getElementById("new").onclick = () => { conv = null; log.innerHTML = ""; renderFiles([]); };
 document.getElementById("file").onchange = async (e) => {
   const file = e.target.files[0]; if (!file) return;
