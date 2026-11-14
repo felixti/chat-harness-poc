@@ -74,7 +74,7 @@ spec:
         - {name: CONNECTORS_CONTAINER, value: chat-credentials}
         - name: CONNECTORS_MASTER_KEY
           valueFrom: {secretKeyRef: {name: chat-connectors, key: master-key, optional: true}}
-        - {name: GITHUB_CLIENT_ID, value: ""}   # GitHub OAuth App client ID (public)
+        - {name: GITHUB_CLIENT_ID, value: "Ov23lipiqkWBqCka0Sgk"}   # GitHub OAuth App client ID (public)
         - name: GITHUB_CLIENT_SECRET
           valueFrom: {secretKeyRef: {name: chat-connectors, key: github-client-secret, optional: true}}
         ports: [{name: http, containerPort: 8080}]
