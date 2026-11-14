@@ -709,7 +709,8 @@ export interface RenderOptions {
 	preview?: boolean;
 }
 
-async function resolveTheme(deck: DeckSpec, themes: Record<string, Theme>, opts: RenderOptions, warnings: string[]): Promise<Theme> {
+/** Theme from a name, a workspace .json file or an inline {extends, ...} object (decks and dashboards). */
+export async function resolveTheme(deck: Pick<DeckSpec, "theme">, themes: Record<string, Theme>, opts: Pick<RenderOptions, "resolve">, warnings: string[]): Promise<Theme> {
 	const names = Object.keys(themes).join(", ");
 	let spec: unknown = deck.theme ?? "executive";
 	if (typeof spec === "string" && spec.endsWith(".json")) {

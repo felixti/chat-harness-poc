@@ -17,6 +17,7 @@
 		"@earendil-works/pi-ai": "1.5.2",
 		"@earendil-works/pi-coding-agent": "1.5.2",
 		"docx": "9.14.0",
+		"echarts": "6.1.0",
 		"exceljs": "4.4.0",
 		"just-bash": "3.6.0",
 		"marked": "16.4.1",

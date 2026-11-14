@@ -1,6 +1,6 @@
 ---
 name: design
-description: Visual design rules for anything the user will look at - slide decks, Word reports, PDFs, spreadsheets, charts. Read it together with the pptx, docx, pdf or xlsx-csv skill whenever the output is a designed file.
+description: Visual design rules for anything the user will look at - slide decks, dashboards, one-pagers, Word reports, PDFs, spreadsheets, charts. Read it together with the pptx, dashboard, docx, pdf or xlsx-csv skill whenever the output is a designed file.
 ---
 
 # Design
@@ -34,6 +34,8 @@ rules only for decks live in the `pptx` skill.
 
 ## 3. Form follows the data
 
+Names are deck layouts; dashboards use `kpi` items and the same chart types.
+
 | You want to show | Use |
 |---|---|
 | 2 to 4 headline numbers | `kpis` |
@@ -41,7 +43,7 @@ rules only for decks live in the `pptx` skill.
 | Ranking of categories | horizontal `bar`, sorted, top item highlighted |
 | Change over time | `line` (many points) or `column` (up to 8 periods) |
 | Part of a whole | `doughnut` up to 5 slices; more: sorted `bar` |
-| Exact values to look up | `table` up to 10 rows x 6 columns; the full set in xlsx |
+| Exact values to look up | `table` up to 6 columns and 10 rows (20 in a dashboard); the full set in xlsx |
 | Options and trade-offs | `comparison` |
 | Sequence or plan | `timeline` |
 | One idea that must stick | `statement` |

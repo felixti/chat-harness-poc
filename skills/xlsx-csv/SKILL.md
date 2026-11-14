@@ -1,33 +1,26 @@
 ---
 name: xlsx-csv
-description: Analyze spreadsheets and tabular data (XLSX, CSV, TSV) - summaries, filters, group-bys, pivots, charts, and cleaned exports. Use when the user uploads a spreadsheet or asks for numbers from tabular data.
+description: Analyze spreadsheets and tabular data (XLSX, CSV) - summaries, filters, group-bys, pivots and formatted exports. Use when the user uploads a spreadsheet or asks for numbers from tabular data.
 ---
 
 # Spreadsheets and CSV
 
 ## Look before computing
 
-1. CSV/TSV: `bash` with `head -5 file.csv` and `wc -l file.csv` to see columns and size.
-2. XLSX: `parse_document` turns every sheet into a markdown table (good for small files and for
-   reading). For real computation use `run_code`.
+1. `describe_data` on the file: sheets, row count, and per column the type, range or top values.
+   For a table that does not start at the top, pass `header_row`; for another sheet, `sheet`.
+2. Small files can also be read whole: `parse_document` turns every sheet into markdown.
 
 ## Compute
 
-With `run_code` (Python sandbox: pandas, openpyxl, matplotlib):
-
-```python
-import pandas as pd
-df = pd.read_excel("/workspace/uploads/sales.xlsx", sheet_name=None)  # dict of sheets
-for name, sheet in df.items():
-    print(name, sheet.shape); print(sheet.head())
-```
-
-- Print shapes and `head()` first, then the answer. Keep printed output short (`.head(20)`).
-- Charts: `matplotlib`, save PNG to `/workspace/outputs/`, mention the file.
-- Exports: save a CSV and use `generate_xlsx` (below) for a formatted workbook.
-
-Without `run_code`, small CSVs only: `bash` with `python3` (standard library `csv` module, no pandas)
-or `awk`/`sort`/`uniq -c`.
+- **`query_data`** answers most questions with exact numbers and no code: filter (`where`,
+  including periods like `"2026"` or `"2026-03"` and ranges `{"from", "to"}`), group
+  (`group_by`, `bucket` month/quarter/year for dates), aggregate (`sum`, `avg`, `count`,
+  `distinct`, `min`, `max`), `sort`, `top`. `output_csv` saves the result for `generate_xlsx`.
+- **Anything else** (ratios between results, custom logic): `bash` with `python3` (standard
+  library only: `csv`, `statistics`, `datetime`; no pandas) on a CSV, for example one saved by
+  `query_data`.
+- **Charts and dashboards:** the `dashboard` skill. For one chart in a deck, the `pptx` skill.
 
 ## Answer
 
@@ -49,7 +42,7 @@ or `awk`/`sort`/`uniq -c`.
 
 - `format`: `text`, `integer`, `decimal`, `currency`, `percent` (fractions: 0.12 = 12%), `date`
   (ISO `2026-11-13`).
-- Many rows: write them to a CSV with `bash`/python and use `"rows_csv": "outputs/data.csv"`
+- Many rows: save them as CSV (`query_data` `output_csv`, or `bash`/python) and use `"rows_csv": "outputs/data.csv"`
   (first line is the header and is skipped) instead of `rows`.
 - Formulas: strings starting with `=` in A1 notation. With `title`, the header is row 3 and
   data starts at row 4; without it, header row 1, data from row 2.

@@ -11,6 +11,7 @@ import { config } from "../config.ts";
 import { renderDeck, loadThemes, LAYOUT_NAMES } from "./pptx.ts";
 import { contactSheet } from "./preview.ts";
 import { imageTool } from "./image.ts";
+import { renderDashboard, loadTable, describe, runQuery, type DashboardSpec } from "./dashboard.ts";
 import { markdownToDocx } from "./docx.ts";
 import { renderWorkbook } from "./xlsx.ts";
 
@@ -140,5 +141,96 @@ export function officeTools(workspace: string) {
 		},
 	});
 
-	return [pptx, docx, xlsx, imageTool(workspace, themesDir)];
+	const dashboard = defineTool({
+		name: "generate_dashboard",
+		label: "generate_dashboard",
+		description:
+			"Render an interactive HTML dashboard or a printable one-page summary from a JSON spec: KPIs, charts, tables " +
+			"and text computed from Excel/CSV files in the workspace, with global filters. One self-contained .html " +
+			"(works offline). Read skill `dashboard` first. Returns lint warnings and the computed numbers to check.",
+		promptSnippet: "generate_dashboard: spec JSON + xlsx/csv -> interactive .html dashboard or one-pager (read skill dashboard)",
+		parameters: Type.Object({
+			spec: Type.String({ description: "Dashboard spec JSON file, relative to the workspace (e.g. outputs/painel.json)" }),
+			output: Type.String({ description: ".html path to create, e.g. outputs/painel.html" }),
+		}),
+		async execute(_id, params) {
+			const spec = (await readSpec(workspace, params.spec)) as DashboardSpec;
+			const themes = await loadThemes(themesDir);
+			const r = await renderDashboard(spec, { resolve: (p) => insideWorkspace(workspace, p), themes });
+			const bytes = Buffer.from(r.html, "utf8");
+			await save(workspace, params.output, bytes, ".html");
+			return text(
+				report(spec.format === "onepage" ? "One-page summary" : "Dashboard", params.output, bytes.length, r.warnings) +
+					`\n\nComputed values (unfiltered) - check them against the question before you answer:\n- ${r.summary.join("\n- ")}`,
+			);
+		},
+	});
+
+	const describeData = defineTool({
+		name: "describe_data",
+		label: "describe_data",
+		description:
+			"Profile a spreadsheet (.xlsx) or .csv in the workspace: sheets, row count, and per column the type, range or " +
+			"top values, distinct count and fill rate. Use it before writing a dashboard or analysing a file.",
+		promptSnippet: "describe_data: xlsx/csv -> sheets, columns, types, ranges, top values",
+		parameters: Type.Object({
+			path: Type.String({ description: "File relative to the workspace" }),
+			sheet: Type.Optional(Type.String({ description: "Sheet name (default: first)" })),
+			header_row: Type.Optional(Type.Integer({ minimum: 1, description: "Header row number when the table does not start at the top" })),
+		}),
+		async execute(_id, p) {
+			const f = await loadTable(insideWorkspace(workspace, p.path), p.sheet, p.header_row);
+			const head = [`${p.path}${f.sheets ? ` - sheets: ${f.sheets.join(", ")} (showing ${p.sheet ?? f.sheets[0]})` : ""}`];
+			if (f.truncated) head.push("(only the first 200,000 rows were read)");
+			return text([...head, ...describe(f.ds)].join("\n"));
+		},
+	});
+
+	const queryData = defineTool({
+		name: "query_data",
+		label: "query_data",
+		description:
+			"Filter, group and aggregate a spreadsheet (.xlsx) or .csv in the workspace without code: where (values, " +
+			"periods like \"2026\" or \"2026-03\" on date columns, ranges {from,to}), group_by (+ month/quarter/year " +
+			"buckets for dates), measures (sum, avg, count, distinct, min, max), sort, top. Returns a table; " +
+			"optionally saves it as CSV for generate_xlsx. Run describe_data first to see the columns.",
+		promptSnippet: "query_data: xlsx/csv -> filtered group-by with sum/avg/count (exact numbers, no code)",
+		parameters: Type.Object({
+			path: Type.String({ description: "File relative to the workspace" }),
+			sheet: Type.Optional(Type.String()),
+			header_row: Type.Optional(Type.Integer({ minimum: 1 })),
+			where: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: '{"Região": "Sul", "Data": "2026", "Receita": {"from": 1000}}' })),
+			group_by: Type.Optional(Type.String()),
+			bucket: Type.Optional(Type.Union([Type.Literal("month"), Type.Literal("quarter"), Type.Literal("year")], { description: "Group a date column by period" })),
+			measures: Type.Optional(
+				Type.Array(
+					Type.Object({
+						field: Type.Optional(Type.String()),
+						agg: Type.Optional(Type.Union(["sum", "avg", "count", "distinct", "min", "max"].map((a) => Type.Literal(a)))),
+						label: Type.Optional(Type.String()),
+					}),
+					{ description: "Default: row count" },
+				),
+			),
+			sort: Type.Optional(Type.Union([Type.Literal("desc"), Type.Literal("asc"), Type.Literal("x")], { description: "By the first measure (default desc), or by the group (x)" })),
+			top: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, description: "Default 50" })),
+			output_csv: Type.Optional(Type.String({ description: "Also save the result as CSV, e.g. outputs/receita-regiao.csv" })),
+		}),
+		async execute(_id, p) {
+			const f = await loadTable(insideWorkspace(workspace, p.path), p.sheet, p.header_row);
+			const r = runQuery(f.ds, { where: p.where, group_by: p.group_by, x_bucket: p.bucket, measures: p.measures as never, sort: p.sort, top: p.top });
+			if (r.missing.length) return text(`Unknown column(s): ${r.missing.join(", ")}. Columns: ${f.ds.cols.join(", ")}`);
+			const cell = (v: unknown) => (typeof v === "number" ? v.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) : String(v ?? ""));
+			const md = [`| ${r.head.join(" | ")} |`, `|${r.head.map(() => "---").join("|")}|`, ...r.rows.map((row) => `| ${row.map(cell).join(" | ")} |`)];
+			let note = `${r.matched} of ${f.ds.rows.length} rows matched${p.group_by ? `; ${r.rows.length} of ${r.groups} groups shown` : ""}.`;
+			if (p.output_csv) {
+				const q = (v: unknown) => (typeof v === "number" ? String(v) : `"${String(v ?? "").replace(/"/g, '""')}"`);
+				await save(workspace, p.output_csv, Buffer.from([r.head.map(q).join(","), ...r.rows.map((row) => row.map(q).join(","))].join("\n"), "utf8"), ".csv");
+				note += ` Saved ${p.output_csv}.`;
+			}
+			return text(`${md.join("\n")}\n\n${note}`);
+		},
+	});
+
+	return [pptx, docx, xlsx, dashboard, describeData, queryData, imageTool(workspace, themesDir)];
 }
