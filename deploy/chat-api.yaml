@@ -58,7 +58,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
       - name: chat-api
-        image: ghcr.io/felixti/chat-harness-chat-api:5fdd84c99b87f6414430b2817e90333c701a2a74
+        image: ghcr.io/felixti/chat-harness-chat-api:56d67d31ce335ef9be5a34a0932943dd1066ffd3
         env:
         - name: DB_PASSWORD
           valueFrom: {secretKeyRef: {name: chat-db, key: password}}
