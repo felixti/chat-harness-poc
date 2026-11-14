@@ -57,13 +57,24 @@ export async function listLibrary(user: string, store?: ConversationStore, query
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
-/** Validates a library id and returns the bytes; only this user's prefix is reachable. */
-async function readLibraryFile(user: string, id: string): Promise<{ data: Buffer; name: string }> {
+/** Blob name of a library id; only this user's uploads/ and outputs/ are reachable. */
+function blobOf(user: string, id: string): string {
 	const m = /^([a-zA-Z0-9-]{8,64})\/((?:uploads|outputs)\/[^\0]+)$/.exec(id);
 	if (!m || m[2].split("/").some((seg) => seg === ".." || seg === "." || seg === "")) throw Object.assign(new Error("bad file id"), { status: 400 });
-	const data = await objectStore().get(`${user}/${m[1]}/${m[2]}`);
+	return `${user}/${m[1]}/${m[2]}`;
+}
+
+/** The user removes a file (panel ×). Old versions and soft-deleted copies purge within 7 days. */
+export async function deleteLibraryFile(user: string, id: string): Promise<void> {
+	await objectStore().delete(blobOf(user, id));
+}
+
+/** Validates a library id and returns the bytes. */
+async function readLibraryFile(user: string, id: string): Promise<{ data: Buffer; name: string }> {
+	const name = blobOf(user, id);
+	const data = await objectStore().get(name);
 	if (!data) throw Object.assign(new Error("file expired or removed (30-day retention)"), { status: 410 });
-	return { data, name: basename(m[2]).replace(/[^\w.\- ]/g, "_") };
+	return { data, name: basename(name).replace(/[^\w.\- ]/g, "_") };
 }
 
 /** Free name in uploads/: "x.xlsx", then "x (2).xlsx"... */

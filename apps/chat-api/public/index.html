@@ -195,7 +195,14 @@ async function loadLibrary() {
       const fl = await fetch(`api/conversations/${conv}/files`); if (fl.ok) renderFiles(await fl.json());
       loadLibrary();
     };
-    li.append(t, use); ul.append(li);
+    const del = document.createElement("button"); del.type = "button"; del.title = "Remover arquivo"; del.textContent = "×";
+    del.onclick = async () => {
+      if (!confirm(`Remover ${f.name}? Ele some da conversa de origem e de "Meus arquivos".`)) return;
+      const res = await fetch(`api/files?id=${encodeURIComponent(f.id)}`, { method: "DELETE" });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); add("tool", `erro: ${j.error ?? res.status}`); return; }
+      loadLibrary();
+    };
+    li.append(t, use, del); ul.append(li);
   }
   box.append(ul);
 }

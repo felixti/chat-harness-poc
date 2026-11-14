@@ -45,3 +45,12 @@ test("agent tools: my_files finds it, attach_file puts it in the running workspa
 	assert.match(r.content[0].text, /uploads\/vendas_q3\.xlsx/);
 	assert.equal(await readFile(join(ws, "uploads/vendas_q3.xlsx"), "utf8"), "xlsx-bytes");
 });
+
+test("delete removes only this user's file; bad ids rejected", async () => {
+	const { deleteLibraryFile } = await import("../src/library.ts");
+	await deleteLibraryFile(U, "conv-aaaa-01/outputs/deck.pptx");
+	assert.deepEqual((await listLibrary(U)).map((f) => f.name).includes("deck.pptx"), false);
+	await assert.rejects(deleteLibraryFile(U, "conv-aaaa-01/../../user-lib-0002/conv-bbbb-01/uploads/segredo.pdf"), (e: any) => e.status === 400);
+	await deleteLibraryFile(U, "conv-bbbb-01/uploads/segredo.pdf"); // other user's conversation id under MY prefix: nothing there
+	assert.equal((await listLibrary("user-lib-0002")).length, 1);
+});

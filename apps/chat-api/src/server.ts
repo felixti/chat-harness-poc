@@ -10,7 +10,7 @@ import { openStore } from "./store.ts";
 import { retrievedPrompt, clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
 import { FactGraph, graphTools } from "./graph-memory.ts";
 import { curate } from "./curator.ts";
-import { attachToConversation, libraryTools, listLibrary } from "./library.ts";
+import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } from "./library.ts";
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
 import { listFiles, openTurn, readFileFromStore, workspacePath, writeFileToStore } from "./workspace.ts";
@@ -138,6 +138,10 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
 
 	if (url.pathname === "/api/files" && req.method === "GET") return json(res, 200, await listLibrary(user, store, url.searchParams.get("q") ?? undefined));
+	if (url.pathname === "/api/files" && req.method === "DELETE") {
+		await deleteLibraryFile(user, url.searchParams.get("id") ?? "");
+		return json(res, 200, { ok: true });
+	}
 	if (url.pathname === "/api/memory") return memoryRoute(req, res, user, url);
 	if (url.pathname === "/api/memory/skills" && req.method === "GET")
 		return json(res, 200, config.connectors.masterKey ? (await listSkills(user)).map(({ name, description, src, updatedAt }) => ({ name, description, src, updatedAt })) : []);
