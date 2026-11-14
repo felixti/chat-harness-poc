@@ -41,7 +41,7 @@ metadata:
   name: chat-api
   namespace: chat
 spec:
-  replicas: 1
+  replicas: 2   # stateless: Blob is the only source of truth, any pod serves any turn
   selector: {matchLabels: {app: chat-api}}
   template:
     metadata:
@@ -58,11 +58,9 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
       - name: chat-api
-        image: ghcr.io/felixti/chat-harness-chat-api:56d67d31ce335ef9be5a34a0932943dd1066ffd3
+        image: ghcr.io/felixti/chat-harness-chat-api:72fc765ef4f2b929e62d493f260add600c81fb2d
         env:
-        - name: DB_PASSWORD
-          valueFrom: {secretKeyRef: {name: chat-db, key: password}}
-        - {name: MONGO_URL, value: "mongodb://ferret:$(DB_PASSWORD)@ferretdb:27017/chat"}
+        - {name: MONGO_URL, value: "mongodb://ferret@ferretdb:27017/chat"}   # password from /var/run/secrets/chat/db-password
         - {name: BLOB_ACCOUNT_URL, value: "https://stagentpocjt75.blob.core.windows.net"}
         - {name: BLOB_CONTAINER, value: chat-workspaces}
         - {name: PARSER_URL, value: "http://parser"}
@@ -72,11 +70,7 @@ spec:
         - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
         - {name: PUBLIC_URL, value: "https://chat.20-121-208-105.sslip.io"}
         - {name: CONNECTORS_CONTAINER, value: chat-credentials}
-        - name: CONNECTORS_MASTER_KEY
-          valueFrom: {secretKeyRef: {name: chat-connectors, key: master-key, optional: true}}
         - {name: GITHUB_CLIENT_ID, value: "Ov23lipiqkWBqCka0Sgk"}   # GitHub OAuth App client ID (public)
-        - name: GITHUB_CLIENT_SECRET
-          valueFrom: {secretKeyRef: {name: chat-connectors, key: github-client-secret, optional: true}}
         ports: [{name: http, containerPort: 8080}]
         readinessProbe:
           httpGet: {path: /healthz, port: 8080}
@@ -87,7 +81,22 @@ spec:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           capabilities: {drop: [ALL]}
-        volumeMounts: [{name: tmp, mountPath: /tmp}]
+        volumeMounts:
+        - {name: tmp, mountPath: /tmp}
+        # Secrets as files, not env vars: kept out of /proc/self/environ; the agent's file tools
+        # are confined to the turn workspace and cannot read this path either.
+        - {name: secrets, mountPath: /var/run/secrets/chat, readOnly: true}
       volumes:
-      # Workspaces are a cache of Blob: losing the pod loses nothing.
+      - name: secrets
+        projected:
+          defaultMode: 0440   # group-readable: fsGroup 65532 is the app user
+          sources:
+          - secret:
+              name: chat-db
+              items: [{key: password, path: db-password}]
+          - secret:
+              name: chat-connectors
+              optional: true
+              items: [{key: master-key, path: connectors-master-key}, {key: github-client-secret, path: github-client-secret}]
+      # Scratch for one turn at a time; Blob is the truth, losing the pod loses nothing.
       - {name: tmp, emptyDir: {sizeLimit: 4Gi}}
