@@ -44,8 +44,8 @@ contrast (text 4.5:1, muted 3:1) and warns; a custom theme must pass before you 
   color or uploads a template. `dark: true` switches content slides to a dark background.
 
 Every slide accepts: `layout` (required), `title`, `kicker` (small uppercase label above the
-title, e.g. the section name), `subtitle`, `notes` (speaker notes), `source` (footer line,
-"Fonte: ..." is added).
+title; when to use it is in the `pptx` skill), `subtitle`, `notes` (speaker notes), `source`
+(footer line; "Fonte:" is added).
 
 ## Layout fields
 
@@ -53,7 +53,7 @@ title, e.g. the section name), `subtitle`, `notes` (speaker notes), `source` (fo
 {"layout": "title", "title": "O lucro de 2014 está concentrado em dois mercados", "subtitle": "Análise por país, segmento e produto"}
 {"layout": "agenda", "title": "Agenda", "items": ["Contexto", "Resultados", "Recomendação"]}
 {"layout": "section", "number": 2, "title": "Resultados", "subtitle": "Onde ganhamos dinheiro"}
-{"layout": "big_number", "kicker": "O tamanho da oportunidade", "value": "R$ 42 mi",
+{"layout": "big_number", "value": "R$ 42 mi",
  "title": "é o custo anual do atendimento que pode ser automatizado",
  "text": "68% dos contatos são **perguntas repetitivas**.", "source": "Base interna, 2026", "dark": false}
 {"layout": "cards", "title": "Quatro frentes concentram 80% do ganho",
@@ -81,16 +81,15 @@ title, e.g. the section name), `subtitle`, `notes` (speaker notes), `source` (fo
              {"name": "Focar EUA", "points": ["..."], "verdict": "Recomendado", "highlight": true}]}
 {"layout": "timeline", "title": "Plano em quatro etapas",
  "steps": [{"label": "Q1", "title": "Revisar preços", "text": "Teto de desconto", "icon": "tag"}]}
-{"layout": "statement", "icon": "target", "title": "Recomendação: **focar EUA e Canadá** em 2015", "subtitle": "Protege 45% do lucro", "dark": true}
+{"layout": "statement", "title": "Recomendação: **focar EUA e Canadá** em 2015", "subtitle": "Protege 45% do lucro", "dark": true}
 {"layout": "quote", "quote": "...", "author": "Diretoria Financeira"}
-{"layout": "image", "title": "...", "path": "outputs/chart.png", "caption": "...", "bullets": ["..."]}
+{"layout": "image", "title": "...", "path": "uploads/fabrica.jpg", "caption": "...", "bullets": ["..."]}
 {"layout": "closing", "title": "Próximos passos", "bullets": ["Aprovar teto de desconto (Ana, 15/12)"], "subtitle": "Contato: fpa@empresa.com"}
 ```
 
-`background_image` (title, section, statement, closing, big_number): a `.png`/`.jpg` from the
-workspace, usually made by `generate_image`. It fills the slide under a strong scrim of the cover
-color, so the text stays readable. Use it on at most 3 slides; on other layouts it is ignored
-with a warning (use the `image` layout there).
+`background_image` (`title` and `section` only): a `.png`/`.jpg` from the workspace, usually
+made by `generate_image`. It fills the slide under a strong layer of the cover color, so the text
+stays readable. On other layouts it is ignored with a warning.
 
 ```json
 {"layout": "title", "title": "IA generativa no Brasil em 2026", "subtitle": "Onde está o valor", "background_image": "outputs/img/cover.jpg"}
@@ -126,10 +125,15 @@ Lucide icon names (2,275 available, https://lucide.dev/icons). Common ones:
 
 | Warning | Fix |
 |---|---|
-| title over ~90 chars / does not fit | Shorter sentence; move detail to `subtitle` or notes |
-| more than 6 bullets / bullet over 160 chars | Split the slide or move detail to `notes` |
-| text overflows even at the minimum size | Cut text; `bullets` -> `two_column`; split slide |
-| pie with more than 6 slices | `bar` sorted by value, or group the tail as "Outros" |
+| title over 90 chars / does not fit | Shorter sentence; move detail to `subtitle` or `notes` |
+| more than 5 bullets / bullet over 160 chars | Split the slide or move detail to `notes` |
+| text overflows even at the minimum size | Cut text; `bullets` -> `two_column`; split the slide |
+| pie with more than 5 slices | `bar` sorted by value, or group the tail as "Outros" |
 | more than 5 series | Keep the 2 or 3 that matter, or split into small charts |
-| table over 10 rows | Top rows + "Outros"; full data goes to an xlsx (`generate_xlsx`) |
+| table over 10 rows / 6 columns | Top rows + "Outros"; full data goes to an xlsx (`generate_xlsx`) |
+| same layout 4 slides in a row | Change one to another form or add a light slide |
+| bullets on over a third of the slides | Numbers -> `kpis`/`chart`, options -> `comparison`, plans -> `timeline` |
+| cards or big_number on more than 2 slides | Keep the 2 that matter most; turn the rest into other forms |
+| emoji or pictographs in the text | Delete them; use the `icon` field |
 | no speaker notes | Add `notes` with what the presenter should say |
+| "(measured)" overflow / collision / contrast | Shorten the text or choose a layout with more room; the preview shows where |

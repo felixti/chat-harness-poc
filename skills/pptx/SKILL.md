@@ -5,8 +5,9 @@ description: Create PowerPoint presentations (.pptx) - executive decks, results 
 
 # PowerPoint decks
 
-You write the story and the content. The `generate_pptx` tool owns the visual design (grid, type
-scale, themes, charts), so never try to position things yourself. Also read the `design` skill.
+You write the story and the content. The `generate_pptx` tool owns positions, sizes and type, so
+never try to place things yourself. Read the `design` skill too: it has the rules for theme,
+emphasis, chart choice, icons, pictures and words. This skill adds only what is specific to decks.
 
 ## Reading a deck
 
@@ -14,79 +15,77 @@ scale, themes, charts), so never try to position things yourself. Also read the 
 
 ## Workflow
 
-1. **Brief.** Know the audience, the decision or message, and the length. If the user gave no
-   length: 8 to 12 slides. Ask at most one question, only when the goal is unclear.
-2. **Get the facts.** Read the uploads (`parse_document`), compute numbers with `bash`/python.
-   For a topic without uploads, research it: `tool_search` "brave" loads the web search tools;
-   run 3 to 6 searches (`brave_web_search`, `brave_news_search` for recent facts,
-   `brave_llm_context` to read the best pages). Collect numbers with their source and year in
-   `outputs/notes.md`. Never invent numbers; put the origin in `source`.
-3. **Storyline first.** Pick a structure in `storylines.md` (this folder). Write the action titles
-   of every slide as a list, one line each. Read only the titles: they must tell the whole story
-   (situation -> insight -> recommendation -> next steps).
-4. **Pick a layout per slide** (table below) and write the spec to `outputs/<name>.json`.
-   Full field reference with examples: `reference.md` in this skill folder. Read it before the
-   first spec of the conversation.
-4b. **Cover image (optional).** For the title slide and at most 2 section openers you may call
-   `generate_image` (`theme` = the deck theme, `aspect_ratio` 16:9) with a prompt describing a
-   calm, abstract or photographic scene about the topic, and set `"background_image": "<path>"`
-   on that slide. Never generate charts, numbers, diagrams, logos or people. Look at the image
-   it returns; if it shows text or clutter, generate once more with a clearer prompt or skip it.
-5. **Render:** `generate_pptx` with `spec: outputs/<name>.json`, `output: outputs/<name>.pptx`.
-   The result has the lint warnings and **one preview image per slide**.
-6. **Review like a designer.** Fix every lint warning ("(measured)" ones come from the real
-   layout: overflow, collisions, low contrast). Then look at each preview image and check:
-   - Nothing overlaps, nothing is cut, no text runs into the footer.
-   - One focal point per slide; the eye lands on the number/bar/option that proves the title.
+1. **Brief.** Know the audience, the message or decision, and the length. No length given: 8 to
+   12 slides. Ask at most one question, and only when the goal is unclear.
+2. **Facts.** Read the uploads with `parse_document`; compute with `bash` (python3, standard
+   library). For a topic without uploads, research it: `tool_search` "brave" loads the web search
+   tools; run 3 to 6 searches (`brave_web_search`, `brave_news_search` for recent facts,
+   `brave_llm_context` to read the best pages). Write each number with its source and year in
+   `outputs/notes.md`. Never invent numbers.
+3. **Storyline.** Pick a structure in `storylines.md` (this folder) and write every action title
+   as a list. Read only the titles: they must tell the story.
+4. **Spec.** Pick a layout per slide (table below) and write `outputs/<name>.json`. Read
+   `reference.md` (this folder) before the first spec of the conversation.
+5. **Cover images (optional).** For the `title` slide and up to 2 `section` slides, call
+   `generate_image` with `theme` = the deck theme and a prompt for a calm scene about the topic
+   (abstract, landscape, architecture, objects). Look at the image it returns: if it shows text,
+   faces or clutter, generate once more with a clearer prompt, or skip it. Then set
+   `"background_image": "<path>"` on that slide.
+6. **Render:** `generate_pptx` with `spec` and `output: outputs/<name>.pptx`. It returns the lint
+   and one preview image per slide.
+7. **Review like a designer.** Fix every lint warning ("(measured)" ones come from the drawn
+   slide: overflow, collisions, contrast). Then look at each preview:
+   - Nothing overlaps or is cut; no text runs into the footer.
+   - Squint test: the eye lands first on what proves the title.
    - Balance: no big empty area beside a crowded one; cards and columns look even.
-   - Readable from the back of the room: no tiny text, no wall of bullets.
-   - Rhythm across the deck: layouts vary, a breathing slide every 4 to 5.
-   Edit the spec and render again with `preview_slides` set to the slides you changed (saves
-   context). Stop after 3 renders; mention anything you could not fix.
-7. Answer with the file name, the slide count and the storyline in 3 to 5 lines. The user also
-   gets `outputs/<name>.preview.png` (thumbnails); the preview uses open fonts, so PowerPoint
-   looks slightly different.
+   - Readable from the back of the room: no small text, no wall of text.
+   Edit the spec and render again with `preview_slides` set to the slides you changed. At most
+   3 renders; then run the final check in the `design` skill.
+8. **Answer** with the file name, the slide count and the storyline in 3 to 5 lines. The user
+   also gets `outputs/<name>.preview.png` (thumbnails). The preview uses open fonts, so
+   PowerPoint looks slightly different.
 
 ## Layouts
 
-| Layout | Use for |
-|---|---|
-| `title` | First slide: the deck's main message as a sentence, subtitle with scope |
-| `agenda` | 3 to 6 parts, only for decks over 10 slides |
-| `section` | Divider between parts of a long deck |
-| `big_number` | One giant figure that carries the slide (the stakes, the result) |
-| `kpis` | 2 to 4 headline numbers with deltas and icons, plus one takeaway |
-| `cards` | 3 to 6 parallel ideas (pillars, features, findings) with icons |
-| `chart` | One chart + takeaway callout. bar, column, stacked_*, line, area, pie, doughnut |
-| `table` | Exact values, up to ~8 rows x 6 columns; highlight the row that matters |
-| `bullets` | Arguments or findings, 3 to 5 bullets, optional callout |
-| `two_column` | Before/after, problem/solution, risks/mitigation |
-| `comparison` | 2 to 4 options side by side; highlight the recommended one |
-| `timeline` | Plan, roadmap, history: 3 to 6 steps |
-| `statement` | One big sentence: the key insight or the recommendation |
-| `quote` | Customer or leadership voice |
-| `image` | A chart image or picture from the workspace, optional bullets |
-| `closing` | Next steps with owners and dates |
+| Layout | Use for | Limits |
+|---|---|---|
+| `title` | First slide: the main message as a sentence, scope in the subtitle | always first |
+| `agenda` | The parts of the deck | 3 to 6 items; decks over 12 slides only |
+| `section` | Divider between parts | decks over 12 slides only |
+| `big_number` | One figure that carries the slide: the stakes, the result | at most 2 per deck |
+| `kpis` | Headline numbers with deltas and icons, plus one takeaway | 2 to 4 numbers |
+| `cards` | Parallel ideas: pillars, features, findings | 2 to 6 items (3 or 4 read best); at most 2 per deck |
+| `chart` | One chart plus a takeaway | see `reference.md` |
+| `table` | Exact values; highlight the row that matters | up to 10 rows x 6 columns |
+| `bullets` | Arguments or findings, optional callout | 3 to 5 bullets; at most a third of the slides |
+| `two_column` | Before/after, problem/solution, risks/mitigation | |
+| `comparison` | Options side by side; highlight the recommended one | 2 to 4 options |
+| `timeline` | Plan, roadmap, history | 3 to 6 steps |
+| `statement` | One sentence: the key insight or the recommendation | |
+| `quote` | A customer's or leader's own words, with the author | real quotes only |
+| `image` | A picture the user gave (photo, screenshot, product) or a generated illustration | never a picture of a chart: use `chart` |
+| `closing` | Next steps with owners and dates | always last |
 
-## Rules that make decks good
+The lint warns when a limit is broken.
 
-- **Action titles**: every title is a full sentence with the conclusion ("EUA e Canadá geram 45%
-  do lucro"), never a topic ("Lucro por país"). Under ~90 characters.
-- **One message per slide.** If a slide needs two takeaways, it is two slides.
-- **Show, do not list**: numbers become `kpis` or a `chart`; options become `comparison`; plans
-  become `timeline`. Use `bullets` for at most a third of the slides.
-- **Charts**: one series + `highlight` on the category that proves the title. Sort bars by
-  value. Pie/doughnut only for parts of a whole with up to 5 slices. Lines for time.
-- **Text budget**: bullets up to ~15 words, at most 5 per slide. Details go to `notes`.
-- **Speaker notes on every content slide**: what to say, in 2 to 4 sentences.
-- **Vary the rhythm**: do not use the same layout three slides in a row.
-- Bold inside text with `**...**` (only in takeaway, callout, statement, paragraphs).
-- **Icons** (`icon` on cards, kpis, timeline steps, comparison options, statement): Lucide names
-  like `rocket`, `shield-check`, `chart-line`, `users`, `wallet`. One icon per item, same style;
-  never decorative-only. List in `reference.md`; unknown names come back in the lint with options.
-- **Open strong, close strong**: `title` with the main message, `big_number` or `statement` early
-  for the stakes, `closing` with owners and dates.
-- Write in the user's language with **correct accents and punctuation** (não, já, três, ação),
-  dates and number formats (pt-BR: 1.234,5). The lint flags text written without accents.
-- `big_number`: the `title` continues the number ("é o custo anual..."); never repeat the value.
-- `source`: only the origin ("Zendesk CX Trends 2026"); the footer adds "Fonte:".
+## Deck rules
+
+- **Action titles:** each title is a full sentence with the conclusion ("EUA e Canadá geram 45%
+  do lucro"), never a topic ("Lucro por país"). Under 90 characters.
+- **One message per slide.** Two takeaways means two slides.
+- **Show, do not list:** numbers become `kpis` or `chart`, options `comparison`, plans `timeline`.
+- **Text budget:** bullets of up to ~15 words. Detail goes to `notes`.
+- **Speaker notes** on every slide except `title`, `section` and `closing`: what to say, in 2 to
+  4 sentences.
+- **Rhythm:** at most 3 slides of the same layout in a row; a light slide (`statement`,
+  `big_number`, `quote`) after every 3 or 4 dense ones.
+- **Open and close strong:** `title` with the main message; the stakes early (`big_number` or
+  `statement`); `closing` with owners and dates.
+- **Bold** with `**...**` works in body text only: `takeaway`, `callout`, card, step and column
+  `text`, `big_number` `text`, and the `statement` title. Not in other titles or bullets.
+- **`kicker`** (small label above a title) only when it adds information: the section name in
+  decks with sections, or the client or event on the `title` slide. Otherwise leave it out.
+- **`big_number`:** the `title` continues the number ("é o custo anual..."); never repeat it.
+- **`source`:** only the origin ("Zendesk CX Trends 2026"); the footer adds "Fonte:".
+- **Language:** the user's language, with correct accents (não, já, três, ação) and number
+  formats (pt-BR: 1.234,5). The lint flags text written without accents.

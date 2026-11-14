@@ -215,7 +215,7 @@ function bulletParas(items: Bullet[]): string[] {
 }
 
 function bulletsBox(c: Ctx, slide: any, n: number, items: Bullet[], x: number, y: number, w: number, h: number, max = 22) {
-	if (items.length > 6) c.warn(n, `${items.length} bullets; use at most 6 (split the slide or use two_column)`);
+	if (items.length > 5) c.warn(n, `${items.length} bullets; use at most 5 (split the slide or use two_column)`);
 	for (const p of bulletParas(items)) if (p.length > 160) c.warn(n, `bullet over 160 chars: "${p.slice(0, 40)}..."`);
 	const f = fit(bulletParas(items), w - 0.3, h, max, 14);
 	if (f.overflow) c.warn(n, "bullets overflow the box even at 14 pt; cut text");
@@ -295,7 +295,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 	agenda(c, slide, s, n) {
 		header(c, slide, s, n);
 		const items = (s.items as string[]) ?? [];
-		if (items.length > 7) c.warn(n, `agenda with ${items.length} items; keep it under 7`);
+		if (items.length > 6) c.warn(n, `agenda with ${items.length} items; use at most 6`);
 		const rowH = Math.min(0.78, BODY_H / Math.max(1, items.length));
 		items.forEach((it, i) => {
 			const y = BODY_Y + i * rowH;
@@ -372,7 +372,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		const rows = (s.rows as (string | number)[][]) ?? [];
 		const hi = s.highlight_row as number | undefined;
 		if (rows.length > 10) c.warn(n, `${rows.length} table rows; show at most ~10 and put the rest in an appendix or xlsx`);
-		if (columns.length > 7) c.warn(n, `${columns.length} columns; keep tables under 7 columns`);
+		if (columns.length > 6) c.warn(n, `${columns.length} columns; use at most 6 (move the rest to an xlsx)`);
 		const numeric = columns.map((_, j) => rows.length > 0 && rows.every((r) => typeof r[j] === "number" || /^[-+]?[R$€%\d.,\s]+%?$/.test(String(r[j] ?? "")))) ;
 		const pt = rows.length > 8 ? 12 : 14;
 		const head = columns.map((h, j) => ({ text: h, options: { bold: true, color: c.t.onAccent, fill: { color: c.t.accent }, align: numeric[j] ? "right" : "left" } }));
@@ -405,7 +405,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 	},
 
 	statement(c, slide, s, n) {
-		const dark = s.dark !== false || !!c.bgImage;
+		const dark = s.dark !== false;
 		let color = c.t.ink;
 		let hi = c.t.accent;
 		if (dark) ({ fg: color, hi } = cover(c, slide));
@@ -484,7 +484,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 
 	big_number(c, slide, s, n) {
 		// One number that carries the slide: 120 pt hero figure, label, context.
-		const dark = !!s.dark || !!c.bgImage;
+		const dark = !!s.dark;
 		let ink = c.t.ink;
 		let hi = c.t.accent;
 		if (dark) ({ fg: ink, hi } = cover(c, slide));
@@ -603,7 +603,7 @@ function addChart(c: Ctx, slide: any, n: number, ch: ChartSpec | undefined, x: n
 	const [type, extra] = kind[ch.type] ?? kind.column;
 	const pie = ch.type === "pie" || ch.type === "doughnut";
 	const points = ch.categories.length;
-	if (pie && points > 6) c.warn(n, `${ch.type} with ${points} slices; use a bar chart above 6`);
+	if (pie && points > 5) c.warn(n, `${ch.type} with ${points} slices; use a sorted bar chart above 5`);
 	if (ch.series.length > 5) c.warn(n, `${ch.series.length} series; more than 5 is unreadable`);
 	for (const s of ch.series) if (s.values.length !== points) c.warn(n, `series "${s.name}" has ${s.values.length} values for ${points} categories`);
 
@@ -661,6 +661,29 @@ function addChart(c: Ctx, slide: any, n: number, ch: ChartSpec | undefined, x: n
 
 // Common pt-BR words that are only written without accents by mistake (ASCII-only output).
 const ACCENTLESS = new Set("nao ja voce voces sao entao tambem ate apos acao acoes solucao solucoes informacao decisao operacao integracao satisfacao mitigacao recomendacao regulatorio relatorio rapido rapida tres mes paises negocio negocios area areas inteligencia experiencia estrategia estrategico estrategica historico unico unica proximo proximos proxima ultimo ultimos ultima possivel disponivel periodo previsao projecao gestao reducao producao".split(" "));
+
+/** Deck-level habits that make decks look generated (adapted from pbakaus/impeccable, Apache-2.0). */
+function deckLint(deck: DeckSpec): string[] {
+	const out: string[] = [];
+	const layouts = deck.slides.map((s) => s.layout);
+	for (let i = 0; i < layouts.length; ) {
+		let j = i;
+		while (j + 1 < layouts.length && layouts[j + 1] === layouts[i]) j++;
+		if (j - i + 1 >= 4) out.push(`slides ${i + 1}-${j + 1}: ${j - i + 1} "${layouts[i]}" slides in a row; break the run with a statement, big_number or another form`);
+		i = j + 1;
+	}
+	const count = (l: string) => layouts.filter((x) => x === l).length;
+	if (deck.slides.length >= 6 && count("bullets") * 3 > deck.slides.length) {
+		out.push(`${count("bullets")} of ${deck.slides.length} slides are bullets; keep it to a third: turn numbers into kpis/chart, options into comparison, plans into timeline`);
+	}
+	if (count("cards") > 2) out.push(`${count("cards")} cards slides; use cards at most twice (icon grids everywhere look generated)`);
+	if (count("big_number") > 2) out.push(`${count("big_number")} big_number slides; keep at most 2 so the big number stays special`);
+	const emoji = deck.slides.flatMap((s, i) =>
+		JSON.stringify({ ...s, icon: undefined, background_image: undefined, path: undefined }).match(/(?![\u00A9\u00AE\u2122])\p{Extended_Pictographic}/gu) ? [i + 1] : [],
+	);
+	if (emoji.length) out.push(`slides ${emoji.join(", ")}: emoji or pictographs in the text; remove them and use the "icon" field (Lucide) instead`);
+	return out;
+}
 
 function accentlessWords(deck: DeckSpec): string[] {
 	const text = JSON.stringify(deck.slides).toLowerCase();
@@ -754,7 +777,7 @@ export async function renderDeck(deck: DeckSpec, opts: RenderOptions): Promise<R
 	const c: Ctx = { pptx, t, deck, workspace: opts.workspace, resolve: opts.resolve, warn: (n, m) => warnings.push(`slide ${n}: ${m}`) };
 
 	const withImage = deck.slides.filter((s) => s.background_image).length;
-	if (withImage > 3) warnings.push(`${withImage} slides with background_image; use at most 3 (cover, section openers) so they stay special`);
+	if (withImage > 3) warnings.push(`${withImage} slides with background_image; use at most 3 (the title and up to 2 section slides)`);
 	for (const [i, s] of deck.slides.entries()) {
 		const n = i + 1;
 		const layout = LAYOUTS[s.layout];
@@ -774,6 +797,7 @@ export async function renderDeck(deck: DeckSpec, opts: RenderOptions): Promise<R
 	}
 	const plain = accentlessWords(deck);
 	if (plain.length) warnings.push(`text without Portuguese accents (${plain.slice(0, 8).join(", ")}): rewrite with correct accents (não, já, ação, três, rápido...)`);
+	warnings.push(...deckLint(deck));
 	if (noNotes.length) warnings.push(`slides ${noNotes.join(", ")}: no speaker notes (add "notes")`);
 
 	const previews: Buffer[] = [];
@@ -788,7 +812,7 @@ export async function renderDeck(deck: DeckSpec, opts: RenderOptions): Promise<R
 	return { bytes, slides: deck.slides.length, warnings, previews };
 }
 
-const IMAGE_COVERS = new Set(["title", "section", "statement", "closing", "big_number"]);
+const IMAGE_COVERS = new Set(["title", "section"]);
 
 async function bgImage(c: Ctx, s: SlideSpec, n: number): Promise<string | undefined> {
 	const path = String(s.background_image);

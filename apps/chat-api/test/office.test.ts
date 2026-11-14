@@ -135,3 +135,21 @@ test("generate_image helpers: guardrails in the prompt, data URL parsing", async
 	assert.equal(ok.mime, "jpeg");
 	assert.throws(() => firstImage({ choices: [{ message: { content: "sorry" } }] }), /no image.*sorry/);
 });
+
+test("deck lint: runs, bullet share, cards/big_number budget, emoji", async () => {
+	const b = (t: string) => ({ layout: "bullets", title: t, bullets: ["um", "dois"], notes: "n" });
+	const card = { layout: "cards", title: "c", items: [{ title: "a", text: "b" }, { title: "c", text: "d" }], notes: "n" };
+	const r = await renderDeck(
+		{
+			title: "t",
+			slides: [b("a"), b("b"), b("c"), b("d 🚀"), card, card, card, { layout: "big_number", value: "1", title: "x", notes: "n", icon: "rocket" }],
+		},
+		{ workspace: ".", resolve: (p) => p, themes, preview: false },
+	);
+	const w = r.warnings.join("\n");
+	assert.match(w, /slides 1-4: 4 "bullets" slides in a row/);
+	assert.match(w, /4 of 8 slides are bullets/);
+	assert.match(w, /3 cards slides/);
+	assert.match(w, /slides 4: emoji or pictographs/);
+	assert.doesNotMatch(w, /big_number slides/);
+});
