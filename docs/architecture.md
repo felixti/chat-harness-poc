@@ -147,8 +147,23 @@ Rules: the model never writes Cypher or paths (typed tools only); every fact kee
 (conversation, message) and time; `forget` is an event too, so "what did the agent believe on
 date X" stays answerable; the graph engine is replaceable (Relate spike; fallback FerretDB).
 
-Status 2026-11-14: layers 1, 2 and 3 implemented (`src/memory.ts`, `src/graph-memory.ts`);
-curator and layer 4 next.
+Status 2026-11-14: layers 1, 2 and 3 and the curator are implemented (`src/memory.ts`,
+`src/graph-memory.ts`, `src/curator.ts`). Layer 4 is next.
+
+Curator: after the answer streams and before `done`, the curator makes one JSON call to
+`CURATOR_MODEL` (default: the chat model). Only the **user's message** is a source of facts; the
+assistant reply is context, and documents, web pages and tool output are never shown to it.
+- Output: at most 2 core entries and 5 facts.
+- These go through the same checks as the tools: `checkEntry`, ETag writes, and duplicates
+  skipped by key and relation.
+- The UI shows a `memória: …` line for what was saved.
+- `MEMORY_CURATOR=false` turns it off.
+- Cost: about US$0.0003 per turn on deepseek-flash.
+
+Memória panel: core entries (forget each, or clear all). Relations come grouped by subject, each
+with a "forget" action that writes a `forget` event, so history is kept. "Ver grafo" opens an SVG
+force layout of the newest 100 facts, colored by entity kind. It uses no library; the API is
+`GET /api/memory/graph` and `DELETE /api/memory/graph/<factId>`.
 
 Layer 3 implementation notes:
 - Engine: Relate native (`@relate/relate` 1.0.1, pinned), not WASM (see [spike-relate.md](spike-relate.md)).
