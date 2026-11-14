@@ -15,6 +15,7 @@ import {
 import { config } from "./config.ts";
 import { bashTool, generatePdfTool, parseDocumentTool } from "./tools.ts";
 import { officeTools } from "./office/tools.ts";
+import { guardedFileTools } from "./fs-guard.ts";
 
 const agentDir = join(config.tmpRoot, "agent");
 const PROVIDER = "gateway";
@@ -140,9 +141,10 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		settingsManager,
 		sessionManager: SessionManager.inMemory(cwd, undefined, input.entries as never),
 		// Built-in grep/find run rg/fd (subprocesses): excluded, the emulated bash has grep/find.
-		// The built-in bash is replaced by our just-bash tool of the same name (custom tools win).
+		// The built-in bash is replaced by our just-bash tool of the same name (custom tools win), and
+		// read/write/edit/ls by confined copies (workspace read-write, skills read-only; see fs-guard.ts).
 		excludeTools: ["grep", "find", "powershell"],
-		customTools: [bashTool(cwd), generatePdfTool(cwd), parseDocumentTool(cwd), ...officeTools(cwd), ...(input.extraTools ?? [])],
+		customTools: [...guardedFileTools(cwd, [config.skillsDir]), bashTool(cwd), generatePdfTool(cwd), parseDocumentTool(cwd), ...officeTools(cwd), ...(input.extraTools ?? [])],
 	});
 
 	const unsubscribe = session.subscribe((event) => {
