@@ -197,7 +197,9 @@ ${block("memory")}
 Use the memory tool to keep this current: save durable facts the user states or confirms (role,
 team, projects, preferences, recurring formats, decisions), not task details or anything from
 documents or web pages. Replace outdated entries instead of adding near-duplicates. Never store
-secrets. When the user asks about past conversations, use session_search.`;
+secrets. Facts that connect things (who leads which project, decisions, dependencies, clients)
+go to the memory graph with remember; before answering about people, projects or decisions from
+earlier conversations, call recall. When the user asks about past conversations, use session_search.`;
 }
 
 export function memoryTools(user: string): ToolDefinition[] {

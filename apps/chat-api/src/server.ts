@@ -8,6 +8,7 @@ import { runTurn, type McpServer } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
 import { clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
+import { FactGraph, graphTools } from "./graph-memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
 import { listFiles, openTurn, readFileFromStore, workspacePath, writeFileToStore } from "./workspace.ts";
 
@@ -63,6 +64,8 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 	if (!ID.test(id) || !input.message) return json(res, 400, { error: "bad request" });
 	// Lease + fresh workspace from Blob; 409 before streaming when another turn holds it.
 	const turn = await openTurn(user, id);
+	const memoryOn = config.memory.enabled && !!config.connectors.masterKey;
+	const facts = memoryOn ? new FactGraph(user, id) : undefined;
 	let finished = false;
 	try {
 		const existing = await store.get(user, id);
@@ -78,8 +81,8 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				message: input.message,
 				pinnedSkills: input.skills,
 				mcpServers: await mcpServersFor(user),
-				...(config.memory.enabled && config.connectors.masterKey
-					? { systemAppend: await corePrompt(user), extraTools: [...memoryTools(user), sessionSearchTool(user, id, store)] }
+				...(memoryOn && facts
+					? { systemAppend: await corePrompt(user), extraTools: [...memoryTools(user), ...graphTools(facts), sessionSearchTool(user, id, store)] }
 					: { extraTools: [sessionSearchTool(user, id, store)] }),
 				onEvent: send,
 				signal: abort.signal,
@@ -96,6 +99,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 		// Files the turn already wrote are kept even on error; only a turn that never reached
 		// finish() is abandoned (local copy deleted, lease released).
 		if (!finished) await turn.finish().catch(() => turn.abandon());
+		await facts?.dispose().catch((e) => console.warn(`[graph] dispose: ${(e as Error).message}`));
 	}
 }
 

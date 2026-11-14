@@ -103,7 +103,7 @@ only; the lease expires and the next turn starts from Blob.
 Not covered yet: process/VM isolation per user (phase 3: ACA dynamic sessions or Kata), turns
 that survive a pod restart (queue + resumable stream).
 
-## 6. Memory (H36, planned)
+## 6. Memory (H36)
 
 Four layers, inspired by Hermes Agent. The Blob log is the truth; anything in memory of a pod
 is derived and disposable.
@@ -147,7 +147,24 @@ Rules: the model never writes Cypher or paths (typed tools only); every fact kee
 (conversation, message) and time; `forget` is an event too, so "what did the agent believe on
 date X" stays answerable; the graph engine is replaceable (Relate spike; fallback FerretDB).
 
-Delivery order: 1+2 (core + session search), spike of 3 with Relate WASM, curator, then 4.
+Status 2026-11-14: layers 1, 2 and 3 implemented (`src/memory.ts`, `src/graph-memory.ts`);
+curator and layer 4 next.
+
+Layer 3 implementation notes:
+- Engine: Relate native (`@relate/relate` 1.0.1, pinned), not WASM (see [spike-relate.md](spike-relate.md)).
+- The JS binding has no `close()`. `graph-memory.ts` calls `relate_database_close` and
+  `relate_disconnect` from the C ABI through koffi, which is already a dependency of the
+  binding. Without these calls every turn leaked its graph: +140 MB after 60 opens, against +28 MB
+  with them.
+- Graph model: `(:Entity {key, name, kind})-[:FACT {id, rel, at, src, note, forgotten_at}]->(:Entity)`.
+  `key` is `kind:` plus the folded name (no accents, lower case).
+- Events: append blob per month, one sealed line per event (one append block, atomic).
+- Snapshot: compacted when 50 or more events are not in it yet. Only one compactor runs per user
+  (`_locks/<oid>/compact` lease). The pointer `graph/current.json` is written with an ETag, and
+  the snapshot files are sealed. If the snapshot is missing or corrupt, the graph is rebuilt from
+  the events.
+- Tools: `remember(subject, subject_kind, relation, object, object_kind, note)`,
+  `recall(about, as_of, limit)` and `forget(fact_id, reason)`. All Cypher is parameterized.
 
 ## 7. Scale and cost (PoC)
 
