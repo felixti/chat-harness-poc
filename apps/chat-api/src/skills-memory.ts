@@ -121,8 +121,8 @@ export function skillTools(user: string, conversation: string): ToolDefinition[]
 			label: "skill_save",
 			description:
 				"Save a reusable procedure as one of the user's personal skills (appears as my-<name> in future conversations). " +
-				"ONLY when the user asks to save it or says yes after you offer. Offer it after a multi-step task that worked and " +
-				"will likely repeat (a weekly report, a deck in their format, a data cleanup). The body is a SKILL.md: goal, inputs, " +
+				"ONLY when the user asks to save it or says yes after you offer. Offer it only when the user signals the task " +
+				"repeats (a weekly report, a deck in their format, a data cleanup). The body is a SKILL.md: goal, inputs, " +
 				"numbered steps with the exact tools, layouts, themes and formats used, and checks. Saving with an existing name replaces it.",
 			promptSnippet: "skill_save: save a procedure the user wants reused as a personal skill (only with their consent)",
 			parameters: Type.Object({
