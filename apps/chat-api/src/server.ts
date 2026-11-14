@@ -7,6 +7,7 @@ import { config } from "./config.ts";
 import { runTurn, type McpServer } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
+import { clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
 import { listFiles, openTurn, readFileFromStore, workspacePath, writeFileToStore } from "./workspace.ts";
 
@@ -77,6 +78,9 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				message: input.message,
 				pinnedSkills: input.skills,
 				mcpServers: await mcpServersFor(user),
+				...(config.memory.enabled && config.connectors.masterKey
+					? { systemAppend: await corePrompt(user), extraTools: [...memoryTools(user), sessionSearchTool(user, id, store)] }
+					: { extraTools: [sessionSearchTool(user, id, store)] }),
 				onEvent: send,
 				signal: abort.signal,
 			});
@@ -107,6 +111,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (url.pathname === "/api/conversations" && req.method === "GET") return json(res, 200, await store.list(user));
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
 
+	if (url.pathname === "/api/memory") return memoryRoute(req, res, user, url);
+
 	const k = url.pathname.match(/^\/api\/connectors(?:\/([a-z0-9-]+)\/(connect|callback))?(?:\/([a-z0-9-]+))?$/);
 	if (k) return connectorRoute(req, res, user, url, k);
 
@@ -129,6 +135,20 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 		}
 	}
 	json(res, 404, { error: "not found" });
+}
+
+/** The user sees and edits what the agent remembers (Memória panel). */
+async function memoryRoute(req: IncomingMessage, res: ServerResponse, user: string, url: URL) {
+	if (req.method === "GET") return json(res, 200, await coreEntries(user));
+	if (req.method === "DELETE") {
+		const target = url.searchParams.get("target") as Target | null;
+		const text = url.searchParams.get("text");
+		if (!target && !text) await clearCore(user);
+		else if (target && target in TARGETS && text) await editCore(user, target, { action: "remove", old_text: text });
+		else return json(res, 400, { error: "target and text, or nothing to clear all" });
+		return json(res, 200, await coreEntries(user));
+	}
+	json(res, 405, { error: "method not allowed" });
 }
 
 async function connectorRoute(req: IncomingMessage, res: ServerResponse, user: string, url: URL, k: RegExpMatchArray) {

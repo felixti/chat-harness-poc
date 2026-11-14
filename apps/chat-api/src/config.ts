@@ -64,6 +64,11 @@ export const config = {
 			readOnly: env.GITHUB_MCP_READONLY !== "false",
 		},
 	},
+	memory: {
+		/** Long-term memory (docs/architecture.md §6); sealed per user, the agent only reaches it via tools. */
+		container: env.MEMORY_CONTAINER ?? "chat-memory",
+		enabled: env.MEMORY_ENABLED !== "false",
+	},
 	/** Dev only: identity when no gateway header is present. */
 	devUser: env.DEV_USER ?? "",
 };

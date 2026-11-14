@@ -72,6 +72,8 @@ export interface TurnInput {
 	pinnedSkills?: string[];
 	mcpServers: McpServer[];
 	extraTools?: ToolDefinition[];
+	/** Per-user system prompt additions (core memory snapshot). */
+	systemAppend?: string;
 	onEvent: (event: { type: string; [k: string]: unknown }) => void;
 	signal?: AbortSignal;
 }
@@ -106,7 +108,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 			skills: base.skills.filter((s) => s.filePath.startsWith(`${config.skillsDir}/`)),
 			diagnostics: base.diagnostics,
 		}),
-		appendSystemPrompt: [SYSTEM_APPEND],
+		appendSystemPrompt: [SYSTEM_APPEND, ...(input.systemAppend ? [input.systemAppend] : [])],
 		extensionFactories: [
 			createToolSearchExtension(),
 			createMcpExtension({

@@ -78,6 +78,14 @@ resource "azurerm_storage_container" "credentials" {
   container_access_type = "private"
 }
 
+# Long-term memory (docs/architecture.md §6): sealed per user, reached only through the
+# memory tools, never mounted in a workspace.
+resource "azurerm_storage_container" "memory" {
+  name                  = "chat-memory"
+  storage_account_id    = data.azurerm_storage_account.artifacts.id
+  container_access_type = "private"
+}
+
 resource "azurerm_user_assigned_identity" "chat_api" {
   name                = "id-${var.cluster_name}-chat-api"
   location            = data.azurerm_kubernetes_cluster.main.location
@@ -102,6 +110,12 @@ resource "azurerm_role_assignment" "chat_api_blob" {
 
 resource "azurerm_role_assignment" "chat_api_credentials" {
   scope                = azurerm_storage_container.credentials.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.chat_api.principal_id
+}
+
+resource "azurerm_role_assignment" "chat_api_memory" {
+  scope                = azurerm_storage_container.memory.id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = azurerm_user_assigned_identity.chat_api.principal_id
 }

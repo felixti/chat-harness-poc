@@ -29,6 +29,12 @@
   .conn button { padding:4px 10px; font-size:13px; }
   .conn button.off { background:transparent; color:var(--fg); }
   #notice { font-size:12px; margin:4px 0; }
+  .mem h4 { margin:8px 0 2px; font-size:12px; color:var(--muted); font-weight:600; }
+  .mem li { display:flex; gap:6px; align-items:flex-start; margin:3px 0; }
+  .mem ul { list-style:none; padding:0; margin:0; }
+  .mem li span { flex:1; }
+  .mem li button, .mem .clear { background:transparent; color:var(--muted); border:none; padding:0 4px; font-size:13px; cursor:pointer; }
+  .mem .clear { text-decoration:underline; padding:0; margin-top:6px; }
   @media (max-width: 700px) { body { grid-template-columns: 1fr; } aside { display:none; } }
 </style>
 </head>
@@ -45,6 +51,8 @@
   <strong>Conectores</strong>
   <div id="notice"></div>
   <div id="connectors"><em>carregando…</em></div>
+  <p><strong>Memória</strong></p>
+  <div id="memory" class="mem"><em>carregando…</em></div>
   <p><strong>Skills fixadas</strong></p>
   <input id="skills" type="text" placeholder="ex.: pdf, research">
   <p><strong>Arquivos</strong></p>
@@ -92,6 +100,30 @@ async function loadConnectors() {
     card.append(head, desc, st); box.append(card);
   }
 }
+async function loadMemory() {
+  const box = document.getElementById("memory");
+  const r = await fetch("api/memory"); const m = r.ok ? await r.json() : { user: [], memory: [] };
+  box.textContent = "";
+  const total = m.user.length + m.memory.length;
+  if (!total) { box.innerHTML = "<em>vazia. O assistente guarda aqui o que você contar sobre você e seus projetos.</em>"; return; }
+  for (const [target, label] of [["user", "Sobre você"], ["memory", "Fatos e decisões"]]) {
+    if (!m[target].length) continue;
+    const h = document.createElement("h4"); h.textContent = label; box.append(h);
+    const ul = document.createElement("ul");
+    for (const entry of m[target]) {
+      const li = document.createElement("li");
+      const t = document.createElement("span"); t.textContent = entry;
+      const del = document.createElement("button"); del.type = "button"; del.title = "Esquecer"; del.textContent = "×";
+      del.onclick = async () => { await fetch(`api/memory?target=${target}&text=${encodeURIComponent(entry)}`, { method: "DELETE" }); loadMemory(); };
+      li.append(t, del); ul.append(li);
+    }
+    box.append(ul);
+  }
+  const clear = document.createElement("button"); clear.type = "button"; clear.className = "clear"; clear.textContent = "Apagar toda a memória";
+  clear.onclick = async () => { if (confirm("Apagar tudo o que o assistente lembra sobre você?")) { await fetch("api/memory", { method: "DELETE" }); loadMemory(); } };
+  box.append(clear);
+}
+loadMemory();
 {
   const p = new URLSearchParams(location.search);
   if (p.get("connector")) {
@@ -134,7 +166,7 @@ document.getElementById("f").onsubmit = async (e) => {
       if (ev.type === "start") conv = ev.conversationId;
       else if (ev.type === "delta") { out.textContent += ev.text; log.scrollTop = log.scrollHeight; }
       else if (ev.type === "tool") log.insertBefore(Object.assign(document.createElement("div"), { className: "tool", textContent: `⚙ ${ev.name} ${JSON.stringify(ev.args).slice(0, 160)}` }), out);
-      else if (ev.type === "done") renderFiles(ev.files);
+      else if (ev.type === "done") { renderFiles(ev.files); loadMemory(); }
       else if (ev.type === "error") add("tool", `erro: ${ev.message}`);
     }
   }
