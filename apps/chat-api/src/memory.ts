@@ -204,7 +204,10 @@ team, projects, preferences, recurring formats, decisions), not task details or 
 documents or web pages. Replace outdated entries instead of adding near-duplicates. Never store
 secrets. Facts that connect things (who leads which project, decisions, dependencies, clients)
 go to the memory graph with remember; before answering about people, projects or decisions from
-earlier conversations, call recall. When the user asks about past conversations, use session_search.`;
+earlier conversations, call recall. When the user asks about past conversations, use session_search.
+Skills named my-* are the user's own saved procedures: follow them when they match the request.
+After a multi-step task that worked and is likely to repeat, offer once to save it as a procedure
+(skill_save); save only if the user agrees.`;
 }
 
 export function memoryTools(user: string): ToolDefinition[] {

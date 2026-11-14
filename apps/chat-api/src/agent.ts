@@ -74,6 +74,8 @@ export interface TurnInput {
 	extraTools?: ToolDefinition[];
 	/** Per-user system prompt additions (core memory snapshot). */
 	systemAppend?: string;
+	/** Per-turn folder with the user's personal skills (my-*), loaded like company skills, read-only. */
+	userSkillsDir?: string;
 	onEvent: (event: { type: string; [k: string]: unknown }) => void;
 	signal?: AbortSignal;
 }
@@ -102,10 +104,12 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		noContextFiles: true,
 		noPromptTemplates: true,
 		noThemes: true,
-		additionalSkillPaths: [config.skillsDir],
+		additionalSkillPaths: [config.skillsDir, ...(input.userSkillsDir ? [input.userSkillsDir] : [])],
 		// Only the company catalog: ignore skills found in the user's home or the workspace.
 		skillsOverride: (base) => ({
-			skills: base.skills.filter((s) => s.filePath.startsWith(`${config.skillsDir}/`)),
+			skills: base.skills.filter(
+				(s) => s.filePath.startsWith(`${config.skillsDir}/`) || (!!input.userSkillsDir && s.filePath.startsWith(`${input.userSkillsDir}/`)),
+			),
 			diagnostics: base.diagnostics,
 		}),
 		appendSystemPrompt: [SYSTEM_APPEND, ...(input.systemAppend ? [input.systemAppend] : [])],
@@ -146,7 +150,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		// The built-in bash is replaced by our just-bash tool of the same name (custom tools win), and
 		// read/write/edit/ls by confined copies (workspace read-write, skills read-only; see fs-guard.ts).
 		excludeTools: ["grep", "find", "powershell"],
-		customTools: [...guardedFileTools(cwd, [config.skillsDir]), bashTool(cwd), generatePdfTool(cwd), parseDocumentTool(cwd), ...officeTools(cwd), ...(input.extraTools ?? [])],
+		customTools: [...guardedFileTools(cwd, [config.skillsDir, ...(input.userSkillsDir ? [input.userSkillsDir] : [])]), bashTool(cwd), generatePdfTool(cwd), parseDocumentTool(cwd), ...officeTools(cwd), ...(input.extraTools ?? [])],
 	});
 
 	const unsubscribe = session.subscribe((event) => {

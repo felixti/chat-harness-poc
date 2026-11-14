@@ -10,6 +10,7 @@ import { openStore } from "./store.ts";
 import { retrievedPrompt, clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
 import { FactGraph, graphTools } from "./graph-memory.ts";
 import { curate } from "./curator.ts";
+import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
 import { listFiles, openTurn, readFileFromStore, workspacePath, writeFileToStore } from "./workspace.ts";
 
@@ -67,6 +68,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 	const turn = await openTurn(user, id);
 	const memoryOn = config.memory.enabled && !!config.connectors.masterKey;
 	const facts = memoryOn ? new FactGraph(user, id) : undefined;
+	const mySkills = memoryOn ? await materializeSkills(user) : undefined;
 	let finished = false;
 	try {
 		const existing = await store.get(user, id);
@@ -88,7 +90,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				pinnedSkills: input.skills,
 				mcpServers: await mcpServersFor(user),
 				...(memoryOn && facts
-					? { systemAppend: (await corePrompt(user)) + (await retrievedPrompt(user, input.message, id, store, facts)), extraTools: [...memoryTools(user), ...graphTools(facts), sessionSearchTool(user, id, store)] }
+					? { systemAppend: (await corePrompt(user)) + (await retrievedPrompt(user, input.message, id, store, facts)), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store)], userSkillsDir: mySkills?.dir }
 					: { extraTools: [sessionSearchTool(user, id, store)] }),
 				onEvent,
 				signal: abort.signal,
@@ -118,6 +120,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 		// finish() is abandoned (local copy deleted, lease released).
 		if (!finished) await turn.finish().catch(() => turn.abandon());
 		await facts?.dispose().catch((e) => console.warn(`[graph] dispose: ${(e as Error).message}`));
+		await mySkills?.cleanup();
 	}
 }
 
@@ -134,6 +137,10 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
 
 	if (url.pathname === "/api/memory") return memoryRoute(req, res, user, url);
+	if (url.pathname === "/api/memory/skills" && req.method === "GET")
+		return json(res, 200, config.connectors.masterKey ? (await listSkills(user)).map(({ name, description, src, updatedAt }) => ({ name, description, src, updatedAt })) : []);
+	const sk = url.pathname.match(/^\/api\/memory\/skills\/([a-z0-9-]{3,40})$/);
+	if (sk && req.method === "DELETE") return json(res, 200, { deleted: await deleteSkill(user, sk[1]) });
 	const gm = url.pathname.match(/^\/api\/memory\/graph(?:\/([a-f0-9-]{8}))?$/);
 	if (gm) return graphRoute(req, res, user, gm[1]);
 

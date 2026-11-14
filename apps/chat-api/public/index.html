@@ -63,6 +63,7 @@
   <p><strong>Memória</strong></p>
   <div id="memory" class="mem"><em>carregando…</em></div>
   <div id="graphmem" class="mem"></div>
+  <div id="skillmem" class="mem"></div>
   <p><strong>Skills fixadas</strong></p>
   <input id="skills" type="text" placeholder="ex.: pdf, research">
   <p><strong>Arquivos</strong></p>
@@ -165,6 +166,25 @@ async function loadGraph() {
     box.append(ul);
   }
 }
+async function loadSkills() {
+  const box = document.getElementById("skillmem");
+  const r = await fetch("api/memory/skills"); const list = r.ok ? await r.json() : [];
+  box.textContent = "";
+  if (!list.length) return;
+  const h = document.createElement("h4"); h.textContent = `Procedimentos (${list.length})`; box.append(h);
+  const ul = document.createElement("ul");
+  for (const s of list) {
+    const li = document.createElement("li");
+    const t = document.createElement("span");
+    const n = document.createElement("strong"); n.textContent = `my-${s.name}`;
+    const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = `${s.description} · ${s.updatedAt.slice(0, 10)}`;
+    t.append(n, meta);
+    const del = document.createElement("button"); del.type = "button"; del.title = "Apagar procedimento"; del.textContent = "×";
+    del.onclick = async () => { if (confirm(`Apagar o procedimento my-${s.name}?`)) { await fetch(`api/memory/skills/${s.name}`, { method: "DELETE" }); loadSkills(); } };
+    li.append(t, del); ul.append(li);
+  }
+  box.append(ul);
+}
 function showGraph() {
   const dlg = document.getElementById("graph"); dlg.showModal();
   const svg = document.getElementById("graphsvg"); svg.textContent = "";
@@ -202,7 +222,7 @@ function showGraph() {
   for (const k of kinds) { const sp = document.createElement("span"); const i = document.createElement("i"); i.style.background = KIND_COLORS[k] ?? KIND_COLORS.other; sp.append(i, document.createTextNode(KIND_LABELS[k] ?? k)); legend.append(sp); }
 }
 document.getElementById("graphclose").onclick = () => document.getElementById("graph").close();
-loadMemory(); loadGraph();
+loadMemory(); loadGraph(); loadSkills();
 {
   const p = new URLSearchParams(location.search);
   if (p.get("connector")) {
@@ -246,7 +266,7 @@ document.getElementById("f").onsubmit = async (e) => {
       else if (ev.type === "delta") { out.textContent += ev.text; log.scrollTop = log.scrollHeight; }
       else if (ev.type === "tool") log.insertBefore(Object.assign(document.createElement("div"), { className: "tool", textContent: `⚙ ${ev.name} ${JSON.stringify(ev.args).slice(0, 160)}` }), out);
       else if (ev.type === "memory") add("tool", `memória: ${ev.saved.join(" · ")}`);
-      else if (ev.type === "done") { renderFiles(ev.files); loadMemory(); loadGraph(); }
+      else if (ev.type === "done") { renderFiles(ev.files); loadMemory(); loadGraph(); loadSkills(); }
       else if (ev.type === "error") add("tool", `erro: ${ev.message}`);
     }
   }
