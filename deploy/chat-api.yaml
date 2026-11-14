@@ -58,7 +58,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
       - name: chat-api
-        image: ghcr.io/felixti/chat-harness-chat-api:72fc765ef4f2b929e62d493f260add600c81fb2d
+        image: ghcr.io/felixti/chat-harness-chat-api:893f4c6f528bbc433bb2049656381546c9233b5d
         env:
         - {name: MONGO_URL, value: "mongodb://ferret@ferretdb:27017/chat"}   # password from /var/run/secrets/chat/db-password
         - {name: BLOB_ACCOUNT_URL, value: "https://stagentpocjt75.blob.core.windows.net"}
@@ -70,6 +70,7 @@ spec:
         - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
         - {name: PUBLIC_URL, value: "https://chat.20-121-208-105.sslip.io"}
         - {name: CONNECTORS_CONTAINER, value: chat-credentials}
+        - {name: MEMORY_CONTAINER, value: chat-memory}
         - {name: GITHUB_CLIENT_ID, value: "Ov23lipiqkWBqCka0Sgk"}   # GitHub OAuth App client ID (public)
         ports: [{name: http, containerPort: 8080}]
         readinessProbe:
