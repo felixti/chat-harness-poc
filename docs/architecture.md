@@ -150,6 +150,9 @@ date X" stays answerable; the graph engine is replaceable (Relate spike; fallbac
 Status 2026-11-14: layers 1, 2 and 3 and the curator are implemented (`src/memory.ts`,
 `src/graph-memory.ts`, `src/curator.ts`). Layer 4 is next.
 
+Retrieval every turn (H37): core memory, the 5 latest conversations with summaries, and graph
+facts about entities the message names, capped at ~3 KB; tools for deeper lookups.
+
 Curator: after the answer streams and before `done`, the curator makes one JSON call to
 `CURATOR_MODEL` (default: the chat model). Only the **user's message** is a source of facts; the
 assistant reply is context, and documents, web pages and tool output are never shown to it.
