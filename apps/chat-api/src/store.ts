@@ -9,6 +9,16 @@ export interface Conversation {
 	/** Pi session entries (messages, tool calls, compactions) to rebuild the session. */
 	entries: unknown[];
 	updatedAt: Date;
+	/** Optimistic concurrency: save() succeeds only if the stored version is still this one
+	 *  (undefined = new conversation). Backs up the per-conversation lease. */
+	version?: number;
+}
+
+export class ConflictError extends Error {
+	status = 409;
+	constructor() {
+		super("conversation changed in another tab or device; reload it");
+	}
 }
 
 export type ConversationSummary = Pick<Conversation, "id" | "title" | "updatedAt">;
@@ -26,7 +36,9 @@ export class MemoryStore implements ConversationStore {
 		return c && c.user === user ? c : undefined;
 	}
 	async save(c: Conversation) {
-		this.items.set(c.id, c);
+		const cur = this.items.get(c.id);
+		if ((cur?.version ?? undefined) !== c.version || (cur && cur.user !== c.user)) throw new ConflictError();
+		this.items.set(c.id, { ...c, version: (c.version ?? 0) + 1 });
 	}
 	async list(user: string) {
 		return [...this.items.values()]
@@ -54,12 +66,19 @@ export class MongoStore implements ConversationStore {
 	async get(user: string, id: string) {
 		// Filter by user too: a conversation id alone never grants access.
 		const d = await this.col.findOne({ _id: id, user });
-		return d ? { id: d._id, user: d.user, title: d.title, entries: d.entries, updatedAt: d.updatedAt } : undefined;
+		return d ? { id: d._id, user: d.user, title: d.title, entries: d.entries, updatedAt: d.updatedAt, version: d.version ?? 0 } : undefined;
 	}
 
 	async save(c: Conversation) {
-		const { id, ...rest } = c;
-		await this.col.replaceOne({ _id: id, user: c.user }, rest, { upsert: true });
+		const { id, version, ...rest } = c;
+		if (version === undefined) {
+			await this.col.insertOne({ _id: id, ...rest, version: 1 }).catch((e) => Promise.reject(e?.code === 11000 ? new ConflictError() : e));
+			return;
+		}
+		// Documents written before versioning have no field: treat that as version 0.
+		const filter = version === 0 ? { _id: id, user: c.user, version: { $in: [0, null] } } : { _id: id, user: c.user, version };
+		const r = await this.col.replaceOne(filter as never, { ...rest, version: version + 1 });
+		if (r.matchedCount === 0) throw new ConflictError();
 	}
 
 	async list(user: string) {

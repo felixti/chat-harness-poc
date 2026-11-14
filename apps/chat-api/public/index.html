@@ -121,6 +121,7 @@ document.getElementById("f").onsubmit = async (e) => {
   const skills = document.getElementById("skills").value.split(",").map(s => s.trim()).filter(Boolean);
   const out = add("msg", "");
   const res = await fetch("api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ conversationId: conv ?? undefined, message, skills }) });
+  if (!res.ok) { const j = await res.json().catch(() => ({})); out.textContent = res.status === 409 ? "Esta conversa está respondendo em outra aba ou dispositivo. Aguarde terminar e tente de novo." : `erro: ${j.error ?? res.status}`; return; }
   const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
   for (;;) {
     const { value, done } = await reader.read(); if (done) break;

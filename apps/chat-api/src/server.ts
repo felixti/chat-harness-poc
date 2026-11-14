@@ -1,14 +1,14 @@
 import "./no-subprocess.ts"; // first: enforce the "no subprocess" runtime rule
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { relative } from "node:path";
 import { config } from "./config.ts";
 import { runTurn, type McpServer } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
-import { hydrate, listLocal, persistChanges, persistFile, readWorkspaceFile, workspacePath } from "./workspace.ts";
+import { listFiles, openTurn, readFileFromStore, workspacePath, writeFileToStore } from "./workspace.ts";
 
 const store = await openStore(config.mongoUrl);
 const ID = /^[a-zA-Z0-9-]{8,64}$/;
@@ -41,10 +41,6 @@ async function mcpServersFor(user: string): Promise<McpServer[]> {
 	return servers;
 }
 
-async function listFiles(dir: string) {
-	return (await listLocal(dir)).map(({ path, size }) => ({ path, size }));
-}
-
 async function body(req: IncomingMessage, limit: number): Promise<Buffer> {
 	const chunks: Buffer[] = [];
 	let size = 0;
@@ -64,32 +60,39 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 	const input = JSON.parse((await body(req, 1_000_000)).toString()) as { conversationId?: string; message: string; skills?: string[] };
 	const id = input.conversationId ?? randomUUID();
 	if (!ID.test(id) || !input.message) return json(res, 400, { error: "bad request" });
-	const existing = await store.get(user, id);
-	const workspace = await hydrate(user, id);
-	const started = Date.now();
-
-	res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
-	const send = (e: unknown) => res.write(`data: ${JSON.stringify(e)}\n\n`);
-	const abort = new AbortController();
-	res.on("close", () => abort.abort());
-	send({ type: "start", conversationId: id });
+	// Lease + fresh workspace from Blob; 409 before streaming when another turn holds it.
+	const turn = await openTurn(user, id);
+	let finished = false;
 	try {
-		const result = await runTurn({
-			workspace,
-			entries: existing?.entries ?? [],
-			message: input.message,
-			pinnedSkills: input.skills,
-			mcpServers: await mcpServersFor(user),
-			onEvent: send,
-			signal: abort.signal,
-		});
-		await persistChanges(user, id, started);
-		await store.save({ id, user, title: existing?.title ?? input.message.slice(0, 60), entries: result.entries, updatedAt: new Date() });
-		send({ type: "done", conversationId: id, files: await listFiles(workspace) });
-	} catch (e) {
-		send({ type: "error", message: (e as Error).message });
+		const existing = await store.get(user, id);
+		res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+		const send = (e: unknown) => res.write(`data: ${JSON.stringify(e)}\n\n`);
+		const abort = new AbortController();
+		res.on("close", () => abort.abort());
+		send({ type: "start", conversationId: id });
+		try {
+			const result = await runTurn({
+				workspace: turn.dir,
+				entries: existing?.entries ?? [],
+				message: input.message,
+				pinnedSkills: input.skills,
+				mcpServers: await mcpServersFor(user),
+				onEvent: send,
+				signal: abort.signal,
+			});
+			const files = await turn.finish();
+			finished = true;
+			await store.save({ id, user, title: existing?.title ?? input.message.slice(0, 60), entries: result.entries, updatedAt: new Date(), version: existing?.version });
+			send({ type: "done", conversationId: id, files });
+		} catch (e) {
+			send({ type: "error", message: (e as Error).message });
+		}
+		res.end();
+	} finally {
+		// Files the turn already wrote are kept even on error; only a turn that never reached
+		// finish() is abandoned (local copy deleted, lease released).
+		if (!finished) await turn.finish().catch(() => turn.abandon());
 	}
-	res.end();
 }
 
 async function route(req: IncomingMessage, res: ServerResponse) {
@@ -110,21 +113,18 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	const m = url.pathname.match(/^\/api\/conversations\/([^/]+)\/(files|uploads)(?:\/(.+))?$/);
 	if (m && ID.test(m[1])) {
 		const workspace = workspacePath(user, m[1]);
-		if (m[2] === "files" && !m[3]) return json(res, 200, await listFiles(await hydrate(user, m[1])));
+		if (m[2] === "files" && !m[3]) return json(res, 200, await listFiles(user, m[1]));
 		if (m[2] === "files" && req.method === "GET") {
-			const rel = decodeURIComponent(m[3]);
-			const file = insideWorkspace(workspace, rel);
-			const name = file.split("/").pop()!;
-			return res
-				.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": `attachment; filename="${name}"` })
-				.end(await readWorkspaceFile(user, m[1], rel, file));
+			// Validates the path (no ../ into another prefix), then reads straight from Blob.
+			const rel = relative(workspace, insideWorkspace(workspace, decodeURIComponent(m[3])));
+			const name = rel.split("/").pop()!.replace(/["\r\n]/g, "_");
+			const data = await readFileFromStore(user, m[1], rel);
+			return res.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": `attachment; filename="${name}"` }).end(data);
 		}
 		if (m[2] === "uploads" && req.method === "POST" && m[3]) {
 			const name = decodeURIComponent(m[3]).replace(/[^\w.\- ]/g, "_");
-			const target = insideWorkspace(workspace, join("uploads", name));
-			await mkdir(join(workspace, "uploads"), { recursive: true });
-			await writeFile(target, await body(req, 100 * 1024 * 1024));
-			await persistFile(user, m[1], `uploads/${name}`);
+			if (!name || name.startsWith(".")) return json(res, 400, { error: "bad file name" });
+			await writeFileToStore(user, m[1], `uploads/${name}`, await body(req, 100 * 1024 * 1024));
 			return json(res, 201, { path: `uploads/${name}` });
 		}
 	}

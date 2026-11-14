@@ -1,5 +1,27 @@
 // All settings come from the environment (12-factor). Secrets never have defaults.
+// In the cluster secrets are files under SECRETS_DIR (not env vars, so they are not in
+// /proc/self/environ); the env var of the same name is the fallback for local runs.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 const env = process.env;
+const secretsDir = env.SECRETS_DIR ?? "/var/run/secrets/chat";
+
+function secret(envName: string, file: string): string {
+	try {
+		return readFileSync(join(secretsDir, file), "utf8").trim();
+	} catch {
+		return env[envName] ?? "";
+	}
+}
+
+/** mongodb://user@host/db plus the password file -> full URL (password URL-encoded). */
+function mongoUrl(): string {
+	const url = env.MONGO_URL ?? "";
+	const pw = secret("DB_PASSWORD", "db-password");
+	if (!url || !pw || /:\/\/[^/@]*:[^/@]*@/.test(url)) return url;
+	return url.replace(/:\/\/([^/@:]+)@/, (_m, u) => `://${u}:${encodeURIComponent(pw)}@`);
+}
 
 export const config = {
 	port: Number(env.PORT ?? 8080),
@@ -23,21 +45,21 @@ export const config = {
 		container: env.BLOB_CONTAINER ?? "chat-workspaces",
 	},
 	/** mongodb:// URL (FerretDB in the PoC); empty = in-memory history. */
-	mongoUrl: env.MONGO_URL ?? "",
+	mongoUrl: mongoUrl(),
 	parserUrl: env.PARSER_URL ?? "",
 	/** In-cluster Brave Search MCP (http://brave-mcp/mcp); empty = no web search. */
 	braveMcpUrl: env.BRAVE_MCP_URL ?? "",
-	context7ApiKey: env.CONTEXT7_API_KEY ?? "",
+	context7ApiKey: secret("CONTEXT7_API_KEY", "context7-api-key"),
 	/** Public origin of the chat, for OAuth redirect URIs. */
 	publicUrl: (env.PUBLIC_URL ?? "http://localhost:8080").replace(/\/$/, ""),
 	connectors: {
 		/** 32 random bytes, base64, from Key Vault (connectors-master-key). Seals tokens and OAuth state. */
-		masterKey: env.CONNECTORS_MASTER_KEY ?? "",
+		masterKey: secret("CONNECTORS_MASTER_KEY", "connectors-master-key"),
 		/** Separate from the workspaces: the agent never sees this container. */
 		container: env.CONNECTORS_CONTAINER ?? "chat-credentials",
 		github: {
 			clientId: env.GITHUB_CLIENT_ID ?? "",
-			clientSecret: env.GITHUB_CLIENT_SECRET ?? "",
+			clientSecret: secret("GITHUB_CLIENT_SECRET", "github-client-secret"),
 			/** GitHub MCP read-only mode; "false" lets the agent open issues and PRs. */
 			readOnly: env.GITHUB_MCP_READONLY !== "false",
 		},
