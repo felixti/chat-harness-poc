@@ -78,6 +78,7 @@ only; the lease expires and the next turn starts from Blob.
 |---|---|---|---|
 | Blob `chat-workspaces` | `<oid>/<conv>/uploads/…`, `outputs/…` | user uploads, generated files | turn diff upload, upload endpoint |
 | Blob `chat-workspaces` | `_locks/<oid>/<conv>` | empty blob holding the turn lease | turn runner |
+| Blob `chat-workspaces` (all) | retention | deleted 30 days after last access; listed across conversations in "Meus arquivos", attached on request (H39) | lifecycle rule |
 | Blob `chat-credentials` | `<oid>/<connector>.json` | OAuth token, AES-256-GCM, AAD `<oid>/<connector>` | connectors |
 | Blob `chat-memory` (planned) | `<oid>/core/USER.md`, `core/MEMORY.md` | core memory, sealed | `memory` tool (ETag) |
 | Blob `chat-memory` (planned) | `<oid>/events/<yyyy-mm>.jsonl` | fact events, sealed per line | `remember`, curator (append) |
