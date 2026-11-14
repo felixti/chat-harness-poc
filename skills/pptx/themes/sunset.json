@@ -1,0 +1,23 @@
+{
+  "look": "warm white, burnt orange + cobalt",
+  "good_for": "marketing, sales, culture, consumer",
+  "style": "modern",
+  "bg": "FFF8F2",
+  "surface": "FBEBDD",
+  "ink": "2B1B12",
+  "muted": "6E5A4C",
+  "accent": "BF3A10",
+  "accent2": "1F4FB8",
+  "onAccent": "FFFFFF",
+  "line": "EBD9C9",
+  "chart": [
+    "BF3A10",
+    "1F4FB8",
+    "E8A33D",
+    "5E8C61",
+    "8A5A9E",
+    "A8968A"
+  ],
+  "headFont": "Aptos Display",
+  "bodyFont": "Aptos"
+}

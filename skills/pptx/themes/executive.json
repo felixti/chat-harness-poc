@@ -1,5 +1,5 @@
 {
-  "look": "navy + teal, white",
+  "look": "navy + teal on white, boxed cards",
   "good_for": "board, finance, strategy",
   "bg": "FFFFFF",
   "surface": "F2F4F7",
@@ -18,5 +18,6 @@
     "98A2B3"
   ],
   "headFont": "Aptos Display",
-  "bodyFont": "Aptos"
+  "bodyFont": "Aptos",
+  "style": "classic"
 }

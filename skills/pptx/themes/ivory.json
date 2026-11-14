@@ -1,0 +1,23 @@
+{
+  "look": "cream paper, oxblood + ochre, serif titles",
+  "good_for": "board, strategy, consulting, annual reports",
+  "style": "editorial",
+  "bg": "F5F0E8",
+  "surface": "ECE4D6",
+  "ink": "1E1A16",
+  "muted": "675E54",
+  "accent": "7B2D26",
+  "accent2": "B07A2F",
+  "onAccent": "F5F0E8",
+  "line": "D8CDBD",
+  "chart": [
+    "7B2D26",
+    "B07A2F",
+    "3F5A4C",
+    "8C7B6B",
+    "C9B8A3",
+    "4A4440"
+  ],
+  "headFont": "Georgia",
+  "bodyFont": "Aptos"
+}

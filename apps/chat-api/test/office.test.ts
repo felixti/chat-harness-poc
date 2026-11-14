@@ -25,9 +25,9 @@ test("sample deck renders 14 slides with only the notes warning", async () => {
 });
 
 test("themes come from the skill folder; custom themes and contrast are checked", async () => {
-	assert.ok(Object.keys(themes).length >= 13);
+	assert.ok(Object.keys(themes).length >= 9);
 	const slides = [{ layout: "statement", text: "Uma frase **importante** aqui", notes: "n" }];
-	const inline = await renderDeck({ title: "t", theme: { extends: "insight", accent: "#7A1F5C" }, slides }, { workspace: ".", resolve: (p) => p, themes, preview: false });
+	const inline = await renderDeck({ title: "t", theme: { extends: "ivory", accent: "#7A1F5C" }, slides }, { workspace: ".", resolve: (p) => p, themes, preview: false });
 	assert.deepEqual(inline.warnings, []);
 	const bad = await renderDeck(
 		{ title: "t", theme: { muted: "#E4E7EC" }, slides: [{ layout: "kpis", title: "Três números", items: [{ value: "42", label: "Clientes" }], notes: "n" }] },
@@ -152,4 +152,34 @@ test("deck lint: runs, bullet share, cards/big_number budget, emoji", async () =
 	assert.match(w, /3 cards slides/);
 	assert.match(w, /slides 4: emoji or pictographs/);
 	assert.doesNotMatch(w, /big_number slides/);
+});
+
+test("styles: every theme renders split and numbered cleanly; picture budget is linted", async () => {
+	const { mkdtemp, writeFile } = await import("node:fs/promises");
+	const { tmpdir } = await import("node:os");
+	const { join } = await import("node:path");
+	const PImage = await import("pureimage/dist/index.js");
+	const { PassThrough } = await import("node:stream");
+	const img = PImage.make(160, 120);
+	const g = img.getContext("2d");
+	g.fillStyle = "#335577";
+	g.fillRect(0, 0, 160, 120);
+	const chunks: Buffer[] = [];
+	const out = new PassThrough();
+	out.on("data", (d) => chunks.push(d));
+	await PImage.encodePNGToStream(img, out);
+	const dir = await mkdtemp(join(tmpdir(), "split-"));
+	await writeFile(join(dir, "p.png"), Buffer.concat(chunks));
+	const slides = [
+		{ layout: "title", title: "Um título de capa", background_image: "p.png" },
+		{ layout: "split", title: "Clientes querem resposta rápida", bullets: ["Um ponto curto", "Outro ponto"], path: "p.png", notes: "n" },
+		{ layout: "numbered", title: "Três prioridades", items: [{ title: "Preço", text: "Teto de desconto" }, { title: "Foco", text: "EUA e Canadá" }, { title: "Mix", text: "Premium" }], notes: "n" },
+		{ layout: "section", number: 2, title: "Resultados", background_image: "p.png" },
+	];
+	for (const [name, t] of Object.entries(themes)) {
+		const r = await renderDeck({ title: "t", theme: name, slides }, { workspace: dir, resolve: (p) => join(dir, p), themes });
+		assert.deepEqual(r.warnings, [], `${name} (${t.style}): ${r.warnings.join(" | ")}`);
+	}
+	const four = await renderDeck({ title: "t", slides: [...slides, { ...slides[1] }] }, { workspace: dir, resolve: (p) => join(dir, p), themes, preview: false });
+	assert.match(four.warnings.join("\n"), /4 slides with a large picture/);
 });

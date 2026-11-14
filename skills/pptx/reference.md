@@ -13,32 +13,36 @@ Top level:
 }
 ```
 
-- `theme` (pick by topic and audience; see the `design` skill). Three forms:
-  1. A name: one of the files in `themes/` in this skill folder (each has `look` and `good_for`).
-  2. An inline theme that starts from one: `{"extends": "insight", "accent": "#7A1F5C"}`.
+- `theme` (choose with the `design` skill: sober or modern, light or dark). Three forms:
+  1. A name: one of the files in `themes/` in this skill folder.
+  2. An inline theme that starts from one: `{"extends": "ivory", "accent": "#7A1F5C"}`.
   3. A theme file in the workspace: `"outputs/brand-theme.json"` (same fields as `themes/*.json`).
 
-| Theme | Look | Good for |
-|---|---|---|
-| `executive` (default) | navy + teal, white | board, finance, strategy |
-| `authority` | charcoal + red, serif titles | annual reports, government, risk |
-| `insight` | deep teal + coral/sand chart palette | market analysis, research, data stories |
-| `platinum` | black + gold, minimal | premium brands, fintech, luxury |
-| `midnight` | dark slate + sky blue | engineering, product, data platforms |
-| `tech_night` | near-black + gold/cyan | tech launches, AI, keynotes |
-| `coastal` | ocean blue + coral | travel, consumer, customer experience |
-| `wellness` | teal + peach, serif titles | health, HR, wellbeing |
-| `eco` | forest green + ochre, serif | ESG, agriculture, sustainability |
-| `warm` | orange + teal, serif titles | culture, marketing, storytelling |
-| `luxury` | ink + bronze on ivory | consulting, hospitality, high-end |
-| `mono` | black + one red highlight | design audiences, minimal decks |
-| `fresh` | green + blue | people, operations, internal comms |
+| Theme | Style | Look | Good for |
+|---|---|---|---|
+| `executive` (default) | classic, light | navy + teal on white, boxed cards | board, finance, strategy |
+| `ivory` | editorial, light | cream paper, oxblood + ochre, serif titles | board, consulting, annual reports |
+| `graphite` | editorial, light | white, black type, one vermilion highlight | design, product, minimal executive decks |
+| `forest` | editorial, light | sage paper, deep green + brass, serif titles | ESG, agro, health, people |
+| `aurora` | modern, light | white, indigo-violet + coral | product, innovation, digital, CX |
+| `sunset` | modern, light | warm white, burnt orange + cobalt | marketing, sales, culture, consumer |
+| `tech_night` | modern, dark | near-black, violet + aqua | AI, tech launches, keynotes |
+| `midnight` | modern, dark | deep navy, mint + sky blue | data platforms, engineering, cloud, security |
+| `volt` | modern, dark | black, electric lime + signal orange | engineering, startups, bold launches |
+
+Styles change the composition, not only the colors:
+- **classic:** boxed cards and KPIs, rings on covers.
+- **editorial (sober):** paper background, rules instead of boxes, serif or Swiss titles, half-page
+  picture on covers.
+- **modern:** color-block covers with one geometric form, solid icon tiles, filled callouts,
+  half-page picture with a color seam on covers.
 
 Theme fields (hex colors): `bg` (slides), `surface` (cards, zebra rows), `ink` (text), `muted`
 (secondary text), `accent` (titles bar, highlights, covers), `accent2` (second highlight),
 `onAccent` (text on accent), `line` (hairlines), `chart` (3+ series colors), `headFont`,
-`bodyFont`, optional `darkCover` (dark themes), `good`/`bad` (delta colors). The renderer checks
-contrast (text 4.5:1, muted 3:1) and warns; a custom theme must pass before you answer.
+`bodyFont`, optional `style` (`classic`, `editorial`, `modern`), `darkCover` (dark themes),
+`good`/`bad` (delta colors). The renderer checks contrast (text 4.5:1, muted 3:1) and warns; a
+custom theme must pass before you answer.
 
 - `brand` overrides the theme: company colors (hex) and fonts. Use it when the user names a brand
   color or uploads a template. `dark: true` switches content slides to a dark background.
@@ -84,12 +88,17 @@ title; when to use it is in the `pptx` skill), `subtitle`, `notes` (speaker note
 {"layout": "statement", "title": "Recomendação: **focar EUA e Canadá** em 2015", "subtitle": "Protege 45% do lucro", "dark": true}
 {"layout": "quote", "quote": "...", "author": "Diretoria Financeira"}
 {"layout": "image", "title": "...", "path": "uploads/fabrica.jpg", "caption": "...", "bullets": ["..."]}
+{"layout": "split", "title": "Clientes querem resposta em minutos", "bullets": ["68% esperam resposta no mesmo dia"],
+ "path": "outputs/img/atendimento.jpg", "side": "right", "caption": "Imagem ilustrativa", "source": "Pesquisa interna"}
+{"layout": "numbered", "title": "Três prioridades para 2015",
+ "items": [{"title": "Teto de desconto", "text": "Limitar descontos a 12% no varejo"}, {"title": "Foco em EUA e Canadá", "text": "Realocar o time comercial"}]}
 {"layout": "closing", "title": "Próximos passos", "bullets": ["Aprovar teto de desconto (Ana, 15/12)"], "subtitle": "Contato: fpa@empresa.com"}
 ```
 
 `background_image` (`title` and `section` only): a `.png`/`.jpg` from the workspace, usually
-made by `generate_image`. It fills the slide under a strong layer of the cover color, so the text
-stays readable. On other layouts it is ignored with a warning.
+made by `generate_image`. Classic themes lay it under a strong layer of the cover color; editorial
+and modern themes show it as a half-page picture beside the text. On other layouts it is ignored
+with a warning. A deck has at most 3 large pictures (`background_image` plus `split`).
 
 ```json
 {"layout": "title", "title": "IA generativa no Brasil em 2026", "subtitle": "Onde está o valor", "background_image": "outputs/img/cover.jpg"}
@@ -133,6 +142,7 @@ Lucide icon names (2,275 available, https://lucide.dev/icons). Common ones:
 | table over 10 rows / 6 columns | Top rows + "Outros"; full data goes to an xlsx (`generate_xlsx`) |
 | same layout 4 slides in a row | Change one to another form or add a light slide |
 | bullets on over a third of the slides | Numbers -> `kpis`/`chart`, options -> `comparison`, plans -> `timeline` |
+| more than 3 large pictures | Keep the cover and the strongest one or two |
 | cards or big_number on more than 2 slides | Keep the 2 that matter most; turn the rest into other forms |
 | emoji or pictographs in the text | Delete them; use the `icon` field |
 | no speaker notes | Add `notes` with what the presenter should say |

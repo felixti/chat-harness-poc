@@ -14,9 +14,12 @@ rules only for decks live in the `pptx` skill.
 - **Brand colors only when known for sure:** the user gave the hex, or it is in an uploaded file
   or template. Decks: `brand.accent` and `brand.accent2`; Word: `accent`. Never guess a
   company's hex; use the closest theme instead.
+- **Sober or modern comes from the audience.** Board, finance, legal, consulting, reports: sober
+  (`editorial` style: `ivory`, `graphite`, `forest`; or the `classic` `executive`). Product,
+  tech, marketing, launches, internal events: modern (`aurora`, `sunset`, `tech_night`,
+  `midnight`, `volt`). The user's words ("sóbrio", "moderno", "tech", "elegante") win.
 - **Light or dark comes from where it will be seen.** Lit meeting room, shared PDF or print:
-  light. Stage, keynote, dark room: dark. Then pick the theme by topic (table in the `pptx`
-  skill `reference.md`).
+  light. Stage, keynote, dark room: dark. Table of themes in the `pptx` skill `reference.md`.
 - **No theme fits:** write an inline theme `{"extends": "<closest>", "accent": "#..."}` (fields
   in `reference.md`). The renderer checks contrast; fix every contrast warning.
 - **One theme per file.**
@@ -55,8 +58,8 @@ Names are deck layouts; dashboards use `kpi` items and the same chart types.
   none does.
 - **Never emoji or Unicode symbols** (✅ 🚀 ★) as icons or bullets: they render differently on
   every machine. The lint flags them.
-- **Pictures:** only the user's own files, or `generate_image` for the `title` and `section` slides
-  of a deck (rules in the `pptx` skill). Never images from the web (copyright), clip art, or generated
+- **Pictures:** only the user's own files, or `generate_image` for the `title`, `section` and
+  `split` slides of a deck, at most 3 (rules in the `pptx` skill). Never images from the web (copyright), clip art, or generated
   charts, numbers, logos, text or people.
 
 ## 5. Words

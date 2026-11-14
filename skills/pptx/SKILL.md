@@ -26,11 +26,11 @@ emphasis, chart choice, icons, pictures and words. This skill adds only what is 
    as a list. Read only the titles: they must tell the story.
 4. **Spec.** Pick a layout per slide (table below) and write `outputs/<name>.json`. Read
    `reference.md` (this folder) before the first spec of the conversation.
-5. **Cover images (optional).** For the `title` slide and up to 2 `section` slides, call
+5. **Pictures (optional, at most 3 per deck).** For the `title` slide, `section` slides or a `split` slide, call
    `generate_image` with `theme` = the deck theme and a prompt for a calm scene about the topic
    (abstract, landscape, architecture, objects). Look at the image it returns: if it shows text,
    faces or clutter, generate once more with a clearer prompt, or skip it. Then set
-   `"background_image": "<path>"` on that slide.
+   `"background_image": "<path>"` on `title`/`section`, or `"path"` on `split`.
 6. **Render:** `generate_pptx` with `spec` and `output: outputs/<name>.pptx`. It returns the lint
    and one preview image per slide.
 7. **Review like a designer.** Fix every lint warning ("(measured)" ones come from the drawn
@@ -62,6 +62,8 @@ emphasis, chart choice, icons, pictures and words. This skill adds only what is 
 | `comparison` | Options side by side; highlight the recommended one | 2 to 4 options |
 | `timeline` | Plan, roadmap, history | 3 to 6 steps |
 | `statement` | One sentence: the key insight or the recommendation | |
+| `numbered` | 2 to 4 priorities, steps or findings led by large numerals | 2 to 4 items |
+| `split` | Half-page picture beside a title and short text or bullets | counts in the 3 pictures |
 | `quote` | A customer's or leader's own words, with the author | real quotes only |
 | `image` | A picture the user gave (photo, screenshot, product) or a generated illustration | never a picture of a chart: use `chart` |
 | `closing` | Next steps with owners and dates | always last |
@@ -78,7 +80,7 @@ The lint warns when a limit is broken.
 - **Speaker notes** on every slide except `title`, `section` and `closing`: what to say, in 2 to
   4 sentences.
 - **Rhythm:** at most 3 slides of the same layout in a row; a light slide (`statement`,
-  `big_number`, `quote`) after every 3 or 4 dense ones.
+  `big_number`, `quote`, `split`) after every 3 or 4 dense ones.
 - **Open and close strong:** `title` with the main message; the stakes early (`big_number` or
   `statement`); `closing` with owners and dates.
 - **Bold** with `**...**` works in body text only: `takeaway`, `callout`, card, step and column

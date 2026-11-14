@@ -1,0 +1,23 @@
+{
+  "look": "sage paper, deep green + brass, serif titles",
+  "good_for": "ESG, agro, health, people",
+  "style": "editorial",
+  "bg": "F3F4EF",
+  "surface": "E7EAE1",
+  "ink": "1B2A22",
+  "muted": "56655B",
+  "accent": "1E4D3B",
+  "accent2": "A87A1F",
+  "onAccent": "F3F4EF",
+  "line": "D3D8CC",
+  "chart": [
+    "1E4D3B",
+    "A87A1F",
+    "6F8F7A",
+    "A4B494",
+    "8A6F4E",
+    "3E5C76"
+  ],
+  "headFont": "Georgia",
+  "bodyFont": "Aptos"
+}

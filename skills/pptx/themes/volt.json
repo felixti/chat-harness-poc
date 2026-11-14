@@ -1,0 +1,24 @@
+{
+  "look": "black, electric lime + signal orange",
+  "good_for": "engineering, startups, bold internal launches",
+  "style": "modern",
+  "bg": "0C0C0D",
+  "surface": "1A1A1D",
+  "ink": "F4F4F5",
+  "muted": "A1A1AA",
+  "accent": "D4FF3A",
+  "accent2": "FF5A36",
+  "onAccent": "0C0C0D",
+  "line": "2C2C31",
+  "chart": [
+    "D4FF3A",
+    "FF5A36",
+    "7DD3FC",
+    "F4F4F5",
+    "A78BFA",
+    "71717A"
+  ],
+  "headFont": "Aptos Display",
+  "bodyFont": "Aptos",
+  "darkCover": true
+}

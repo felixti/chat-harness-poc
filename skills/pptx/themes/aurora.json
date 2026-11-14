@@ -1,0 +1,23 @@
+{
+  "look": "white, indigo-violet + coral",
+  "good_for": "product, innovation, digital, customer experience",
+  "style": "modern",
+  "bg": "FBFAFF",
+  "surface": "F0EEFC",
+  "ink": "1A1538",
+  "muted": "5F5A80",
+  "accent": "5B3CF0",
+  "accent2": "FF6B4A",
+  "onAccent": "FFFFFF",
+  "line": "E1DEF5",
+  "chart": [
+    "5B3CF0",
+    "FF6B4A",
+    "14B8A6",
+    "E8A500",
+    "A78BFA",
+    "8E8AA8"
+  ],
+  "headFont": "Aptos Display",
+  "bodyFont": "Aptos"
+}

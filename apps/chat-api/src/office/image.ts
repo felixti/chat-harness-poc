@@ -42,7 +42,7 @@ export function imageTool(workspace: string, themesDir: string) {
 		label: "generate_image",
 		description:
 			"Generate an illustration with an image model and save it in the workspace. Use it only for deck covers, " +
-			"section slides and the `image` layout (at most 3 per deck); never for charts, numbers, diagrams or logos " +
+			"section, split and image slides (at most 3 per deck); never for charts, numbers, diagrams or logos " +
 			"(use real charts and icons). Pass the deck theme so the colors match. Returns the saved path and the image to check.",
 		promptSnippet: "generate_image: prompt -> PNG/JPEG in the workspace for deck covers (read skill pptx)",
 		parameters: Type.Object({
@@ -87,7 +87,7 @@ export function imageTool(workspace: string, themesDir: string) {
 						text:
 							`Image saved: ${output} (${Math.round(img.data.length / 1024)} KiB${cost ? `, US$${Number(cost).toFixed(3)}` : ""}; ${MAX_IMAGES - used} left this session). ` +
 							"Check it below: if it has text, logos, faces or clashing colors, generate again with a clearer prompt. " +
-							`Use it in the deck as "background_image": "${output}" (title or section slide) or "path" in the image layout.`,
+							`Use it in the deck as "background_image": "${output}" (title or section slide) or "path" in the split or image layout.`,
 					},
 					{ type: "image" as const, data: img.data.toString("base64"), mimeType: `image/${img.mime}` },
 				],
