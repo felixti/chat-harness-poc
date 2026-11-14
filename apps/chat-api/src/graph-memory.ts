@@ -341,6 +341,27 @@ export class FactGraph {
 		return ev.id;
 	}
 
+	/** Facts about entities whose name appears in `text` (whole words, accent-insensitive). This is
+	 *  the automatic retrieval that runs before every turn; small and bounded on purpose. */
+	async mentioned(text: string, maxEntities = 6, maxFacts = 15): Promise<FactRow[]> {
+		const { g } = await this.open();
+		const hay = ` ${fold(text).replace(/[^\p{L}\p{N}]+/gu, " ")} `;
+		const hits = g
+			.q("MATCH (e:Entity) RETURN e.key AS key, e.name AS name LIMIT 5000")
+			.map((r) => ({ key: String(r.key), name: fold(String(r.name)).replace(/[^\p{L}\p{N}]+/gu, " ").trim() }))
+			.filter((e) => e.name.length >= 3 && hay.includes(` ${e.name} `))
+			.sort((a, b) => b.name.length - a.name.length)
+			.slice(0, maxEntities);
+		if (!hits.length) return [];
+		return g
+			.q(
+				"MATCH (a:Entity)-[f:FACT]->(b:Entity) WHERE (a.key IN $keys OR b.key IN $keys) AND f.forgotten_at IS NULL " +
+					"RETURN f.id AS id, a.name AS subject, f.rel AS relation, b.name AS object, f.at AS at, f.src AS src, f.note AS note ORDER BY f.at DESC LIMIT $limit",
+				{ keys: hits.map((h) => h.key), limit: maxFacts },
+			)
+			.map((r) => ({ ...(r as unknown as FactRow), at: new Date(Number(r.at)).toISOString().slice(0, 10) }));
+	}
+
 	/** For the Memória panel: totals and the newest live facts. */
 	async overview(limit = 100): Promise<{ entities: number; facts: number; recent: FactRow[] }> {
 		const { g } = await this.open();

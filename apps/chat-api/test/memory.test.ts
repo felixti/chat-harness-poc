@@ -58,3 +58,14 @@ test("session_search finds earlier conversations, accent-insensitive, only this 
 	assert.deepEqual((await s.search(U, "solar", 5, "c1")).length, 0); // current conversation excluded
 	assert.equal(conversationText([msg("toolResult", "huge tool output")]), "");
 });
+
+test("session_search falls back to recent conversations with summaries", async () => {
+	const { sessionSearchTool } = await import("../src/memory.ts");
+	const s = new MemoryStore();
+	await s.save({ id: "c1", user: U, title: "Analise o projeto com mais commits", entries: [], updatedAt: new Date(), summary: "Analisou felixti/chat-harness-poc (412 commits)." });
+	const tool: any = sessionSearchTool(U, "c9", s);
+	const r = await tool.execute("1", { query: "repositorio analisado anteriormente" });
+	assert.match(r.content[0].text, /chat-harness-poc/);
+	const hit = await tool.execute("2", { query: "commits" });
+	assert.match(hit.content[0].text, /Summary: Analisou/);
+});

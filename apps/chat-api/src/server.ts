@@ -7,7 +7,7 @@ import { config } from "./config.ts";
 import { runTurn, type McpServer } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
-import { clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
+import { retrievedPrompt, clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
 import { FactGraph, graphTools } from "./graph-memory.ts";
 import { curate } from "./curator.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
@@ -88,24 +88,26 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				pinnedSkills: input.skills,
 				mcpServers: await mcpServersFor(user),
 				...(memoryOn && facts
-					? { systemAppend: await corePrompt(user), extraTools: [...memoryTools(user), ...graphTools(facts), sessionSearchTool(user, id, store)] }
+					? { systemAppend: (await corePrompt(user)) + (await retrievedPrompt(user, input.message, id, store, facts)), extraTools: [...memoryTools(user), ...graphTools(facts), sessionSearchTool(user, id, store)] }
 					: { extraTools: [sessionSearchTool(user, id, store)] }),
 				onEvent,
 				signal: abort.signal,
 			});
 			const files = await turn.finish();
 			finished = true;
+			let summary = existing?.summary;
 			// The answer is already on screen; the curator runs before "done" so the panel refreshes.
 			if (memoryOn && config.memory.curator) {
 				if (abort.signal.aborted) console.log("[curator] skipped: client disconnected");
-				const saved = await curate({ user, userMessage: input.message, assistantReply: result.text, alreadySaved: savedByAgent }, facts).catch((e) => {
+				const cur = await curate({ user, userMessage: input.message, assistantReply: result.text, alreadySaved: savedByAgent, previousSummary: existing?.summary }, facts).catch((e) => {
 					console.warn(`[curator] ${(e as Error).message}`);
-					return [];
+					return { saved: [] as string[], summary: undefined };
 				});
-				if (saved.length) send({ type: "memory", saved });
-				console.log(`[curator] saved ${saved.length}`);
+				summary = cur.summary ?? summary;
+				if (cur.saved.length) send({ type: "memory", saved: cur.saved });
+				console.log(`[curator] saved ${cur.saved.length}${cur.summary ? ", summary updated" : ""}`);
 			}
-			await store.save({ id, user, title: existing?.title ?? input.message.slice(0, 60), entries: result.entries, updatedAt: new Date(), version: existing?.version });
+			await store.save({ id, user, title: existing?.title ?? input.message.slice(0, 60), entries: result.entries, updatedAt: new Date(), summary, version: existing?.version });
 			send({ type: "done", conversationId: id, files });
 		} catch (e) {
 			send({ type: "error", message: (e as Error).message });

@@ -1,9 +1,10 @@
 // Curator: after each turn a cheap model call decides what is worth remembering, so memory forms
-// without the user asking. Only what the user said counts as a source (documents, web pages and
-// tool output are never read here: that is where prompt injection comes from). The same rules
+// without the user asking. For core memory and facts only what the user said counts as a source
+// (documents, web pages and tool output are never read here: that is where prompt injection comes
+// from); the conversation summary may also use the assistant reply, filtered like memory. The same rules
 // as the tools apply: checkEntry, ETag writes for core memory, append events for the graph.
 import { config } from "./config.ts";
-import { coreEntries, editCore, type Target } from "./memory.ts";
+import { checkEntry, coreEntries, editCore, type Target } from "./memory.ts";
 import { KINDS, type FactGraph, type Kind } from "./graph-memory.ts";
 
 export interface CuratorInput {
@@ -12,16 +13,30 @@ export interface CuratorInput {
 	assistantReply: string;
 	/** Memory tool calls the agent already made this turn (avoid duplicates). */
 	alreadySaved: string[];
+	/** Summary of this conversation so far (updated every turn). */
+	previousSummary?: string;
+}
+
+export interface CuratorResult {
+	saved: string[];
+	/** 1-2 sentences: what was asked and the outcome. Episodic memory for later conversations. */
+	summary?: string;
 }
 
 interface Plan {
 	core?: { action: "add" | "replace"; target: Target; text: string; old_text?: string }[];
 	facts?: { subject: string; subject_kind: Kind; relation: string; object: string; object_kind: Kind; note?: string }[];
+	summary?: string;
 }
 
 const SYSTEM = `You maintain the long-term memory of a company assistant for ONE user.
 Read the user's message (the only source of facts) and the assistant reply (context only).
-Return JSON: {"core": [...], "facts": [...]}, both empty when nothing is worth keeping. Most turns keep nothing.
+Return JSON: {"summary": "...", "core": [...], "facts": [...]}. core and facts are empty when nothing is worth keeping (most turns).
+
+summary: ALWAYS write it. 1-2 sentences (max 300 characters) about this whole conversation so far: what the user
+  asked and the concrete outcome, with the names, numbers, files and results that matter later (e.g. "Analisou o
+  repositório felixti/chat-harness-poc, o com mais commits do usuário (412); gerou outputs/analise.md."). Merge
+  with the previous summary. Here the assistant reply IS a source, but only for what was done and found.
 
 core: durable facts about the user themself, max 2 items:
   {"action":"add","target":"user"|"memory","text":"..."} or {"action":"replace","target":...,"old_text":"part of an existing entry","text":"..."}
@@ -37,17 +52,15 @@ Rules:
 - Skip anything already in the current memory or already saved this turn; use replace when a fact changed.
 - Write entries in the user's language, short and specific.`;
 
-export async function curate(input: CuratorInput, graph: FactGraph | undefined, signal?: AbortSignal): Promise<string[]> {
+export async function curate(input: CuratorInput, graph: FactGraph | undefined, signal?: AbortSignal): Promise<CuratorResult> {
 	const msg = input.userMessage.trim();
-	if (msg.length < 15) {
-		console.log("[curator] skipped: short message");
-		return [];
-	}
+	if (msg.length < 4) return { saved: [] };
 	const core = await coreEntries(input.user);
 	const prompt = [
 		`Current memory (user): ${JSON.stringify(core.user)}`,
 		`Current memory (memory): ${JSON.stringify(core.memory)}`,
 		`Already saved this turn: ${JSON.stringify(input.alreadySaved)}`,
+		`Previous summary of this conversation: ${JSON.stringify(input.previousSummary ?? "")}`,
 		`<user_message>\n${msg.slice(0, 6000)}\n</user_message>`,
 		`<assistant_reply>\n${input.assistantReply.slice(0, 3000)}\n</assistant_reply>`,
 	].join("\n\n");
@@ -91,7 +104,15 @@ export async function curate(input: CuratorInput, graph: FactGraph | undefined, 
 				console.warn(`[curator] fact skipped: ${(e as Error).message}`);
 			}
 		}
-	return saved;
+	return { saved, summary: cleanSummary(plan.summary) };
+}
+
+/** Summaries come partly from the assistant reply (which may echo web content): same filter as memory. */
+export function cleanSummary(s: unknown): string | undefined {
+	if (typeof s !== "string") return undefined;
+	const t = s.replace(/\s+/g, " ").trim().slice(0, 399);
+	if (!t || checkEntry(t)) return undefined;
+	return t;
 }
 
 export function parsePlan(text: string): Plan {
@@ -99,7 +120,7 @@ export function parsePlan(text: string): Plan {
 	if (!m) return {};
 	try {
 		const p = JSON.parse(m[0]) as Plan;
-		return { core: Array.isArray(p.core) ? p.core : [], facts: Array.isArray(p.facts) ? p.facts : [] };
+		return { core: Array.isArray(p.core) ? p.core : [], facts: Array.isArray(p.facts) ? p.facts : [], ...(typeof p.summary === "string" ? { summary: p.summary } : {}) };
 	} catch {
 		return {};
 	}

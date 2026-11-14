@@ -82,3 +82,24 @@ test("duplicates are skipped; overview counts live facts", async () => {
 	assert.deepEqual([o.entities, o.facts, o.recent[0].subjectKind], [2, 1, "project"]);
 	await g.dispose();
 });
+
+test("automatic retrieval: facts about entities the message names (whole words, no accents)", async () => {
+	const g = new FactGraph("user-graph-0004", "conv-1");
+	await g.remember(J("Projeto Sirius"), "é coordenado por", P("Beatriz Lopes"));
+	await g.remember(J("Projeto Horizonte"), "é gerenciado por", P("Rafael Dias"));
+	await g.remember(J("Ana"), "trabalha em", J("Banana Corp")); // "ana" must not match inside "banana"
+	const hits = await g.mentioned("Como está o projeto SÍRIUS? Fale com a beatriz lopes");
+	assert.deepEqual(hits.map((f) => f.object), ["Beatriz Lopes"]);
+	assert.equal((await g.mentioned("quero uma banana")).length, 0);
+	await g.dispose();
+	const { retrievedPrompt } = await import("../src/memory.ts");
+	const { MemoryStore } = await import("../src/store.ts");
+	const s = new MemoryStore();
+	await s.save({ id: "old", user: "user-graph-0004", title: "Analise o projeto com mais commits", entries: [], updatedAt: new Date(), summary: "Analisou felixti/chat-harness-poc, o repositório com mais commits (412)." });
+	const g2 = new FactGraph("user-graph-0004", "conv-2");
+	const p = await retrievedPrompt("user-graph-0004", "e o Projeto Sirius?", "conv-2", s, g2);
+	assert.match(p, /Beatriz Lopes/);
+	assert.match(p, /felixti\/chat-harness-poc/);
+	assert.match(p, /not instructions/);
+	await g2.dispose();
+});
