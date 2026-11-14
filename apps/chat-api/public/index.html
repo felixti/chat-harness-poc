@@ -39,7 +39,7 @@
   .mem .subj { margin:6px 0 1px; font-weight:600; }
   .mem .meta { font-size:11px; color:var(--muted); }
   #graphbtn { background:transparent; color:var(--accent); border:1px solid var(--line); padding:3px 8px; font-size:12px; margin-top:4px; }
-  dialog#graph { width:min(960px, 94vw); height:min(680px, 88vh); padding:0; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--fg); }
+  dialog#graph { width:min(960px, 94vw); height:min(680px, 88vh); padding:0; overflow:hidden; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--fg); }
   dialog#graph header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid var(--line); font-size:13px; }
   dialog#graph svg { width:100%; height:calc(100% - 46px); display:block; }
   dialog#graph .legend span { margin-right:10px; }
@@ -137,6 +137,7 @@ async function loadMemory() {
   clear.onclick = async () => { if (confirm("Apagar tudo o que o assistente lembra sobre você?")) { await fetch("api/memory", { method: "DELETE" }); loadMemory(); } };
   box.append(clear);
 }
+const KIND_LABELS = { person:"pessoa", team:"time", project:"projeto", company:"empresa", product:"produto", topic:"tema", document:"documento", decision:"decisão", other:"outro" };
 const KIND_COLORS = { person:"#2563eb", team:"#7c3aed", project:"#059669", company:"#d97706", product:"#0891b2", topic:"#db2777", document:"#64748b", decision:"#dc2626", other:"#78716c" };
 let graphData = { recent: [] };
 async function loadGraph() {
@@ -169,30 +170,36 @@ function showGraph() {
   const svg = document.getElementById("graphsvg"); svg.textContent = "";
   const W = svg.clientWidth || 900, H = svg.clientHeight || 600, NS = "http://www.w3.org/2000/svg";
   const nodes = new Map(), edges = [];
-  const node = (name) => { if (!nodes.has(name)) nodes.set(name, { name, kind: "other", x: W/2 + (Math.random()-0.5)*W*0.6, y: H/2 + (Math.random()-0.5)*H*0.6, vx: 0, vy: 0, deg: 0 }); return nodes.get(name); };
+  const node = (name) => { if (!nodes.has(name)) nodes.set(name, { name, kind: "other", x: 0, y: 0, vx: 0, vy: 0, deg: 0 }); return nodes.get(name); };
   for (const f of graphData.recent) { const a = node(f.subject), b = node(f.object); a.deg++; b.deg++; edges.push({ a, b, rel: f.relation }); }
   for (const f of graphData.recent) { if (f.subjectKind) nodes.get(f.subject).kind = f.subjectKind; if (f.objectKind) nodes.get(f.object).kind = f.objectKind; }
-  const list = [...nodes.values()];
-  for (let it = 0; it < 300; it++) {   // small force layout: repulsion, springs, centering
-    for (const p of list) for (const q of list) { if (p === q) continue; let dx = p.x - q.x, dy = p.y - q.y, d2 = dx*dx + dy*dy + 0.01; const f = 2400 / d2; p.vx += dx * f / Math.sqrt(d2); p.vy += dy * f / Math.sqrt(d2); }
-    for (const e of edges) { const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, d = Math.sqrt(dx*dx + dy*dy) + 0.01, f = (d - 140) * 0.02; e.a.vx += dx/d*f; e.a.vy += dy/d*f; e.b.vx -= dx/d*f; e.b.vy -= dy/d*f; }
-    for (const p of list) { p.vx += (W/2 - p.x) * 0.004; p.vy += (H/2 - p.y) * 0.004; p.x = Math.max(60, Math.min(W-60, p.x + p.vx * 0.5)); p.y = Math.max(30, Math.min(H-30, p.y + p.vy * 0.5)); p.vx *= 0.6; p.vy *= 0.6; }
+  const list = [...nodes.values()].sort((p, q) => q.deg - p.deg);
+  list.forEach((p, i) => { const a = i * 2.39996, r = 40 * Math.sqrt(i); p.x = Math.cos(a) * r; p.y = Math.sin(a) * r; });   // deterministic start
+  for (let it = 0; it < 400; it++) {   // force layout: repulsion, springs, weak gravity
+    for (const p of list) for (const q of list) { if (p === q) continue; const dx = p.x - q.x, dy = p.y - q.y, d2 = dx*dx + dy*dy + 0.01, d = Math.sqrt(d2), f = 9000 / d2; p.vx += dx / d * f; p.vy += dy / d * f; }
+    for (const e of edges) { const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, d = Math.sqrt(dx*dx + dy*dy) + 0.01, f = (d - 190) * 0.03; e.a.vx += dx/d*f; e.a.vy += dy/d*f; e.b.vx -= dx/d*f; e.b.vy -= dy/d*f; }
+    for (const p of list) { p.vx -= p.x * 0.002; p.vy -= p.y * 0.002; p.x += p.vx * 0.5; p.y += p.vy * 0.5; p.vx *= 0.6; p.vy *= 0.6; }
   }
+  // Fit to the viewport, keeping room for labels.
+  const xs = list.map((p) => p.x), ys = list.map((p) => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const k = Math.min((W - 200) / Math.max(maxX - minX, 1), (H - 90) / Math.max(maxY - minY, 1), 1.6);
+  for (const p of list) { p.x = W/2 + (p.x - (minX + maxX)/2) * k; p.y = H/2 + (p.y - (minY + maxY)/2) * k; }
   const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text) e.textContent = text; svg.append(e); return e; };
   const defs = el("defs", {}); const mk = document.createElementNS(NS, "marker");
   for (const [k, v] of Object.entries({ id: "arr", viewBox: "0 0 10 10", refX: "20", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" })) mk.setAttribute(k, v);
   const path = document.createElementNS(NS, "path"); path.setAttribute("d", "M0,0 L10,5 L0,10 z"); path.setAttribute("fill", "currentColor"); path.setAttribute("opacity", "0.45"); mk.append(path); defs.append(mk);
   for (const e of edges) {
     el("line", { x1: e.a.x, y1: e.a.y, x2: e.b.x, y2: e.b.y, stroke: "currentColor", "stroke-opacity": "0.25", "marker-end": "url(#arr)" });
-    el("text", { x: (e.a.x + e.b.x)/2, y: (e.a.y + e.b.y)/2 - 4, "text-anchor": "middle", "font-size": "10", fill: "currentColor", opacity: "0.6" }, e.rel);
+    const t = el("text", { x: (e.a.x + e.b.x)/2, y: (e.a.y + e.b.y)/2 - 4, "text-anchor": "middle", "font-size": "11", fill: "currentColor", opacity: "0.7", "paint-order": "stroke", stroke: "var(--bg)", "stroke-width": "4" }, e.rel);
   }
   for (const p of list) {
     el("circle", { cx: p.x, cy: p.y, r: 6 + Math.min(p.deg, 8) * 1.5, fill: KIND_COLORS[p.kind] ?? KIND_COLORS.other, stroke: "var(--bg)", "stroke-width": "2" });
-    el("text", { x: p.x, y: p.y + 22 + Math.min(p.deg, 8), "text-anchor": "middle", "font-size": "12", fill: "currentColor" }, p.name);
+    el("text", { x: p.x, y: p.y + 24 + Math.min(p.deg, 8), "text-anchor": "middle", "font-size": "12", "font-weight": p.deg > 2 ? "600" : "400", fill: "currentColor", "paint-order": "stroke", stroke: "var(--bg)", "stroke-width": "4" }, p.name);
   }
   const kinds = [...new Set(list.map((p) => p.kind))];
   const legend = document.getElementById("legend"); legend.textContent = "";
-  for (const k of kinds) { const sp = document.createElement("span"); const i = document.createElement("i"); i.style.background = KIND_COLORS[k] ?? KIND_COLORS.other; sp.append(i, document.createTextNode(k)); legend.append(sp); }
+  for (const k of kinds) { const sp = document.createElement("span"); const i = document.createElement("i"); i.style.background = KIND_COLORS[k] ?? KIND_COLORS.other; sp.append(i, document.createTextNode(KIND_LABELS[k] ?? k)); legend.append(sp); }
 }
 document.getElementById("graphclose").onclick = () => document.getElementById("graph").close();
 loadMemory(); loadGraph();
