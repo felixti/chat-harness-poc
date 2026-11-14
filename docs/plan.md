@@ -39,3 +39,4 @@ current ~R$1.50/h cluster cost.
 | 2026-11-13 | 1 | Design bake-off: `LLM_MODEL` temporarily `anthropic/claude-sonnet-5.5` (US$2/M in, 10/M out). Deck styles (classic/editorial/modern), 9 curated themes, `split` and `numbered` layouts; 18/18 tests. Not deployed yet (user testing Sonnet on the previous image). |
 | 2026-11-13 | 1 | Styles deployed (d638b9c, incl. `outline` + `repo_dark`/`repo_light`). `LLM_MODEL` back to `deepseek/deepseek-v4.1-flash-1017` after the Sonnet 5.5 test. |
 | 2026-11-14 | 1 | Image model bake-off (Gemini 3.1 Flash Lite Image vs MiniMax H3) -> `IMAGE_MODEL=minimax/minimax-h3-image` at 1K (US$0.021/img, -37%); tool supports both OpenRouter image APIs. |
+| 2026-11-14 | 2 | Connectors: GitHub OAuth App + sealed token vault (`chat-credentials` container, master key in KV) + panel in the chat (5fdd84c). Pending: tofu apply (container + role), KV secrets, OAuth App created by the user, deploy. |
