@@ -71,6 +71,8 @@ export const config = {
 		/** Turn-end curator that saves what the user said worth keeping; "false" turns it off. */
 		curator: env.MEMORY_CURATOR !== "false",
 	},
+	/** Workspace files are deleted after this many days without access (Blob lifecycle rule). */
+	retentionDays: Number(env.RETENTION_DAYS ?? 30),
 	/** Model for the memory curator (one small JSON call per turn). */
 	curatorModel: env.CURATOR_MODEL ?? env.LLM_MODEL ?? "deepseek/deepseek-v4.1-flash-1017",
 	/** Dev only: identity when no gateway header is present. */

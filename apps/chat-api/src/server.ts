@@ -10,6 +10,7 @@ import { openStore } from "./store.ts";
 import { retrievedPrompt, clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
 import { FactGraph, graphTools } from "./graph-memory.ts";
 import { curate } from "./curator.ts";
+import { attachToConversation, libraryTools, listLibrary } from "./library.ts";
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
 import { listFiles, openTurn, readFileFromStore, workspacePath, writeFileToStore } from "./workspace.ts";
@@ -90,8 +91,8 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				pinnedSkills: input.skills,
 				mcpServers: await mcpServersFor(user),
 				...(memoryOn && facts
-					? { systemAppend: (await corePrompt(user)) + (await retrievedPrompt(user, input.message, id, store, facts)), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store)], userSkillsDir: mySkills?.dir }
-					: { extraTools: [sessionSearchTool(user, id, store)] }),
+					? { systemAppend: (await corePrompt(user)) + (await retrievedPrompt(user, input.message, id, store, facts)), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store)], userSkillsDir: mySkills?.dir }
+					: { extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store)] }),
 				onEvent,
 				signal: abort.signal,
 			});
@@ -136,6 +137,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (url.pathname === "/api/conversations" && req.method === "GET") return json(res, 200, await store.list(user));
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
 
+	if (url.pathname === "/api/files" && req.method === "GET") return json(res, 200, await listLibrary(user, store, url.searchParams.get("q") ?? undefined));
 	if (url.pathname === "/api/memory") return memoryRoute(req, res, user, url);
 	if (url.pathname === "/api/memory/skills" && req.method === "GET")
 		return json(res, 200, config.connectors.masterKey ? (await listSkills(user)).map(({ name, description, src, updatedAt }) => ({ name, description, src, updatedAt })) : []);
@@ -147,6 +149,11 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	const k = url.pathname.match(/^\/api\/connectors(?:\/([a-z0-9-]+)\/(connect|callback))?(?:\/([a-z0-9-]+))?$/);
 	if (k) return connectorRoute(req, res, user, url, k);
 
+	const at = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})\/attach$/);
+	if (at && req.method === "POST") {
+		const { file_id } = JSON.parse((await body(req, 10_000)).toString()) as { file_id?: string };
+		return json(res, 201, { path: await attachToConversation(user, file_id ?? "", at[1]) });
+	}
 	const m = url.pathname.match(/^\/api\/conversations\/([^/]+)\/(files|uploads)(?:\/(.+))?$/);
 	if (m && ID.test(m[1])) {
 		const workspace = workspacePath(user, m[1]);

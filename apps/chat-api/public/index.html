@@ -68,6 +68,8 @@
   <input id="skills" type="text" placeholder="ex.: pdf, research">
   <p><strong>Arquivos</strong></p>
   <div id="files"><em>nenhum</em></div>
+  <p><strong>Meus arquivos</strong> <span class="meta" style="font-size:11px;color:var(--muted)">(30 dias sem uso e são apagados)</span></p>
+  <div id="library" class="mem"><em>carregando…</em></div>
   <p><button id="new" type="button">Nova conversa</button></p>
 </aside>
 <dialog id="graph">
@@ -166,6 +168,37 @@ async function loadGraph() {
     box.append(ul);
   }
 }
+async function loadLibrary() {
+  const box = document.getElementById("library");
+  const r = await fetch("api/files"); const list = r.ok ? await r.json() : [];
+  box.textContent = "";
+  const others = list.filter((f) => f.conversation !== conv).slice(0, 15);
+  if (!others.length) { box.innerHTML = "<em>nenhum de outras conversas</em>"; return; }
+  const ul = document.createElement("ul");
+  for (const f of others) {
+    const li = document.createElement("li");
+    const t = document.createElement("span");
+    const n = document.createElement("span"); n.textContent = f.name;
+    const days = f.expiresAt ? Math.max(0, Math.ceil((Date.parse(f.expiresAt) - Date.now()) / 86400000)) : null;
+    const meta = document.createElement("div"); meta.className = "meta";
+    meta.textContent = `${f.kind === "upload" ? "enviado" : "gerado"} ${f.modified?.slice(0, 10) ?? ""}${f.title ? " · " + f.title.slice(0, 40) : ""}${days !== null ? ` · expira em ${days} d` : ""}`;
+    t.append(n, meta);
+    const use = document.createElement("button"); use.type = "button"; use.title = "Usar nesta conversa"; use.textContent = "Usar";
+    use.style.cssText = "color:var(--accent);font-size:12px";
+    use.onclick = async () => {
+      conv ??= crypto.randomUUID();
+      const res = await fetch(`api/conversations/${conv}/attach`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ file_id: f.id }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { add("tool", `erro: ${j.error ?? res.status}`); return; }
+      add("tool", `arquivo anexado: ${j.path}`);
+      const q = document.getElementById("q"); q.value = (q.value ? q.value + "\n" : "") + `(arquivo anexado: ${j.path}) `;
+      const fl = await fetch(`api/conversations/${conv}/files`); if (fl.ok) renderFiles(await fl.json());
+      loadLibrary();
+    };
+    li.append(t, use); ul.append(li);
+  }
+  box.append(ul);
+}
 async function loadSkills() {
   const box = document.getElementById("skillmem");
   const r = await fetch("api/memory/skills"); const list = r.ok ? await r.json() : [];
@@ -222,7 +255,7 @@ function showGraph() {
   for (const k of kinds) { const sp = document.createElement("span"); const i = document.createElement("i"); i.style.background = KIND_COLORS[k] ?? KIND_COLORS.other; sp.append(i, document.createTextNode(KIND_LABELS[k] ?? k)); legend.append(sp); }
 }
 document.getElementById("graphclose").onclick = () => document.getElementById("graph").close();
-loadMemory(); loadGraph(); loadSkills();
+loadMemory(); loadGraph(); loadSkills(); loadLibrary();
 {
   const p = new URLSearchParams(location.search);
   if (p.get("connector")) {
@@ -231,7 +264,7 @@ loadMemory(); loadGraph(); loadSkills();
   }
   loadConnectors();
 }
-document.getElementById("new").onclick = () => { conv = null; log.innerHTML = ""; renderFiles([]); };
+document.getElementById("new").onclick = () => { conv = null; log.innerHTML = ""; renderFiles([]); loadLibrary(); };
 document.getElementById("file").onchange = async (e) => {
   const file = e.target.files[0]; if (!file) return;
   conv ??= crypto.randomUUID();
@@ -266,7 +299,7 @@ document.getElementById("f").onsubmit = async (e) => {
       else if (ev.type === "delta") { out.textContent += ev.text; log.scrollTop = log.scrollHeight; }
       else if (ev.type === "tool") log.insertBefore(Object.assign(document.createElement("div"), { className: "tool", textContent: `⚙ ${ev.name} ${JSON.stringify(ev.args).slice(0, 160)}` }), out);
       else if (ev.type === "memory") add("tool", `memória: ${ev.saved.join(" · ")}`);
-      else if (ev.type === "done") { renderFiles(ev.files); loadMemory(); loadGraph(); loadSkills(); }
+      else if (ev.type === "done") { renderFiles(ev.files); loadMemory(); loadGraph(); loadSkills(); loadLibrary(); }
       else if (ev.type === "error") add("tool", `erro: ${ev.message}`);
     }
   }

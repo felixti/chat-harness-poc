@@ -18,6 +18,9 @@ import { config } from "./config.ts";
 export interface FileInfo {
 	path: string;
 	size: number;
+	/** Last write, and last read when the account tracks access time (drives the retention rule). */
+	modified?: Date;
+	accessed?: Date;
 }
 
 /** The storage the workspaces live in: Azure Blob in the cluster, a local folder in dev and tests. */
@@ -42,7 +45,8 @@ class BlobStore implements ObjectStore {
 	}
 	async list(prefix: string) {
 		const out: FileInfo[] = [];
-		for await (const b of this.c.listBlobsFlat({ prefix })) out.push({ path: b.name.slice(prefix.length), size: b.properties.contentLength ?? 0 });
+		for await (const b of this.c.listBlobsFlat({ prefix }))
+			out.push({ path: b.name.slice(prefix.length), size: b.properties.contentLength ?? 0, modified: b.properties.lastModified, accessed: b.properties.lastAccessedOn });
 		return out;
 	}
 	async get(name: string) {
@@ -83,7 +87,7 @@ export class FolderStore implements ObjectStore {
 	}
 	async list(prefix: string) {
 		const base = join(this.root, prefix);
-		return (await listLocal(base)).map(({ path, size }) => ({ path, size }));
+		return (await listLocal(base)).map(({ path, size, mtimeMs }) => ({ path, size, modified: new Date(mtimeMs) }));
 	}
 	async get(name: string) {
 		return readFile(join(this.root, name)).catch(() => undefined);
@@ -206,12 +210,12 @@ export async function openTurn(user: string, conversation: string): Promise<Turn
 
 /** Files of a conversation, from Blob. */
 export async function listFiles(user: string, conversation: string): Promise<FileInfo[]> {
-	return objectStore().list(prefixOf(user, conversation));
+	return (await objectStore().list(prefixOf(user, conversation))).map(({ path, size }) => ({ path, size }));
 }
 
 export async function readFileFromStore(user: string, conversation: string, rel: string): Promise<Buffer> {
 	const data = await objectStore().get(prefixOf(user, conversation) + rel);
-	if (!data) throw Object.assign(new Error("not found"), { status: 404 });
+	if (!data) throw Object.assign(new Error("file expired or removed (files are kept 30 days after last use)"), { status: 404 });
 	return data;
 }
 
