@@ -1,6 +1,7 @@
-// generate_image: one HTTP call to an image model through the platform LLM gateway (OpenRouter
-// chat completions with modalities ["image","text"]). No subprocess, no binaries: the bytes come
-// back as a data URL and are written to the workspace for the deck (background_image / image layout).
+// generate_image: one HTTP call to an image model through the platform LLM gateway. Two OpenRouter
+// APIs: image-only models (MiniMax H3, Seedream, FLUX) use POST /images and return b64_json;
+// chat models with image output (Gemini, GPT image) use /chat/completions with modalities.
+// No subprocess, no binaries: the bytes are written to the workspace for the deck.
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { defineTool } from "@earendil-works/pi-coding-agent";
@@ -17,15 +18,36 @@ const RATIOS = ["16:9", "4:3", "1:1", "3:4", "9:16"] as const;
 /** Guardrails appended to every prompt: generated text, logos and real people are the usual failures. */
 export const IMAGE_RULES =
 	"Do not draw any text, letters, numbers, captions, logos, watermarks, charts, user interfaces, people or faces. " +
-	"Leave calm negative space so a title can sit on top. Professional, editorial, high quality.";
+	"Keep the main subject in the right half and the left third calm and simple, so a title can sit beside it. " +
+	"Professional, editorial, high quality.";
+
+/** Image-only models live on OpenRouter's /images API; IMAGE_API=chat|images overrides the guess. */
+const IMAGES_API_PREFIXES = ["minimax/", "bytedance-seed/", "black-forest-labs/", "recraft/", "ideogram/"];
+export function usesImagesApi(model: string, override = process.env.IMAGE_API): boolean {
+	if (override === "images") return true;
+	if (override === "chat") return false;
+	return IMAGES_API_PREFIXES.some((p) => model.startsWith(p));
+}
+
+/** Path and body for one image: 1K is plenty for a slide and keeps the cost per image low. */
+export function imageRequest(model: string, prompt: string, aspect: string): { path: string; body: Record<string, unknown> } {
+	if (usesImagesApi(model)) return { path: "/images", body: { model, prompt, aspect_ratio: aspect, resolution: "1K", output_format: "jpeg", n: 1 } };
+	return { path: "/chat/completions", body: { model, modalities: ["image", "text"], image_config: { aspect_ratio: aspect }, messages: [{ role: "user", content: prompt }] } };
+}
 
 export function buildPrompt(prompt: string, palette?: string[]): string {
 	const colors = palette?.length ? ` Color palette: ${palette.map((c) => `#${c}`).join(", ")}; keep the image within these hues.` : "";
 	return `${prompt.trim()}${colors} ${IMAGE_RULES}`;
 }
 
-/** Data URL from the model's first image. */
+/** First image of either response shape: /images (data[0].b64_json) or chat (message.images[0] data URL). */
 export function firstImage(body: any): { mime: string; data: Buffer } {
+	const b64 = body?.data?.[0]?.b64_json;
+	if (typeof b64 === "string" && b64) {
+		const mime = String(body.data[0].media_type ?? "image/jpeg").replace(/^image\//, "").replace("jpg", "jpeg");
+		if (!["png", "jpeg", "webp"].includes(mime)) throw new Error(`image model returned ${mime}; use png or jpeg`);
+		return { mime, data: Buffer.from(b64, "base64") };
+	}
 	const url: string | undefined = body?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
 	const m = url && /^data:image\/(png|jpe?g|webp);base64,(.+)$/s.exec(url);
 	if (!m) {
@@ -58,15 +80,11 @@ export function imageTool(workspace: string, themesDir: string) {
 				const t = (await loadThemes(themesDir))[p.theme];
 				if (t) palette = [t.bg, t.accent, t.accent2, t.surface];
 			}
-			const res = await fetch(`${config.llm.baseUrl}/chat/completions`, {
+			const req = imageRequest(config.imageModel, buildPrompt(p.prompt, palette), p.aspect_ratio ?? "16:9");
+			const res = await fetch(`${config.llm.baseUrl}${req.path}`, {
 				method: "POST",
 				headers: { "content-type": "application/json", authorization: `Bearer ${config.llm.apiKey}` },
-				body: JSON.stringify({
-					model: config.imageModel,
-					modalities: ["image", "text"],
-					image_config: { aspect_ratio: p.aspect_ratio ?? "16:9" },
-					messages: [{ role: "user", content: buildPrompt(p.prompt, palette) }],
-				}),
+				body: JSON.stringify(req.body),
 				signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
 			});
 			const body = await res.json().catch(() => ({}));

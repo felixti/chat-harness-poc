@@ -51,7 +51,7 @@ spec:
         - {name: PARSER_URL, value: "http://parser"}
         - {name: LLM_BASE_URL, value: "http://llm-gateway.envoy-gateway-system.svc/api/v1"}
         - {name: LLM_MODEL, value: "deepseek/deepseek-v4.1-flash-1017"}   # vision: reviews slide previews
-        - {name: IMAGE_MODEL, value: "google/gemini-3.1-flash-lite-image"}   # generate_image (covers)
+        - {name: IMAGE_MODEL, value: "minimax/minimax-h3-image"}   # generate_image at 1K; fallback google/gemini-3.1-flash-lite-image
         - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
         ports: [{name: http, containerPort: 8080}]
         readinessProbe:

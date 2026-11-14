@@ -134,6 +134,15 @@ test("generate_image helpers: guardrails in the prompt, data URL parsing", async
 	const ok = firstImage({ choices: [{ message: { images: [{ image_url: { url: "data:image/jpeg;base64,/9j/AA==" } }] } }] });
 	assert.equal(ok.mime, "jpeg");
 	assert.throws(() => firstImage({ choices: [{ message: { content: "sorry" } }] }), /no image.*sorry/);
+	const h3 = firstImage({ data: [{ b64_json: "/9j/AA==", media_type: "image/jpeg" }] });
+	assert.equal(h3.mime, "jpeg");
+	const { imageRequest, usesImagesApi } = await import("../src/office/image.ts");
+	assert.equal(usesImagesApi("minimax/minimax-h3-image", ""), true);
+	assert.equal(usesImagesApi("google/gemini-3.1-flash-lite-image", ""), false);
+	const r = imageRequest("minimax/minimax-h3-image", "x", "16:9");
+	assert.equal(r.path, "/images");
+	assert.equal(r.body.resolution, "1K");
+	assert.equal(imageRequest("google/gemini-3.1-flash-lite-image", "x", "16:9").path, "/chat/completions");
 });
 
 test("deck lint: runs, bullet share, cards/big_number budget, emoji", async () => {
