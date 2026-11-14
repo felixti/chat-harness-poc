@@ -96,12 +96,14 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 			const files = await turn.finish();
 			finished = true;
 			// The answer is already on screen; the curator runs before "done" so the panel refreshes.
-			if (memoryOn && config.memory.curator && !abort.signal.aborted) {
+			if (memoryOn && config.memory.curator) {
+				if (abort.signal.aborted) console.log("[curator] skipped: client disconnected");
 				const saved = await curate({ user, userMessage: input.message, assistantReply: result.text, alreadySaved: savedByAgent }, facts).catch((e) => {
 					console.warn(`[curator] ${(e as Error).message}`);
 					return [];
 				});
 				if (saved.length) send({ type: "memory", saved });
+				console.log(`[curator] saved ${saved.length}`);
 			}
 			await store.save({ id, user, title: existing?.title ?? input.message.slice(0, 60), entries: result.entries, updatedAt: new Date(), version: existing?.version });
 			send({ type: "done", conversationId: id, files });

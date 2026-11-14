@@ -39,7 +39,10 @@ Rules:
 
 export async function curate(input: CuratorInput, graph: FactGraph | undefined, signal?: AbortSignal): Promise<string[]> {
 	const msg = input.userMessage.trim();
-	if (msg.length < 15) return [];
+	if (msg.length < 15) {
+		console.log("[curator] skipped: short message");
+		return [];
+	}
 	const core = await coreEntries(input.user);
 	const prompt = [
 		`Current memory (user): ${JSON.stringify(core.user)}`,
@@ -66,6 +69,7 @@ export async function curate(input: CuratorInput, graph: FactGraph | undefined, 
 	if (!res.ok) throw new Error(`curator HTTP ${res.status}`);
 	const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
 	const plan = parsePlan(body.choices?.[0]?.message?.content ?? "");
+	console.log(`[curator] plan: ${plan.core?.length ?? 0} core, ${plan.facts?.length ?? 0} facts`);
 	const saved: string[] = [];
 	for (const c of (plan.core ?? []).slice(0, 2)) {
 		try {
