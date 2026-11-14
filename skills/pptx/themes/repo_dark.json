@@ -1,0 +1,27 @@
+{
+  "look": "code-host dark: #0D1117, hairline panels, blue + green, monospace figures",
+  "good_for": "engineering, platform, developer tools, tech reviews",
+  "style": "outline",
+  "bg": "0D1117",
+  "surface": "161B22",
+  "ink": "E6EDF3",
+  "muted": "9198A1",
+  "accent": "4493F8",
+  "accent2": "3FB950",
+  "onAccent": "0D1117",
+  "line": "30363D",
+  "chart": [
+    "4493F8",
+    "3FB950",
+    "A371F7",
+    "D29922",
+    "F778BA",
+    "9198A1"
+  ],
+  "headFont": "Aptos",
+  "bodyFont": "Aptos",
+  "monoFont": "Consolas",
+  "darkCover": true,
+  "good": "3FB950",
+  "bad": "F85149"
+}

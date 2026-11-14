@@ -1,0 +1,26 @@
+{
+  "look": "code-host light: white, hairline panels, blue + green, monospace figures",
+  "good_for": "engineering reports, product reviews, docs-style decks",
+  "style": "outline",
+  "bg": "FFFFFF",
+  "surface": "F6F8FA",
+  "ink": "1F2328",
+  "muted": "59636E",
+  "accent": "0969DA",
+  "accent2": "1A7F37",
+  "onAccent": "FFFFFF",
+  "line": "D1D9E0",
+  "chart": [
+    "0969DA",
+    "1A7F37",
+    "8250DF",
+    "9A6700",
+    "BF3989",
+    "59636E"
+  ],
+  "headFont": "Aptos",
+  "bodyFont": "Aptos",
+  "monoFont": "Consolas",
+  "good": "1A7F37",
+  "bad": "CF222E"
+}

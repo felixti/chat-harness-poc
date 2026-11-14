@@ -68,7 +68,8 @@ function face(name: string | undefined, bold: boolean, italic: boolean): Face {
 	const F = fonts();
 	const n = (name ?? "").toLowerCase();
 	if (/georgia|serif|garamond|times|cambria|playfair|merriweather/.test(n)) return { font: F.serif, fake: bold, hscale: bold ? 1.04 : 1 };
-	const hscale = n.startsWith("aptos") ? 1.05 : 1;
+	// Approximate widths: Aptos runs ~5% wider than Carlito, monospace ~15% wider.
+	const hscale = /consolas|mono|courier|cascadia/.test(n) ? 1.15 : n.startsWith("aptos") ? 1.05 : 1;
 	if (bold) return { font: F.sansBold, fake: false, hscale };
 	if (italic) return { font: F.sansItalic, fake: false, hscale };
 	return { font: F.sans, fake: false, hscale };
@@ -360,6 +361,19 @@ function drawShape(c: any, type: string, o: Opts) {
 			c.fill();
 		}
 		stroke();
+		return;
+	}
+	if ((type === "roundRect" || type === "rect") && fill && ln && (ln.transparency ?? 0) === 0 && ln.color !== o.fill.color) {
+		// pureimage strokes curved paths unevenly; a filled border ring (outer in the line color,
+		// inner in the fill) draws a clean hairline panel.
+		const lw = Math.max(1, (ln.width ?? 1) * PT);
+		const r = type === "roundRect" ? (o.rectRadius ?? 0.08) * PX : 0;
+		roundRectPath(c, x, y, w, h, r);
+		c.fillStyle = rgba(ln.color);
+		c.fill();
+		roundRectPath(c, x + lw, y + lw, w - 2 * lw, h - 2 * lw, Math.max(0, r - lw));
+		c.fillStyle = fill;
+		c.fill();
 		return;
 	}
 	if (type === "ellipse" || type === "oval") ellipsePath(c, x, y, w, h);

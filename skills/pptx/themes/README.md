@@ -5,7 +5,7 @@ One JSON file per theme; the file name is the theme name the model uses in the d
 file here changes the available themes without touching code.
 
 Required: `bg`, `surface`, `ink`, `muted`, `accent`, `accent2`, `onAccent`, `line` (hex),
-`chart` (3+ hex), `headFont`, `bodyFont`. Optional: `style` (`classic`, `editorial`, `modern`:
+`chart` (3+ hex), `headFont`, `bodyFont`. Optional: `style` (`classic`, `editorial`, `modern`, `outline`:
 composition, not only color), `darkCover`, `good`, `bad`, and the descriptive `look` /
 `good_for` (keep the table in `reference.md` in sync).
 

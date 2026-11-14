@@ -33,7 +33,9 @@ export interface Theme {
 	bad?: string;
 	/** Art direction: classic (boxes, rings), editorial (paper, rules, serif display, no boxes),
 	 *  modern (bold color blocks, geometric shapes, split covers). Default classic. */
-	style?: "classic" | "editorial" | "modern";
+	style?: "classic" | "editorial" | "modern" | "outline";
+	/** Monospace face for figures and labels in the outline style (default Consolas). */
+	monoFont?: string;
 }
 
 /** Fallback when the skill's theme folder is missing (tests, local runs). Real themes live in skills/pptx/themes/*.json. */
@@ -165,6 +167,8 @@ interface Ctx {
 	resolve: (p: string) => string;
 	/** Data URI of the current slide's background_image (cover layouts only). */
 	bgImage?: string;
+	/** Covers drawn so far: varies decorative patterns between covers. */
+	covers?: number;
 }
 
 function bg(slide: any, color: string) {
@@ -181,6 +185,8 @@ function footer(c: Ctx, slide: any, s: SlideSpec, n: number, onDark = false, wid
 }
 
 const styleOf = (c: Ctx) => c.t.style ?? "classic";
+/** Face for figures: monospace in the outline style (developer-tool look), else the display face. */
+const figureFont = (c: Ctx) => (styleOf(c) === "outline" ? (c.t.monoFont ?? "Consolas") : c.t.headFont);
 const SERIF = /georgia|serif|garamond|times|cambria|playfair|merriweather|sitka|bodoni/i;
 /** Serif display titles read best in regular weight; sans titles in bold. */
 const headBold = (c: Ctx) => !SERIF.test(c.t.headFont);
@@ -193,7 +199,14 @@ function header(c: Ctx, slide: any, s: SlideSpec, n: number, width = CW, x = MX)
 		slide.addShape(c.pptx.ShapeType.rect, { x, y: y - 0.06, w: 0.55, h: 0.035, fill: { color: c.t.accent2 }, line: { type: "none" } });
 		y += 0.1;
 	}
-	if (s.kicker) {
+	if (s.kicker && st === "outline") {
+		// A label pill, like an issue tag.
+		const label = String(s.kicker);
+		const pw = Math.min(width, 0.35 + label.length * 0.085);
+		slide.addShape(c.pptx.ShapeType.roundRect, { x, y, w: pw, h: 0.3, fill: { color: c.t.bg }, line: { color: c.t.accent, width: 1 }, rectRadius: 0.15 });
+		slide.addText(label, { x, y, w: pw, h: 0.3, fontFace: figureFont(c), fontSize: 10, color: c.t.accent, align: "center", valign: "middle", margin: 0 });
+		y += 0.4;
+	} else if (s.kicker) {
 		const kc = st === "modern" && contrast(c.t.accent2, c.t.bg) >= 3 ? c.t.accent2 : st === "editorial" ? c.t.muted : c.t.accent;
 		slide.addText(String(s.kicker).toUpperCase(), { x, y, w: width, h: 0.3, fontFace: c.t.bodyFont, fontSize: 11, bold: true, color: kc, charSpacing: st === "editorial" ? 2.5 : 1.5, margin: 0 });
 		y += 0.32;
@@ -241,7 +254,26 @@ function bulletsBox(c: Ctx, slide: any, n: number, items: Bullet[], x: number, y
 }
 
 function card(c: Ctx, slide: any, x: number, y: number, w: number, h: number, fill = c.t.surface) {
-	slide.addShape(c.pptx.ShapeType.roundRect, { x, y, w, h, fill: { color: fill }, line: { color: fill }, rectRadius: styleOf(c) === "modern" ? 0.16 : 0.08 });
+	const st = styleOf(c);
+	// outline: hairline border on a near-background fill, small radius (developer-tool panels).
+	const line = st === "outline" && fill === c.t.surface ? { color: c.t.line, width: 1 } : { color: fill };
+	slide.addShape(c.pptx.ShapeType.roundRect, { x, y, w, h, fill: { color: fill }, line, rectRadius: st === "modern" ? 0.16 : st === "outline" ? 0.06 : 0.08 });
+}
+
+/** Activity grid (rows x cols of small squares in 5 levels of accent2): the outline cover motif. */
+function activityGrid(c: Ctx, slide: any, x: number, y: number, cols: number, rows: number, seed: number) {
+	const size = 0.24;
+	const gap = 0.07;
+	const levels = [tint(c.t.accent2, 0.88, c.t.bg), tint(c.t.accent2, 0.65, c.t.bg), tint(c.t.accent2, 0.4, c.t.bg), tint(c.t.accent2, 0.15, c.t.bg), c.t.accent2];
+	let v = seed * 9301 + 49297;
+	for (let i = 0; i < cols; i++) {
+		for (let j = 0; j < rows; j++) {
+			v = (v * 9301 + 49297) % 233280;
+			// Denser toward the right edge, like recent activity.
+			const level = Math.min(4, Math.floor((v / 233280) * 3 + (i / cols) * 2.2));
+			slide.addShape(c.pptx.ShapeType.roundRect, { x: x + i * (size + gap), y: y + j * (size + gap), w: size, h: size, fill: { color: levels[level] }, line: { type: "none" }, rectRadius: 0.04 });
+		}
+	}
 }
 
 /** Lucide icon by name; unknown names become a lint warning with suggestions. */
@@ -302,6 +334,17 @@ function cover(c: Ctx, slide: any): CoverLook {
 		slide.addShape(c.pptx.ShapeType.line, { x: MX, y: H - 0.95, w: W - 2 * MX, h: 0, line: { color: c.t.line, width: 1 } });
 		return { fg: c.t.ink, hi: c.t.accent, textW: 11, onColor: false };
 	}
+	if (st === "outline") {
+		bg(slide, c.t.bg);
+		if (img) {
+			slide.addImage({ data: img, x: W * 0.55, y: 0, w: W * 0.45, h: H, sizing: { type: "cover", w: W * 0.45, h: H } });
+			slide.addShape(c.pptx.ShapeType.line, { x: W * 0.55, y: 0, w: 0, h: H, line: { color: c.t.line, width: 1 } });
+			return { fg: c.t.ink, hi: c.t.accent, textW: W * 0.55 - MX - 0.5, onColor: false };
+		}
+		c.covers = (c.covers ?? 0) + 1;
+		activityGrid(c, slide, 9.35, 0.9, 12, 7, c.covers * 7 + c.deck.slides.length);
+		return { fg: c.t.ink, hi: c.t.accent, textW: 8.3, onColor: false };
+	}
 	// modern: a color block and one bold geometric form.
 	const dark = !!c.t.darkCover;
 	const base = dark ? c.t.bg : c.t.accent;
@@ -349,8 +392,8 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		const w = Math.min(11, k.textW);
 		const num = (s.number as string | number | undefined) ?? "";
 		if (num !== "") {
-			const big = st === "classic" ? { pt: 72, bold: true, color: k.hi, transparency: c.t.darkCover ? 0 : 35 } : st === "editorial" ? { pt: 96, bold: false, color: c.t.accent2, transparency: 0 } : { pt: 120, bold: true, color: c.t.darkCover ? c.t.accent2 : k.hi, transparency: 0 };
-			slide.addText(String(num).padStart(2, "0"), { x: MX, y: st === "classic" ? 1.9 : 1.05, w: 4, h: st === "classic" ? 1.3 : 2.1, fontFace: c.t.headFont, fontSize: big.pt, bold: big.bold, color: big.color, margin: 0, valign: "bottom", transparency: big.transparency });
+			const big = st === "classic" ? { pt: 72, bold: true, color: k.hi, transparency: c.t.darkCover ? 0 : 35 } : st === "editorial" ? { pt: 96, bold: false, color: c.t.accent2, transparency: 0 } : st === "outline" ? { pt: 80, bold: false, color: c.t.accent2, transparency: 0 } : { pt: 120, bold: true, color: c.t.darkCover ? c.t.accent2 : k.hi, transparency: 0 };
+			slide.addText(String(num).padStart(2, "0"), { x: MX, y: st === "classic" ? 1.9 : 1.05, w: 4, h: st === "classic" ? 1.3 : 2.1, fontFace: figureFont(c), fontSize: big.pt, bold: big.bold, color: big.color, margin: 0, valign: "bottom", transparency: big.transparency });
 		}
 		slide.addText(s.title ?? "", { x: MX, y: 3.25, w, h: 1.4, fontFace: c.t.headFont, fontSize: 40, bold: headBold(c), color: k.fg, valign: "top", margin: 0, fit: "shrink" });
 		if (s.subtitle) slide.addText(String(s.subtitle), { x: MX, y: 4.7, w, h: 0.8, fontFace: c.t.bodyFont, fontSize: 18, color: st === "editorial" ? c.t.muted : k.fg, margin: 0 });
@@ -364,7 +407,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		const rowH = Math.min(0.78, BODY_H / Math.max(1, items.length));
 		items.forEach((it, i) => {
 			const y = BODY_Y + i * rowH;
-			slide.addText(String(i + 1).padStart(2, "0"), { x: MX, y, w: 0.9, h: rowH, fontFace: c.t.headFont, fontSize: 24, bold: true, color: c.t.accent, valign: "middle", margin: 0 });
+			slide.addText(String(i + 1).padStart(2, "0"), { x: MX, y, w: 0.9, h: rowH, fontFace: figureFont(c), fontSize: 24, bold: true, color: c.t.accent, valign: "middle", margin: 0 });
 			slide.addText(it, { x: MX + 1.0, y, w: CW - 1.0, h: rowH, fontFace: c.t.bodyFont, fontSize: 20, color: c.t.ink, valign: "middle", margin: 0 });
 			slide.addShape(c.pptx.ShapeType.line, { x: MX + 1.0, y: y + rowH, w: CW - 1.0, h: 0, line: { color: c.t.line, width: 0.75 } });
 		});
@@ -417,10 +460,10 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 			} else {
 				card(c, slide, x, BODY_Y + 0.2, cw, ch);
 				if (st === "classic") slide.addShape(c.pptx.ShapeType.rect, { x, y: BODY_Y + 0.2, w: 0.09, h: ch, fill: { color: c.t.accent }, line: { color: c.t.accent } });
-				else slide.addShape(c.pptx.ShapeType.rect, { x: x + 0.35, y: BODY_Y + 0.2, w: 0.7, h: 0.07, fill: { color: c.t.accent }, line: { type: "none" } });
+				else if (st === "modern") slide.addShape(c.pptx.ShapeType.rect, { x: x + 0.35, y: BODY_Y + 0.2, w: 0.7, h: 0.07, fill: { color: c.t.accent }, line: { type: "none" } });
 			}
 			if (it.icon) icon(c, slide, n, it.icon, x + cw - 0.75, BODY_Y + 0.45, 0.42, c.t.accent);
-			slide.addText(it.value, { x: x + (st === "editorial" ? 0 : 0.35), y: BODY_Y + 0.45, w: cw - (it.icon ? 1.05 : 0.6), h: 1.0, fontFace: c.t.headFont, fontSize: vpt, bold: headBold(c), color: st === "modern" ? c.t.accent : c.t.ink, margin: 0, valign: "bottom" });
+			slide.addText(it.value, { x: x + (st === "editorial" ? 0 : 0.35), y: BODY_Y + 0.45, w: cw - (it.icon ? 1.05 : 0.6), h: 1.0, fontFace: figureFont(c), fontSize: vpt, bold: headBold(c), color: st === "modern" ? c.t.accent : c.t.ink, margin: 0, valign: "bottom" });
 			slide.addText(it.label, { x: x + (st === "editorial" ? 0 : 0.35), y: BODY_Y + 1.5, w: cw - 0.6, h: 0.8, fontFace: c.t.bodyFont, fontSize: 15, color: c.t.muted, margin: 0, valign: "top", fit: "shrink" });
 			if (it.delta) {
 				const good = it.good ?? it.trend !== "down";
@@ -448,7 +491,8 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		if (columns.length > 6) c.warn(n, `${columns.length} columns; use at most 6 (move the rest to an xlsx)`);
 		const numeric = columns.map((_, j) => rows.length > 0 && rows.every((r) => typeof r[j] === "number" || /^[-+]?[R$€%\d.,\s]+%?$/.test(String(r[j] ?? "")))) ;
 		const pt = rows.length > 8 ? 12 : 14;
-		const head = columns.map((h, j) => ({ text: h, options: { bold: true, color: c.t.onAccent, fill: { color: c.t.accent }, align: numeric[j] ? "right" : "left" } }));
+		const outline = styleOf(c) === "outline";
+		const head = columns.map((h, j) => ({ text: h, options: { bold: true, color: outline ? c.t.ink : c.t.onAccent, fill: { color: outline ? c.t.surface : c.t.accent }, align: numeric[j] ? "right" : "left" } }));
 		const dec = columns.map((_, j) => Math.max(0, ...rows.map((r) => (typeof r[j] === "number" ? (String(r[j]).split(".")[1]?.length ?? 0) : 0))));
 		const body = rows.map((r, i) =>
 			columns.map((_, j) => ({
@@ -573,7 +617,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		if (s.kicker) slide.addText(String(s.kicker).toUpperCase(), { x: MX, y: 0.9, w: 11, h: 0.4, fontFace: c.t.bodyFont, fontSize: 13, bold: true, color: hi, charSpacing: 3, margin: 0 });
 		const f = fit([value], 11.5, 2.4, 150, 72, 0, 0.55);
 		if (value && String(s.title ?? "").includes(value)) c.warn(n, `big_number title repeats the value "${value}"; the title should continue the number ("é o mercado...")`);
-		slide.addText(value, { x: MX - 0.05, y: 1.35, w: 11.8, h: 2.5, fontFace: c.t.headFont, fontSize: f.pt, bold: headBold(c), color: hi, margin: 0, valign: "bottom" });
+		slide.addText(value, { x: MX - 0.05, y: 1.35, w: 11.8, h: 2.5, fontFace: figureFont(c), fontSize: f.pt, bold: headBold(c), color: hi, margin: 0, valign: "bottom" });
 		slide.addText(String(s.title ?? ""), { x: MX, y: 4.0, w: 10.5, h: 1.1, fontFace: c.t.headFont, fontSize: 28, bold: headBold(c), color: ink, valign: "top", margin: 0, fit: "shrink" });
 		if (s.text) paragraph(c, slide, n, String(s.text), MX, 5.15, 9.5, 1.3, 18, dark ? ink : c.t.muted);
 		if (!dark) slide.addShape(c.pptx.ShapeType.rect, { x: MX, y: 3.92, w: 1.2, h: 0.07, fill: { color: c.t.accent2 }, line: { type: "none" } });
@@ -610,6 +654,8 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 			if (it.icon) {
 				if (st === "editorial") {
 					if (icon(c, slide, n, it.icon, x, y + 0.3, 0.42, c.t.accent2)) ty = y + 0.9;
+				} else if (st === "outline") {
+					if (icon(c, slide, n, it.icon, x + px, y + 0.32, 0.42, c.t.accent)) ty = y + 0.95;
 				} else if (st === "modern") {
 					slide.addShape(c.pptx.ShapeType.roundRect, { x: x + px, y: y + 0.3, w: 0.7, h: 0.7, fill: { color: c.t.accent }, line: { type: "none" }, rectRadius: 0.12 });
 					if (icon(c, slide, n, it.icon, x + px + 0.17, y + 0.47, 0.36, c.t.onAccent)) ty = y + 1.15;
@@ -655,7 +701,7 @@ const LAYOUTS: Record<string, (c: Ctx, slide: any, s: SlideSpec, n: number) => P
 		items.slice(0, 4).forEach((it, i) => {
 			const x = MX + i * (cw + gap);
 			const y = BODY_Y + 0.15;
-			slide.addText(String(i + 1).padStart(2, "0"), { x, y, w: cw, h: 1.25, fontFace: c.t.headFont, fontSize: 66, bold: st !== "editorial", color: st === "modern" ? c.t.accent : c.t.accent2, margin: 0, valign: "bottom" });
+			slide.addText(String(i + 1).padStart(2, "0"), { x, y, w: cw, h: 1.25, fontFace: figureFont(c), fontSize: 66, bold: st !== "editorial", color: st === "modern" ? c.t.accent : c.t.accent2, margin: 0, valign: "bottom" });
 			slide.addShape(c.pptx.ShapeType.line, { x, y: y + 1.4, w: cw, h: 0, line: { color: c.t.ink, width: 1.25 } });
 			slide.addText(it.title, { x, y: y + 1.6, w: cw, h: 0.8, fontFace: c.t.headFont, fontSize: 20, bold: headBold(c), color: c.t.ink, valign: "top", margin: 0, fit: "shrink" });
 			if (it.text) paragraph(c, slide, n, it.text, x, y + 2.45, cw, BODY_H - 2.7, 16, c.t.muted);
@@ -689,6 +735,11 @@ function calloutBox(c: Ctx, slide: any, n: number, text: string, x: number, y: n
 		// A pull quote: rule above, the display face, no box.
 		slide.addShape(c.pptx.ShapeType.rect, { x, y, w: 0.55, h: 0.035, fill: { color: c.t.accent2 }, line: { type: "none" } });
 		slide.addText(rich(text, { color: c.t.ink }), { x, y: y + 0.2, w, h: h - 0.2, fontFace: c.t.headFont, fontSize: f.pt, valign: "top", margin: 0, fit: "shrink" });
+		return;
+	}
+	if (st === "outline") {
+		slide.addShape(c.pptx.ShapeType.roundRect, { x, y, w, h, fill: { color: tint(c.t.accent, 0.88, c.t.bg) }, line: { color: c.t.accent, width: 1 }, rectRadius: 0.06 });
+		slide.addText(rich(text, { color: c.t.ink }), { x: x + 0.3, y: y + 0.25, w: w - 0.55, h: h - 0.5, fontFace: c.t.bodyFont, fontSize: f.pt, valign: "middle", margin: 0, fit: "shrink" });
 		return;
 	}
 	if (st === "modern") {

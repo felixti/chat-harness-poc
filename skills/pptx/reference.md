@@ -29,6 +29,8 @@ Top level:
 | `tech_night` | modern, dark | near-black, violet + aqua | AI, tech launches, keynotes |
 | `midnight` | modern, dark | deep navy, mint + sky blue | data platforms, engineering, cloud, security |
 | `volt` | modern, dark | black, electric lime + signal orange | engineering, startups, bold launches |
+| `repo_dark` | outline, dark | code-host dark: hairline panels, blue + green, monospace figures | engineering, platform, developer tools |
+| `repo_light` | outline, light | code-host light: hairline panels, blue + green, monospace figures | engineering reports, product reviews |
 
 Styles change the composition, not only the colors:
 - **classic:** boxed cards and KPIs, rings on covers.
@@ -36,11 +38,13 @@ Styles change the composition, not only the colors:
   picture on covers.
 - **modern:** color-block covers with one geometric form, solid icon tiles, filled callouts,
   half-page picture with a color seam on covers.
+- **outline (developer tool):** hairline-bordered panels, `kicker` as a label pill, figures and
+  numerals in a monospace face (`monoFont`, default Consolas), activity-grid motif on covers.
 
 Theme fields (hex colors): `bg` (slides), `surface` (cards, zebra rows), `ink` (text), `muted`
 (secondary text), `accent` (titles bar, highlights, covers), `accent2` (second highlight),
 `onAccent` (text on accent), `line` (hairlines), `chart` (3+ series colors), `headFont`,
-`bodyFont`, optional `style` (`classic`, `editorial`, `modern`), `darkCover` (dark themes),
+`bodyFont`, optional `style` (`classic`, `editorial`, `modern`, `outline`), `monoFont`, `darkCover` (dark themes),
 `good`/`bad` (delta colors). The renderer checks contrast (text 4.5:1, muted 3:1) and warns; a
 custom theme must pass before you answer.
 

@@ -17,7 +17,8 @@ rules only for decks live in the `pptx` skill.
 - **Sober or modern comes from the audience.** Board, finance, legal, consulting, reports: sober
   (`editorial` style: `ivory`, `graphite`, `forest`; or the `classic` `executive`). Product,
   tech, marketing, launches, internal events: modern (`aurora`, `sunset`, `tech_night`,
-  `midnight`, `volt`). The user's words ("sóbrio", "moderno", "tech", "elegante") win.
+  `midnight`, `volt`). Engineering and developer audiences, or "estilo GitHub": `repo_dark`,
+  `repo_light`. The user's words ("sóbrio", "moderno", "tech", "elegante") win.
 - **Light or dark comes from where it will be seen.** Lit meeting room, shared PDF or print:
   light. Stage, keynote, dark room: dark. Table of themes in the `pptx` skill `reference.md`.
 - **No theme fits:** write an inline theme `{"extends": "<closest>", "accent": "#..."}` (fields
