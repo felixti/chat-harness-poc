@@ -50,7 +50,7 @@ spec:
         - {name: BLOB_CONTAINER, value: chat-workspaces}
         - {name: PARSER_URL, value: "http://parser"}
         - {name: LLM_BASE_URL, value: "http://llm-gateway.envoy-gateway-system.svc/api/v1"}
-        - {name: LLM_MODEL, value: "anthropic/claude-sonnet-5.5"}   # TEMP design bake-off; default deepseek/deepseek-v4.1-flash-1017
+        - {name: LLM_MODEL, value: "deepseek/deepseek-v4.1-flash-1017"}   # vision: reviews slide previews
         - {name: IMAGE_MODEL, value: "google/gemini-3.1-flash-lite-image"}   # generate_image (covers)
         - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
         ports: [{name: http, containerPort: 8080}]
