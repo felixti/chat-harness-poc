@@ -141,14 +141,25 @@ is derived and disposable.
 | 1 Core | who the user is, preferences, standing facts (≤ 3 KB) | every turn, in the system prompt | `memory` tool, curator | ETag (If-Match), retry on 412 |
 | 2 Episodic | past conversations | `session_search` | turn runner (already) | versioned history |
 | 3 Facts graph | entities, relations, decisions, with source and time | `recall` | `remember`, curator | append-only events; graph rebuilt from snapshot + events |
-| 4 Procedural | procedures that worked | listed like skills | `skill_save` | ETag |
+| 4 Procedural | procedures the user chose to keep | loaded as `my-*` skills every turn | `skill_save` (user consent) | ETag |
 
 Rules: the model never writes Cypher or paths (typed tools only); every fact keeps its source
 (conversation, message) and time; `forget` is an event too, so "what did the agent believe on
 date X" stays answerable; the graph engine is replaceable (Relate spike; fallback FerretDB).
 
-Status 2026-11-14: layers 1, 2 and 3 and the curator are implemented (`src/memory.ts`,
-`src/graph-memory.ts`, `src/curator.ts`). Layer 4 is next.
+Status 2026-11-14: all four layers, the curator and hybrid retrieval are implemented
+(`src/memory.ts`, `src/graph-memory.ts`, `src/curator.ts`, `src/skills-memory.ts`).
+
+Layer 4 implementation notes:
+- Storage: personal skills are one sealed document, `chat-memory/<oid>/skills/index.json`,
+  written with an ETag. The limits are 30 skills and 6 KB per body.
+- Loading: at turn start each skill is written as `my-<name>/SKILL.md` into a per-turn folder.
+  Pi loads that folder like the company skills (description in the prompt, body read on demand).
+  The confined file tools treat it as read-only, and it is deleted after the turn.
+- Safety: a skill is instructions by nature. So `skill_save` requires `user_confirmed=true`; the
+  agent offers once after a repeatable multi-step task, and the curator never creates skills.
+  Saves are rejected if the text looks like a prompt injection or contains a credential. Each skill
+  records the conversation it came from, and the Memória panel lists them with a delete action.
 
 Retrieval every turn (H37): core memory, the 5 latest conversations with summaries, and graph
 facts about entities the message names, capped at ~3 KB; tools for deeper lookups.
