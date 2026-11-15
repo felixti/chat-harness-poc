@@ -62,14 +62,14 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
       - name: chat-api
-        image: ghcr.io/felixti/chat-harness-chat-api:6fba6232ab314cb16bd1698ca3e48b3c04d4b4c0
+        image: ghcr.io/felixti/chat-harness-chat-api:cf0456e0f124d00cffda5403dba7fd6a10ccaf4d
         env:
         - {name: MONGO_URL, value: "mongodb://ferret@ferretdb:27017/chat"}   # password from /var/run/secrets/chat/db-password
         - {name: BLOB_ACCOUNT_URL, value: "https://stagentpocjt75.blob.core.windows.net"}
         - {name: BLOB_CONTAINER, value: chat-workspaces}
         - {name: PARSER_URL, value: "http://parser"}
         - {name: LLM_BASE_URL, value: "http://llm-gateway.envoy-gateway-system.svc/api/v1"}
-        - {name: LLM_MODEL, value: "google/gemini-4-hydrogen"}   # TEST (H56); back to deepseek/deepseek-v4.1-flash-1017 after
+        - {name: LLM_MODEL, value: "deepseek/deepseek-v4.1-flash-1017"}   # default; users pick others in the portal (LLM_MODELS, H57)
         - {name: IMAGE_MODEL, value: "minimax/minimax-h3-image"}   # generate_image at 1K; fallback google/gemini-3.1-flash-lite-image
         - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
         - {name: PUBLIC_URL, value: "https://chat.20-121-208-105.sslip.io"}
