@@ -64,3 +64,23 @@ test("declined, questions, and stale interrupts", () => {
 	assert.match(stripHidden(r.message), /Recusado: GitHub[\s\S]*Para quem é o deck\? → Diretoria/);
 	assert.throws(() => resumeMessage(g.interrupts, [{ interruptId: "int-old", status: "resolved" }]), (e: any) => e.status === 409);
 });
+
+test("circuit breaker: repeated tool or errors in a row end the turn", () => {
+	const g = new Gate();
+	for (let i = 0; i < 5; i++) assert.equal(g.check({ toolCallId: `m${i}`, toolName: "memory", input: {} }), undefined);
+	assert.match(g.check({ toolCallId: "m6", toolName: "memory", input: {} })?.reason ?? "", /Stopped: memory was called 6 times/);
+	const h = new Gate();
+	for (let i = 0; i < 4; i++) h.noteResult("bash", true);
+	assert.match(h.check({ toolCallId: "b", toolName: "bash", input: {} })?.reason ?? "", /last 4 tool calls failed/);
+	h.noteResult("bash", false);
+	assert.equal(h.check({ toolCallId: "c", toolName: "bash", input: {} }), undefined);
+});
+
+test("tools loaded or used earlier in the conversation are re-activated", async () => {
+	const { previouslyLoadedTools } = await import("../src/agent.ts");
+	const entries = [
+		{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", name: "tool_search" }, { type: "toolCall", name: "mcp__azuredevops__core_list_projects" }] } },
+		{ type: "message", message: { role: "toolResult", toolName: "tool_search", content: [{ type: "text", text: "Loaded 2 tools. They are available from your next call:\n- mcp__azuredevops__wit_work_item_write: Write operations...\n- mcp__azuredevops__wit_work_item_link_write: Link..." }] } },
+	];
+	assert.deepEqual([...previouslyLoadedTools(entries)].sort(), ["mcp__azuredevops__core_list_projects", "mcp__azuredevops__wit_work_item_link_write", "mcp__azuredevops__wit_work_item_write"]);
+});

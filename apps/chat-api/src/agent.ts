@@ -75,7 +75,10 @@ export interface TurnInput {
 	/** Per-user system prompt additions (core memory snapshot). */
 	systemAppend?: string;
 	/** Human-in-the-loop gate (approvals, ask_user): consulted before every tool call. */
-	gate?: { check(call: { toolCallId: string; toolName: string; input: unknown }): { block: true; reason: string; terminate: true } | undefined };
+	gate?: {
+		check(call: { toolCallId: string; toolName: string; input: unknown }): { block: true; reason: string; terminate: true } | undefined;
+		noteResult?(toolName: string, isError: boolean): void;
+	};
 	/** Per-turn folder with the user's personal skills (my-*), loaded like company skills, read-only. */
 	userSkillsDir?: string;
 	onEvent: (event: { type: string; [k: string]: unknown }) => void;
@@ -119,6 +122,20 @@ Write for a busy colleague who reads on a chat screen.
 - When a tool returns nothing or fails, say so and stop; never call unrelated tools (memory,
   remember, files) to test, as placeholders, or to keep the turn going.
 Adapted from blader/humanizer and i-have-adhd (MIT).`;
+
+/** MCP tool names a conversation already loaded (tool_search results) or called. */
+export function previouslyLoadedTools(entries: unknown[]): Set<string> {
+	const out = new Set<string>();
+	for (const e of entries as { message?: { role?: string; content?: unknown; toolName?: string } }[]) {
+		const m = e?.message;
+		if (!m) continue;
+		if (m.role === "assistant" && Array.isArray(m.content))
+			for (const c of m.content as { type?: string; name?: string }[]) if (c.type === "toolCall" && c.name?.startsWith("mcp__")) out.add(c.name);
+		if (m.role === "toolResult" && m.toolName === "tool_search" && Array.isArray(m.content))
+			for (const c of m.content as { type?: string; text?: string }[]) for (const x of (c.text ?? "").matchAll(/^- (mcp__[\w-]+__[\w-]+):/gm)) out.add(x[1]);
+	}
+	return out;
+}
 
 export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; text: string }> {
 	const cwd = input.workspace;
@@ -193,6 +210,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		} else if (event.type === "tool_execution_start") {
 			input.onEvent({ type: "tool", id: event.toolCallId, name: event.toolName, args: event.args });
 		} else if (event.type === "tool_execution_end") {
+			input.gate?.noteResult?.(event.toolName, event.isError);
 			input.onEvent({ type: "tool_end", id: event.toolCallId, name: event.toolName, isError: event.isError, result: event.result });
 		}
 	});
@@ -200,6 +218,16 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 
 	try {
 		await session.bindExtensions({});
+		// Each turn rebuilds the session, and tools that tool_search loaded in earlier turns would be
+		// gone while the history says they are loaded: the model then calls the wrong tool. Re-activate
+		// every MCP tool the conversation already loaded or used.
+		const wanted = previouslyLoadedTools(input.entries);
+		if (wanted.size) {
+			const known = new Set(session.getAllTools().map((t) => t.name));
+			const add = [...wanted].filter((n) => known.has(n));
+			if (add.length) session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...add])]);
+			console.log(`[turn] re-activated ${add.length}/${wanted.size} MCP tools from history`);
+		}
 		// Pinned skills (the old API's `skills: [ids]`): one uses Pi's /skill command, several are
 		// named explicitly so the model reads each SKILL.md first.
 		const pinned = input.pinnedSkills ?? [];

@@ -77,10 +77,31 @@ export const APPROVAL_SCHEMA = { type: "object", properties: { approved: { type:
 export class Gate {
 	readonly interrupts: Pending[] = [];
 	private readonly allowed = new Set<string>();
+	private readonly calls = new Map<string, number>();
+	private errorsInARow = 0;
+	/** Circuit breaker: a model stuck repeating a tool or failing in a row ends the turn. */
+	noteResult(_toolName: string, isError: boolean) {
+		this.errorsInARow = isError ? this.errorsInARow + 1 : 0;
+	}
+	private loop(toolName: string): string | undefined {
+		const n = (this.calls.get(toolName) ?? 0) + 1;
+		this.calls.set(toolName, n);
+		const limit = toolName === "memory" || toolName === "remember" || toolName === "forget" ? 5 : 15;
+		if (n > limit) return `${toolName} was called ${n} times in this turn.`;
+		if (this.errorsInARow >= 4) return `the last ${this.errorsInARow} tool calls failed.`;
+		return undefined;
+	}
 	allow(toolName: string, input: unknown) {
 		this.allowed.add(callKey(toolName, input));
 	}
 	check(call: { toolCallId: string; toolName: string; input: unknown }): { block: true; reason: string; terminate: true } | undefined {
+		const stuck = this.loop(call.toolName);
+		if (stuck)
+			return {
+				block: true,
+				terminate: true,
+				reason: `Stopped: ${stuck} Do not call more tools. Tell the user in one or two sentences what you were trying to do, what failed, and what you need from them.`,
+			};
 		if (call.toolName === "ask_user") {
 			const questions = ((call.input as { questions?: Question[] })?.questions ?? []).slice(0, 3);
 			this.interrupts.push({
