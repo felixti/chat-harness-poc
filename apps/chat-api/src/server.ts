@@ -300,7 +300,11 @@ async function connectorRoute(req: IncomingMessage, res: ServerResponse, user: s
 		const code = url.searchParams.get("code");
 		const state = url.searchParams.get("state") ?? "";
 		let status = "ok";
-		if (!code) status = url.searchParams.get("error") ?? "denied";
+		if (!code) {
+			const desc = (url.searchParams.get("error_description") ?? "").split(/\r?\n/)[0].slice(0, 300);
+			console.warn(`[connectors] ${id} authorize error: ${url.searchParams.get("error")} ${desc}`);
+			status = [url.searchParams.get("error") ?? "denied", desc].filter(Boolean).join(": ");
+		}
 		else
 			await completeAuthorization(user, id, code, state).catch((e) => {
 				console.warn(`[connectors] ${id} callback: ${(e as Error).message}`);

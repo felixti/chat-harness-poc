@@ -25,6 +25,8 @@ export interface Connector {
 	mcpUrl?: string;
 	/** Extra MCP headers (e.g. read-only mode). */
 	mcpHeaders?: Record<string, string>;
+	/** Provider-specific authorize parameters (e.g. GitHub's allow_signup). */
+	authParams?: Record<string, string>;
 	/** Account label for the panel ("@login"); called once after connecting. */
 	account(token: string): Promise<string>;
 }
@@ -54,6 +56,7 @@ export function connectors(): Connector[] {
 			clientId: gh.clientId,
 			clientSecret: gh.clientSecret,
 			mcpUrl: "https://api.githubcopilot.com/mcp/",
+			authParams: { allow_signup: "false" },
 			// Read-only until write access is a deliberate decision (prompt injection could open PRs).
 			mcpHeaders: gh.readOnly ? { "X-MCP-Readonly": "true" } : undefined,
 			async account(token) {
@@ -75,6 +78,8 @@ export function connectors(): Connector[] {
 			authorizeUrl: `https://login.microsoftonline.com/${ms.authority}/oauth2/v2.0/authorize`,
 			tokenUrl: `https://login.microsoftonline.com/${ms.authority}/oauth2/v2.0/token`,
 			scopes: ms.scopes,
+			// Lets the user pick the account (work or personal) instead of reusing the chat's SSO session.
+			authParams: { prompt: "select_account" },
 			clientId: ms.clientId,
 			clientSecret: ms.clientSecret,
 			async account(token) {
@@ -195,7 +200,7 @@ export function authorizeRedirect(user: string, id: string): string {
 		state,
 		code_challenge: challenge,
 		code_challenge_method: "S256",
-		allow_signup: "false",
+		...c.authParams,
 	});
 	return `${c.authorizeUrl}?${q}`;
 }
