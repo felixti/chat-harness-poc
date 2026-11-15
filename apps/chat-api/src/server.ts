@@ -121,8 +121,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 			finished = true;
 			let summary = existing?.summary;
 			// The answer is already on screen; the curator runs before "done" so the panel refreshes.
-			if (memoryOn && config.memory.curator) {
-				if (abort.signal.aborted) console.log("[curator] skipped: client disconnected");
+			if (memoryOn && config.memory.curator && config.memory.curatorMode === "inline") {
 				const cur = await curate({ user, userMessage: input.message, assistantReply: result.text, alreadySaved: savedByAgent, previousSummary: existing?.summary }, facts).catch((e) => {
 					console.warn(`[curator] ${(e as Error).message}`);
 					return { saved: [] as string[], summary: undefined };
@@ -131,7 +130,18 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				if (cur.saved.length) send({ type: "memory", saved: cur.saved });
 				console.log(`[curator] saved ${cur.saved.length}${cur.summary ? ", summary updated" : ""}`);
 			}
-			await store.save({ id, user, title: existing?.title ?? titleOf(input.message), entries: result.entries, updatedAt: new Date(), summary, version: existing?.version });
+			await store.save({ id, user, title: existing?.title ?? titleOf(input.message), entries: result.entries, updatedAt: new Date(), summary, curatedAt: existing?.curatedAt, version: existing?.version });
+			if (memoryOn && config.memory.curator && config.memory.curatorMode === "async") {
+				// After the answer, off the request path; the nightly job catches anything this misses.
+				const later = { user, userMessage: input.message, assistantReply: result.text, alreadySaved: savedByAgent, previousSummary: existing?.summary };
+				setImmediate(() => {
+					const g = new FactGraph(user, id);
+					void curate(later, g)
+						.then((r) => store.markCurated(user, id, r.summary, new Date()))
+						.catch((e) => console.warn(`[curator] async: ${(e as Error).message}`))
+						.finally(() => g.dispose().catch(() => undefined));
+				});
+			}
 			send({ type: "done", conversationId: id, files: userVisible(files) });
 		} catch (e) {
 			send({ type: "error", message: (e as Error).message });

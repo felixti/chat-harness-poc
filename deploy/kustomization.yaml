@@ -8,3 +8,4 @@ resources:
 - brave-mcp.yaml
 - chat-api.yaml
 - route.yaml
+- memory-curator.yaml

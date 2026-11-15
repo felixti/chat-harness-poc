@@ -11,6 +11,8 @@ export interface Conversation {
 	updatedAt: Date;
 	/** Curator's 1-2 sentence summary: what was asked and the outcome (episodic memory). */
 	summary?: string;
+	/** Last time the memory curator processed this conversation (nightly job). */
+	curatedAt?: Date;
 	/** Optimistic concurrency: save() succeeds only if the stored version is still this one
 	 *  (undefined = new conversation). Backs up the per-conversation lease. */
 	version?: number;
@@ -87,6 +89,9 @@ export interface ConversationStore {
 	/** Thumbs up/down on an assistant turn (null clears it). Kept apart from the history document. */
 	feedback(user: string, id: string, turn: string, value: "up" | "down" | null): Promise<void>;
 	feedbackOf(user: string, id: string): Promise<Record<string, "up" | "down">>;
+	/** Conversations changed since `since` that the curator has not processed yet (all users). */
+	pendingCuration(since: Date, limit: number): Promise<Conversation[]>;
+	markCurated(user: string, id: string, summary: string | undefined, at: Date): Promise<void>;
 	/** Most recent conversations with their summaries (episodic context for every turn). */
 	recent(user: string, limit: number, exclude?: string): Promise<Episode[]>;
 	/** Earlier conversations of this user matching any keyword (episodic memory). */
@@ -101,6 +106,13 @@ export class MemoryStore implements ConversationStore {
 		if (!c || c.user !== user) return false;
 		c.title = title;
 		return true;
+	}
+	async pendingCuration(since: Date, limit: number) {
+		return [...this.items.values()].filter((c) => c.updatedAt >= since && (!c.curatedAt || c.curatedAt < c.updatedAt)).slice(0, limit);
+	}
+	async markCurated(user: string, id: string, summary: string | undefined, at: Date) {
+		const c = this.items.get(id);
+		if (c && c.user === user) Object.assign(c, { curatedAt: at, ...(summary ? { summary } : {}) });
 	}
 	async remove(user: string, id: string) {
 		const c = this.items.get(id);
@@ -163,6 +175,20 @@ export class MongoStore implements ConversationStore {
 		return (await this.col.updateOne({ _id: id, user }, { $set: { title } })).matchedCount === 1;
 	}
 
+	async pendingCuration(since: Date, limit: number) {
+		// Filtered in code: FerretDB's $expr support is partial, and the window is one or two days.
+		const docs = await this.col.find({ updatedAt: { $gte: since } } as never).sort({ updatedAt: 1 }).limit(limit * 4).toArray();
+		return docs
+			.filter((d) => !d.curatedAt || d.curatedAt < d.updatedAt)
+			.slice(0, limit)
+			.map((d) => ({ id: d._id, user: d.user, title: d.title, entries: d.entries, updatedAt: d.updatedAt, summary: d.summary, curatedAt: d.curatedAt, version: d.version ?? 0 }));
+	}
+
+	async markCurated(user: string, id: string, summary: string | undefined, at: Date) {
+		// $set only: neither the history nor its version changes, so a running turn is not disturbed.
+		await this.col.updateOne({ _id: id, user }, { $set: { curatedAt: at, ...(summary ? { summary } : {}) } });
+	}
+
 	async remove(user: string, id: string) {
 		await this.votes.deleteMany({ user, conversation: id });
 		return (await this.col.deleteOne({ _id: id, user })).deletedCount === 1;
@@ -191,7 +217,7 @@ export class MongoStore implements ConversationStore {
 	async get(user: string, id: string) {
 		// Filter by user too: a conversation id alone never grants access.
 		const d = await this.col.findOne({ _id: id, user });
-		return d ? { id: d._id, user: d.user, title: d.title, entries: d.entries, updatedAt: d.updatedAt, summary: d.summary, version: d.version ?? 0 } : undefined;
+		return d ? { id: d._id, user: d.user, title: d.title, entries: d.entries, updatedAt: d.updatedAt, summary: d.summary, curatedAt: d.curatedAt, version: d.version ?? 0 } : undefined;
 	}
 
 	async save(c: Conversation) {

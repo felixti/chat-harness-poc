@@ -74,7 +74,7 @@ spec:
   podSelector: {matchLabels: {app: ferretdb}}
   policyTypes: [Ingress, Egress]
   ingress:
-  - from: [{podSelector: {matchLabels: {app: chat-api}}}]
+  - from: [{podSelector: {matchLabels: {app: chat-api}}}, {podSelector: {matchLabels: {app: memory-curator}}}]
     ports: [{port: 27017}]
   egress:
   - to: [{podSelector: {matchLabels: {app: chat-pg}}}]
@@ -106,6 +106,28 @@ spec:
     ports: [{port: 8080}]
   egress:
   - to:     # api.search.brave.com only needs HTTPS out
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+    ports: [{port: 443}]
+---
+# Nightly memory curator: database, LLM gateway, and HTTPS out (Blob, Entra). No ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: memory-curator
+  namespace: chat
+spec:
+  podSelector: {matchLabels: {app: memory-curator}}
+  policyTypes: [Ingress, Egress]
+  egress:
+  - to: [{podSelector: {matchLabels: {app: ferretdb}}}]
+    ports: [{port: 27017}]
+  - to:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: envoy-gateway-system}}
+      podSelector: {matchLabels: {gateway.envoyproxy.io/owning-gateway-name: llm-gateway}}
+    ports: [{port: 10080}]
+  - to:
     - ipBlock:
         cidr: 0.0.0.0/0
         except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]

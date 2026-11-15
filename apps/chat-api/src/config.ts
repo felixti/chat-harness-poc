@@ -89,6 +89,10 @@ export const config = {
 		enabled: env.MEMORY_ENABLED !== "false",
 		/** Turn-end curator that saves what the user said worth keeping; "false" turns it off. */
 		curator: env.MEMORY_CURATOR !== "false",
+		/** When the curator runs: "async" (default: right after the answer, the chat never waits; the
+		 *  03:00 UTC CronJob retries what it missed), "nightly" (only the CronJob) or
+		 *  "inline" (before "done", shows "Guardei na memória"). */
+		curatorMode: (env.MEMORY_CURATOR_MODE ?? "async") as "nightly" | "async" | "inline",
 	},
 	/** Workspace files are deleted after this many days without access (Blob lifecycle rule). */
 	retentionDays: Number(env.RETENTION_DAYS ?? 30),

@@ -1,0 +1,78 @@
+# Nightly memory curation (docs/design.md H44): 03:00 UTC, same image and identity as chat-api.
+# Processes conversations changed since their last curation; the chat itself curates async right
+# after each answer, so this is the safety net (restarts, LLM errors) and costs little.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: memory-curator
+  namespace: chat
+spec:
+  schedule: "0 3 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app: memory-curator
+            azure.workload.identity/use: "true"
+        spec:
+          serviceAccountName: chat-api
+          restartPolicy: Never
+          nodeSelector: {agentplatform.io/pool: platform}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            fsGroup: 65532
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+          - name: memory-curator
+            image: ghcr.io/felixti/chat-harness-chat-api:0209cda1478474567f69583c9c8cba25e856b3c9
+            args: ["--experimental-strip-types", "src/jobs/memory-curator.ts"]
+            env:
+            - {name: MONGO_URL, value: "mongodb://ferret@ferretdb:27017/chat"}   # password from /var/run/secrets/chat/db-password
+            - {name: BLOB_ACCOUNT_URL, value: "https://stagentpocjt75.blob.core.windows.net"}
+            - {name: BLOB_CONTAINER, value: chat-workspaces}
+            - {name: PARSER_URL, value: "http://parser"}
+            - {name: LLM_BASE_URL, value: "http://llm-gateway.envoy-gateway-system.svc/api/v1"}
+            - {name: LLM_MODEL, value: "deepseek/deepseek-v4.1-flash-1017"}   # vision: reviews slide previews
+            - {name: IMAGE_MODEL, value: "minimax/minimax-h3-image"}   # generate_image at 1K; fallback google/gemini-3.1-flash-lite-image
+            - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
+            - {name: PUBLIC_URL, value: "https://chat.20-121-208-105.sslip.io"}
+            - {name: CONNECTORS_CONTAINER, value: chat-credentials}
+            - {name: MEMORY_CONTAINER, value: chat-memory}
+            - {name: GITHUB_CLIENT_ID, value: "Ov23lipiqkWBqCka0Sgk"}   # GitHub OAuth App client ID (public)
+            - {name: AZDO_CLIENT_ID, value: "350bddb7-1b60-4df7-b643-4b7d6461b851"}   # Entra app chat-harness-azure-devops (single tenant)
+            - {name: AZDO_TENANT, value: "5f9bf155-4fca-4d0c-8201-ca5e6100f66e"}
+            - {name: AZDO_ORG, value: "felix-demo"}
+            - {name: MICROSOFT_CLIENT_ID, value: "0ea6ada6-2ef2-43fe-b6f2-ba6433182343"}   # Entra app chat-harness-microsoft-files (work + personal accounts)
+            resources:
+              requests: {cpu: 50m, memory: 256Mi}
+              limits: {memory: 1Gi}
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: [ALL]}
+            volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: secrets, mountPath: /var/run/secrets/chat, readOnly: true}
+          volumes:
+          - name: secrets
+            projected:
+              defaultMode: 0440   # group-readable: fsGroup 65532 is the app user
+              sources:
+              - secret:
+                  name: chat-db
+                  items: [{key: password, path: db-password}]
+              - secret:
+                  name: chat-connectors
+                  optional: true
+                  items: [{key: master-key, path: connectors-master-key}, {key: github-client-secret, path: github-client-secret}, {key: microsoft-client-secret, path: microsoft-client-secret}, {key: azuredevops-client-secret, path: azuredevops-client-secret}]
+          # Scratch for one turn at a time; Blob is the truth, losing the pod loses nothing.
+          - {name: tmp, emptyDir: {sizeLimit: 4Gi}}
