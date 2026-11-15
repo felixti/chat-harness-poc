@@ -14,7 +14,8 @@ import { companySkills } from "./skills-catalog.ts";
 import { deletePrefix } from "./workspace.ts";
 import { curate } from "./curator.ts";
 import { AguiRun, resultText, type ResumeEntry } from "./agui.ts";
-import { askUserTool, Gate, resumeMessage, stripHidden } from "./approvals.ts";
+import { askUserTool, Gate, resumeMessage, stripHidden, withHidden } from "./approvals.ts";
+import { callMcpTool } from "./mcp-call.ts";
 import { browse, exportedOf, importFiles, saveToOneDrive, type View } from "./m365.ts";
 import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } from "./library.ts";
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
@@ -119,10 +120,10 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 		// A resume answers the interrupts saved with the conversation (any replica can serve it).
 		let message = input.message ?? lastUserText(input.messages);
 		const gate = new Gate();
+		let resumed: ReturnType<typeof resumeMessage> | undefined;
 		if (input.resume?.length) {
-			const r = resumeMessage(existing?.pending ?? [], input.resume);
-			message = r.message;
-			for (const a of r.allow) gate.allow(a.toolName, a.input);
+			resumed = resumeMessage(existing?.pending ?? [], input.resume);
+			message = resumed.message;
 		}
 		if (!message) return json(res, 400, { error: "bad request: no user message" });
 		res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
@@ -140,6 +141,28 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 		res.on("close", () => abort.abort());
 		run.started();
 		try {
+			// Approved actions run here, exactly as approved; the model only reports the outcome.
+			if (resumed) {
+				const hidden = [...resumed.hidden];
+				if (resumed.approved.length) {
+					const servers = await mcpServersFor(user);
+					for (const a of resumed.approved) {
+						const [, server, tool] = /^mcp__(.+?)__(.+)$/.exec(a.toolName) ?? [];
+						const target = servers.find((x) => x.name === server);
+						const callId = `approved-${a.interruptId}`;
+						run.toolStart(callId, a.toolName, a.input);
+						const out = target ? await callMcpTool(target, tool, a.input).catch((e) => ({ text: (e as Error).message, isError: true })) : { text: `connector ${server} is not connected`, isError: true };
+						run.toolResult(callId, out.text, out.isError);
+						console.log(`[approval] ${a.toolName} ${out.isError ? "failed" : "ran"}`);
+						hidden.push(
+							out.isError
+								? `The approved action ${a.toolName} was executed by the system and FAILED: ${out.text.slice(0, 1500)}. Tell the user in one or two sentences what failed and what they can do. Do not retry it yourself.`
+								: `The approved action ${a.toolName} was already executed by the system, exactly as approved. Result: ${out.text.slice(0, 3000)}. Report the outcome in one or two sentences (IDs, names, links). Do not call it again.`,
+						);
+					}
+				}
+				message = withHidden(message, hidden);
+			}
 			const result = await runTurn({
 				workspace: turn.dir,
 				// edit/regenerate: replay from before the last user message (the old answer is replaced).

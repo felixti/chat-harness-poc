@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { AguiRun, resultText } from "../src/agui.ts";
-import { Gate, needsApproval, resumeMessage, stripHidden } from "../src/approvals.ts";
+import { Gate, needsApproval, resumeMessage, stripHidden, withHidden } from "../src/approvals.ts";
 
 const schemas = createRequire(import.meta.url)("@ag-ui/core/schemas");
 
@@ -35,20 +35,16 @@ test("which tools need approval", () => {
 		assert.ok(!needsApproval(t), t);
 });
 
-test("a write is blocked until approved; only the exact approved call runs, once", () => {
+test("a write is blocked until approved; approval hands the exact call to the server", () => {
 	const call = { toolCallId: "tc-1", toolName: "mcp__azuredevops__wit_work_item_write", input: { action: "create", project: "Demo", fields: { "System.Title": "Corrigir login" } } };
 	const g1 = new Gate();
 	assert.equal(g1.check(call)?.block, true);
 	assert.equal(g1.interrupts[0].message, "Azure DevOps: Criar work item no projeto Demo — “Corrigir login”");
-	const { message, allow } = resumeMessage(g1.interrupts, [{ interruptId: g1.interrupts[0].id, status: "resolved", payload: { approved: true } }]);
-	assert.match(stripHidden(message), /^Aprovado: Azure DevOps/);
-	assert.ok(!stripHidden(message).includes("harness"));
-	const g2 = new Gate();
-	for (const a of allow) g2.allow(a.toolName, a.input);
-	// same arguments in another key order: allowed once
-	assert.equal(g2.check({ ...call, input: { fields: { "System.Title": "Corrigir login" }, project: "Demo", action: "create" } }), undefined);
-	assert.equal(g2.check(call)?.block, true); // second run needs a new approval
-	assert.equal(g2.check({ ...call, input: { ...call.input, project: "Outro" } })?.block, true);
+	const r = resumeMessage(g1.interrupts, [{ interruptId: g1.interrupts[0].id, status: "resolved", payload: { approved: true } }]);
+	assert.match(r.message, /^Aprovado: Azure DevOps/);
+	assert.deepEqual(r.approved.map((x) => [x.toolName, x.input]), [[call.toolName, call.input]]);
+	// The model never gets a pass: the same call in a later turn asks again.
+	assert.equal(new Gate().check(call)?.block, true);
 });
 
 test("declined, questions, and stale interrupts", () => {
@@ -60,8 +56,10 @@ test("declined, questions, and stale interrupts", () => {
 		{ interruptId: g.interrupts[0].id, status: "resolved", payload: { approved: false } },
 		{ interruptId: g.interrupts[1].id, status: "resolved", payload: { answers: { aud: "Diretoria" } } },
 	]);
-	assert.deepEqual(r.allow, []);
-	assert.match(stripHidden(r.message), /Recusado: GitHub[\s\S]*Para quem é o deck\? → Diretoria/);
+	assert.deepEqual(r.approved, []);
+	assert.match(r.message, /Recusado: GitHub[\s\S]*Para quem é o deck\? → Diretoria/);
+	assert.match(withHidden(r.message, r.hidden), /<harness>The user declined/);
+	assert.equal(stripHidden(withHidden(r.message, r.hidden)), r.message);
 	assert.throws(() => resumeMessage(g.interrupts, [{ interruptId: "int-old", status: "resolved" }]), (e: any) => e.status === 409);
 });
 
@@ -91,4 +89,5 @@ test("the reload note lists tools from earlier messages", async () => {
 	const note = reloadNote([{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", name: "mcp__azuredevops__wit_work_item" }] } }]).join("");
 	assert.match(note, /NOT loaded in this message/);
 	assert.match(note, /call tool_search again \(for example with "azuredevops"/);
+	assert.deepEqual(reloadNote([{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", name: "mcp__azuredevops__wit_work_item" }] } }], ["azuredevops"]), []);
 });

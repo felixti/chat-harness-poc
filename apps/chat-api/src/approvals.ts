@@ -137,20 +137,27 @@ export class Gate {
 
 const HIDDEN = (s: string) => `\n\n<harness>${s}</harness>`;
 
-/** Resume entries + saved interrupts -> the message that continues the run, and the calls to allow. */
-export function resumeMessage(pending: Pending[], resume: ResumeEntry[]): { message: string; allow: { toolName: string; input: unknown }[] } {
+export interface ApprovedCall {
+	interruptId: string;
+	toolName: string;
+	input: unknown;
+	message: string;
+}
+
+/** Resume entries + saved interrupts -> what the user said, the hidden notes for the model, and the
+ *  approved calls. Approved calls are executed by chat-api itself (see server.ts), never by the model. */
+export function resumeMessage(pending: Pending[], resume: ResumeEntry[]): { message: string; approved: ApprovedCall[]; hidden: string[] } {
 	const parts: string[] = [];
 	const hidden: string[] = [];
-	const allow: { toolName: string; input: unknown }[] = [];
+	const approved: ApprovedCall[] = [];
 	for (const r of resume) {
 		const p = pending.find((x) => x.id === r.interruptId);
 		if (!p) throw Object.assign(new Error("this request is no longer pending (expired or already answered)"), { status: 409 });
 		if (p.reason === "tool_call") {
-			const approved = r.status === "resolved" && (r.payload as { approved?: boolean } | undefined)?.approved === true;
-			if (approved && p.toolName) {
+			const ok = r.status === "resolved" && (r.payload as { approved?: boolean } | undefined)?.approved === true;
+			if (ok && p.toolName) {
 				parts.push(`Aprovado: ${p.message}`);
-				hidden.push(`The user approved this exact call. Run it now, once, with these exact arguments, then report the result in one or two sentences: ${p.toolName} ${JSON.stringify(p.input)}`);
-				allow.push({ toolName: p.toolName, input: p.input });
+				approved.push({ interruptId: p.id, toolName: p.toolName, input: p.input, message: p.message });
 			} else {
 				parts.push(`Recusado: ${p.message}`);
 				hidden.push(`The user declined ${p.toolName}. Do not run it or anything equivalent. Acknowledge in one sentence.`);
@@ -162,8 +169,10 @@ export function resumeMessage(pending: Pending[], resume: ResumeEntry[]): { mess
 			hidden.push(r.status === "cancelled" ? "The user skipped the questions: continue with your recommended assumptions and state them briefly." : "Use these answers and continue the task now. Do not ask the same questions again.");
 		}
 	}
-	return { message: parts.join("\n") + HIDDEN(hidden.join(" ")), allow };
+	return { message: parts.join("\n"), approved, hidden };
 }
+
+export const withHidden = (message: string, hidden: string[]) => (hidden.length ? message + HIDDEN(hidden.join(" ")) : message);
 
 /** The questions tool. Execution never happens: the gate turns the call into an interrupt. */
 export function askUserTool(): ToolDefinition {

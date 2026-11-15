@@ -61,6 +61,8 @@ export interface McpServer {
 	description: string;
 	/** Sent with every request; carries the signed-in user's token where needed. */
 	headers?: Record<string, string>;
+	/** "direct": tools always declared (per-user connectors); "deferred": loaded via tool_search. */
+	exposure?: "direct" | "deferred";
 }
 
 export interface TurnInput {
@@ -140,8 +142,8 @@ export function previouslyLoadedTools(entries: unknown[]): Set<string> {
 /** Each turn rebuilds the session, so MCP tools that tool_search loaded in earlier messages are not
  *  declared now, while the history says they are. The provider only accepts declared tool names, so
  *  a model that "uses" one ends up calling an unrelated tool (it picked memory). Say so up front. */
-export function reloadNote(entries: unknown[]): string[] {
-	const tools = [...previouslyLoadedTools(entries)];
+export function reloadNote(entries: unknown[], alwaysLoaded: string[] = []): string[] {
+	const tools = [...previouslyLoadedTools(entries)].filter((t) => !alwaysLoaded.includes(t.split("__")[1]));
 	if (!tools.length) return [];
 	const servers = [...new Set(tools.map((t) => t.split("__")[1]))];
 	return [
@@ -171,7 +173,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 			),
 			diagnostics: base.diagnostics,
 		}),
-		appendSystemPrompt: [SYSTEM_APPEND, ...(input.systemAppend ? [input.systemAppend] : []), ...reloadNote(input.entries)],
+		appendSystemPrompt: [SYSTEM_APPEND, ...(input.systemAppend ? [input.systemAppend] : []), ...reloadNote(input.entries, input.mcpServers.filter((m) => m.exposure === "direct").map((m) => m.name))],
 		extensionFactories: [
 			// The gate runs before any tool (MCP ones included, and calls made from codemode).
 			(pi) => {
@@ -188,7 +190,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 						name: s.name,
 						source: "extension",
 						scope: "extension" as const,
-						config: { type: "http" as const, url: s.url, headers: s.headers, description: s.description, exposure: "deferred" as const },
+						config: { type: "http" as const, url: s.url, headers: s.headers, description: s.description, exposure: s.exposure ?? ("deferred" as const) },
 					})),
 				}),
 			}),

@@ -338,6 +338,9 @@ export async function connectedServers(user: string): Promise<McpServer[]> {
 			url: c.mcpUrl,
 			description: `${c.description} Connected as ${cred.account || "the user"}.${c.mcpHeaders?.["X-MCP-Readonly"] ? " Read-only." : " Write actions pause for the user's approval in the chat: call them with complete arguments, then wait."}`,
 			headers: { authorization: `Bearer ${token}`, ...c.mcpHeaders },
+			// The user's own connectors stay declared every turn: a deferred tool loaded in an earlier
+			// message is gone in the next one, and the model then picks an unrelated tool (H48).
+			exposure: "direct",
 		});
 	}
 	return out;
