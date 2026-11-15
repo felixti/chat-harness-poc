@@ -131,10 +131,10 @@ code, pre, kbd { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 }
 .notice.error { background: color-mix(in oklab, var(--danger) 12%, var(--bg)); }
 
-.welcome { flex: 1; display: grid; place-content: center; padding: 24px; gap: 26px; justify-items: center; }
-.welcome .composer-wrap { width: min(768px, 100%); padding: 0; }
+.welcome { flex: 1; display: grid; grid-template-columns: min(768px, 100%); align-content: center; justify-content: center; padding: 24px; gap: 26px; justify-items: stretch; }
+.welcome .composer-wrap { padding: 0; }
 .welcome h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin: 0; text-align: center; }
-.starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: min(768px, 100%); }
+.starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .starter {
 	text-align: left; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; color: var(--fg-2); font-size: 14px;
 	transition: background 150ms ease-out, border-color 150ms ease-out;
