@@ -84,3 +84,11 @@ test("tools loaded or used earlier in the conversation are re-activated", async 
 	];
 	assert.deepEqual([...previouslyLoadedTools(entries)].sort(), ["mcp__azuredevops__core_list_projects", "mcp__azuredevops__wit_work_item_link_write", "mcp__azuredevops__wit_work_item_write"]);
 });
+
+test("the reload note lists tools from earlier messages", async () => {
+	const { reloadNote } = await import("../src/agent.ts");
+	assert.deepEqual(reloadNote([]), []);
+	const note = reloadNote([{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", name: "mcp__azuredevops__wit_work_item" }] } }]).join("");
+	assert.match(note, /NOT loaded in this message/);
+	assert.match(note, /call tool_search again \(for example with "azuredevops"/);
+});

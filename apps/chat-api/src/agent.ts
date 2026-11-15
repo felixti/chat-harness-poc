@@ -137,6 +137,18 @@ export function previouslyLoadedTools(entries: unknown[]): Set<string> {
 	return out;
 }
 
+/** Each turn rebuilds the session, so MCP tools that tool_search loaded in earlier messages are not
+ *  declared now, while the history says they are. The provider only accepts declared tool names, so
+ *  a model that "uses" one ends up calling an unrelated tool (it picked memory). Say so up front. */
+export function reloadNote(entries: unknown[]): string[] {
+	const tools = [...previouslyLoadedTools(entries)];
+	if (!tools.length) return [];
+	const servers = [...new Set(tools.map((t) => t.split("__")[1]))];
+	return [
+		`\n## Tools from earlier messages\nMCP tools used or loaded earlier in this conversation (${tools.slice(0, 12).join(", ")}${tools.length > 12 ? ", ..." : ""}) are NOT loaded in this message. Before calling any of them, call tool_search again (for example with "${servers.join(" ")}" and the action you need). Never call an unrelated tool instead.`,
+	];
+}
+
 export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; text: string }> {
 	const cwd = input.workspace;
 	const settingsManager = SettingsManager.inMemory({
@@ -159,7 +171,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 			),
 			diagnostics: base.diagnostics,
 		}),
-		appendSystemPrompt: [SYSTEM_APPEND, ...(input.systemAppend ? [input.systemAppend] : [])],
+		appendSystemPrompt: [SYSTEM_APPEND, ...(input.systemAppend ? [input.systemAppend] : []), ...reloadNote(input.entries)],
 		extensionFactories: [
 			// The gate runs before any tool (MCP ones included, and calls made from codemode).
 			(pi) => {
@@ -218,16 +230,6 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 
 	try {
 		await session.bindExtensions({});
-		// Each turn rebuilds the session, and tools that tool_search loaded in earlier turns would be
-		// gone while the history says they are loaded: the model then calls the wrong tool. Re-activate
-		// every MCP tool the conversation already loaded or used.
-		const wanted = previouslyLoadedTools(input.entries);
-		if (wanted.size) {
-			const known = new Set(session.getAllTools().map((t) => t.name));
-			const add = [...wanted].filter((n) => known.has(n));
-			if (add.length) session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...add])]);
-			console.log(`[turn] re-activated ${add.length}/${wanted.size} MCP tools from history`);
-		}
 		// Pinned skills (the old API's `skills: [ids]`): one uses Pi's /skill command, several are
 		// named explicitly so the model reads each SKILL.md first.
 		const pinned = input.pinnedSkills ?? [];
