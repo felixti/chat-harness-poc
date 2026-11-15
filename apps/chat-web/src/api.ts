@@ -137,6 +137,7 @@ export const api = {
 	conversation: (id: string) => req<ConversationDetail>(`api/conversations/${id}`),
 	rename: (id: string, title: string) => req(`api/conversations/${id}`, send("PATCH", { title })),
 	remove: (id: string) => req(`api/conversations/${id}`, send("DELETE")),
+	removeMany: (ids: string[]) => req<{ deleted: string[] }>("api/conversations/delete", send("POST", { ids })),
 	feedback: (id: string, turn: string, value: "up" | "down" | null) => req(`api/conversations/${id}/feedback`, send("POST", { turn, value })),
 	files: (id: string) => req<FileInfo[]>(`api/conversations/${id}/files`),
 	upload: (id: string, file: File) => req<{ path: string }>(`api/conversations/${id}/uploads/${encodeURIComponent(file.name)}`, { method: "POST", body: file }),

@@ -49,3 +49,4 @@ current ~R$1.50/h cluster cost.
 | 2026-11-14 | 2 | "Meus arquivos" deployed (9e0c30f, H39): cross-conversation file reuse proven. Lifecycle applied (R$0): last-access 30 d, 7-day version purge for credentials/memory, operator IP kept via `operator_ip_rules`. |
 | 2026-11-14 | 2 | New portal (H41): React + Vite, ChatGPT-like, impeccable finish review = ship. |
 | 2026-11-15 | 2 | OneDrive/SharePoint connector + picker deployed (H42). Pending: first real connect with a personal Microsoft account. Company rollout: admin consent + tenant authority + Sites.Read.All. |
+| 2026-11-15 | 2 | Usability (H49): optional vim-mode navigation + "Atalhos" dialog; multi-select delete in the history (one request, up to 100). Verified in a headless browser: v → j/x → d deleted 2 conversations. |

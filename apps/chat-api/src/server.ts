@@ -262,6 +262,19 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 		const mine = config.connectors.masterKey ? await listSkills(user).catch(() => []) : [];
 		return json(res, 200, [...(await companySkills()), ...mine.map((s) => ({ name: `my-${s.name}`, label: `Meu: ${s.name.replace(/-/g, " ")}`, description: s.description, personal: true }))]);
 	}
+	// Bulk delete from the history ("Selecionar" in the sidebar): one request, up to 100 conversations.
+	if (url.pathname === "/api/conversations/delete" && req.method === "POST") {
+		const { ids } = JSON.parse((await body(req, 20_000)).toString()) as { ids?: unknown };
+		if (!Array.isArray(ids) || !ids.length || ids.length > 100 || !ids.every((i) => typeof i === "string" && /^[a-zA-Z0-9-]{8,64}$/.test(i)))
+			return json(res, 400, { error: "ids: 1 to 100 conversation ids" });
+		const deleted: string[] = [];
+		for (const id of new Set(ids as string[])) {
+			await store.remove(user, id);
+			await deletePrefix(user, id);
+			deleted.push(id);
+		}
+		return json(res, 200, { deleted });
+	}
 	const cv = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})(\/feedback)?$/);
 	if (cv) {
 		const id = cv[1];

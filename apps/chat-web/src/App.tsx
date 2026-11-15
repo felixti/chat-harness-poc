@@ -12,6 +12,7 @@ import { Composer, type Attachment } from "./Composer";
 import { Sidebar, type DrawerTab } from "./Sidebar";
 import { Drawer } from "./Drawer";
 import { DrivePicker } from "./DrivePicker";
+import { SELECT_SHORTCUTS, SHORTCUTS, useVimKeys, useVimSetting } from "./vim";
 
 const STARTERS = [
 	{ title: "Montar uma apresentação", hint: "Deck no padrão da empresa, com gráficos e fontes", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
@@ -46,6 +47,10 @@ export function App() {
 	const pendingConv = useRef<string>(undefined);
 	const previewDlg = useRef<HTMLDialogElement>(null);
 	const dropTarget = useRef<(f: FileList) => void>(undefined);
+	const [vim, setVim] = useVimSetting();
+	const [selecting, setSelecting] = useState(false);
+	const keysDlg = useRef<HTMLDialogElement>(null);
+	const searchRef = useRef<HTMLInputElement>(null);
 
 	const notify = useCallback((t: string) => {
 		setToast(t);
@@ -309,6 +314,59 @@ export function App() {
 	}
 
 	const empty = messages.length === 0;
+
+	function deleteConv(id: string) {
+		return api.remove(id).then(() => {
+			refreshList();
+			if (id === conv) startNew();
+			notify("Conversa apagada.");
+		});
+	}
+	async function deleteMany(ids: string[]) {
+		try {
+			const r = await api.removeMany(ids);
+			refreshList();
+			if (conv && r.deleted.includes(conv)) startNew();
+			notify(r.deleted.length === 1 ? "1 conversa apagada." : `${r.deleted.length} conversas apagadas.`);
+		} catch (e) {
+			notify(`Não consegui apagar: ${(e as Error).message}`);
+			refreshList();
+		}
+	}
+
+	const scrollBy = (dy: number) => scroller.current?.scrollBy({ top: dy, behavior: "smooth" });
+	const step = (d: number) => {
+		const i = list.findIndex((c) => c.id === conv);
+		const next = list[i < 0 ? (d > 0 ? 0 : list.length - 1) : i + d];
+		if (next) void open(next.id);
+	};
+	useVimKeys(
+		vim && !selecting,
+		{
+			j: () => scrollBy(80),
+			k: () => scrollBy(-80),
+			"C-d": () => scrollBy((scroller.current?.clientHeight ?? 600) / 2),
+			"C-u": () => scrollBy(-(scroller.current?.clientHeight ?? 600) / 2),
+			gg: () => scroller.current?.scrollTo({ top: 0, behavior: "smooth" }),
+			G: () => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }),
+			J: () => step(1),
+			K: () => step(-1),
+			o: startNew,
+			i: () => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus(),
+			"/": () => {
+				setSideOpen(true);
+				requestAnimationFrame(() => searchRef.current?.focus());
+			},
+			dd: () => {
+				if (conv && confirm("Apagar esta conversa e os arquivos dela? Não dá para desfazer.")) void deleteConv(conv);
+			},
+			v: () => {
+				setSideOpen(true);
+				setSelecting(true);
+			},
+		},
+		() => keysDlg.current?.showModal(),
+	);
 	// A JSX value, not a nested component: the composer keeps its draft across renders.
 	const composer = (
 		<Composer
@@ -354,13 +412,13 @@ export function App() {
 						if (id === conv) setTitle(t);
 					})
 				}
-				onDelete={(id) =>
-					api.remove(id).then(() => {
-						refreshList();
-						if (id === conv) startNew();
-						notify("Conversa apagada.");
-					})
-				}
+				onDelete={(id) => void deleteConv(id)}
+				onDeleteMany={deleteMany}
+				selecting={selecting}
+				setSelecting={setSelecting}
+				vim={vim}
+				onShortcuts={() => keysDlg.current?.showModal()}
+				searchRef={searchRef}
 				onDrawer={(t) => setDrawer((d) => (d === t ? undefined : t))}
 				drawer={drawer}
 			/>
@@ -449,6 +507,47 @@ export function App() {
 				{dragging && <div className="drop">Solte os arquivos para anexar</div>}
 			</main>
 			{drawer && <Drawer tab={drawer} setTab={setDrawer} onClose={() => setDrawer(undefined)} conv={conv} files={files} onUse={useFromLibrary} onPreview={openPreview} onCloud={cloud} refreshKey={refreshKey} />}
+			<dialog className="keys" ref={keysDlg} aria-label="Atalhos de teclado">
+				<header>
+					<strong>Atalhos de teclado</strong>
+					<button type="button" className="icon-btn" aria-label="Fechar" onClick={() => keysDlg.current?.close()}>
+						<X size={18} />
+					</button>
+				</header>
+				<div className="body">
+					<label className="toggle">
+						<input type="checkbox" checked={vim} onChange={(e) => setVim(e.target.checked)} />
+						Modo vim
+					</label>
+					<p className="hint">Navegue sem mouse. Funciona fora dos campos de texto; fica salvo neste navegador.</p>
+					<div>
+						<h3>Navegação</h3>
+						<dl className={vim ? "" : "off"}>
+							{SHORTCUTS.map(([k, d]) => (
+								<div key={k} style={{ display: "contents" }}>
+									<dt>{k.split(" / ").map((x, n) => (<span key={x}>{n > 0 && " / "}<kbd>{x}</kbd></span>))}</dt>
+									<dd>{d}</dd>
+								</div>
+							))}
+							<dt><kbd>?</kbd></dt>
+							<dd>Mostrar esta janela</dd>
+						</dl>
+					</div>
+					<div>
+						<h3>Seleção de conversas (também sem o modo vim)</h3>
+						<dl>
+							{SELECT_SHORTCUTS.map(([k, d]) => (
+								<div key={k} style={{ display: "contents" }}>
+									<dt>{k.split(" / ").map((x, n) => (<span key={x}>{n > 0 && " / "}<kbd>{x}</kbd></span>))}</dt>
+									<dd>{d}</dd>
+								</div>
+							))}
+							<dt><kbd>Ctrl</kbd> / <kbd>Shift</kbd> + clique</dt>
+							<dd>Começar a seleção / marcar um intervalo</dd>
+						</dl>
+					</div>
+				</div>
+			</dialog>
 			<dialog className="sheet" ref={previewDlg} onClose={() => setPreview(undefined)}>
 				{preview && conv && (
 					<>
