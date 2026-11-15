@@ -45,6 +45,8 @@ export const config = {
 	},
 	/** OpenRouter image model for generate_image (through the same gateway). MiniMax H3 at 1K:
 	 *  ~US$0.021/image and closer to the theme palette; Gemini Flash Lite Image is the fast fallback. */
+	/** USD -> BRL for the cost shown in the portal (H58); update it with the month's rate. */
+	usdBrl: Number(env.USD_BRL ?? 5.4),
 	imageModel: env.IMAGE_MODEL ?? "minimax/minimax-h3-image",
 	blob: {
 		/** e.g. https://stagentpocjt75.blob.core.windows.net ; empty = local-only workspaces */

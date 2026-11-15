@@ -15,6 +15,7 @@ import { DrivePicker } from "./DrivePicker";
 import { CanvasPanel, type CanvasTarget } from "./CanvasPanel";
 import { SELECT_SHORTCUTS, SHORTCUTS, useVimKeys, useVimSetting } from "./vim";
 import { loadModelPref, ModelPicker, type ModelPref } from "./ModelPicker";
+import { fmtBrl, fmtUsd, type Spend } from "./cost";
 
 const STARTERS = [
 	{ title: "Montar uma apresentação", hint: "Deck no padrão da empresa, com gráficos e fontes", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
@@ -42,6 +43,12 @@ export function App() {
 	const [notice, setNotice] = useState<{ text: string; error?: boolean; action?: { label: string; run: () => void } }>();
 	const [seed, setSeed] = useState<{ text: string; n: number }>();
 	const [modelPref, setModelPref] = useState<ModelPref>(loadModelPref);
+	// Cost (H58): this conversation and the user's month, from the server's ledger.
+	const [convCost, setConvCost] = useState<Spend>();
+	const [monthCost, setMonthCost] = useState<Spend>();
+	useEffect(() => {
+		api.usage().then((u) => setMonthCost(u.month)).catch(() => {});
+	}, []);
 	const [attachments, setAttachments] = useState<Attachment[]>([]);
 	const [dragging, setDragging] = useState(false);
 	const [preview, setPreview] = useState<FileInfo>();
@@ -154,6 +161,7 @@ export function App() {
 			setMessages(msgs);
 			setFiles(d.files);
 			setVotes(d.feedback);
+			setConvCost(d.cost);
 			setNotice(undefined);
 			setCanvas((c) => (id === conv ? c : undefined));
 			pendingConv.current = undefined;
@@ -175,6 +183,7 @@ export function App() {
 		setMessages([]);
 		setFiles([]);
 		setVotes({});
+		setConvCost(undefined);
 		setNotice(undefined);
 		setAttachments([]);
 		pendingConv.current = undefined;
@@ -250,7 +259,11 @@ export function App() {
 						break;
 					case "CUSTOM":
 						if (ev.name === "memory_used") patch((a) => ({ ...a, memory: ev.value as MemoryUsed }));
-						else if (ev.name === "memory_saved") patch((a) => ({ ...a, saved: ev.value as string[] }));
+						else if (ev.name === "usage") {
+							const u = ev.value as { conversation: Spend; month: Spend };
+							setConvCost(u.conversation);
+							setMonthCost(u.month);
+						} else if (ev.name === "memory_saved") patch((a) => ({ ...a, saved: ev.value as string[] }));
 						else if (ev.name === "canvas") {
 							const c = ev.value as CanvasEvent;
 							setDrawer(undefined);
@@ -480,6 +493,7 @@ export function App() {
 				setSelecting={setSelecting}
 				vim={vim}
 				onShortcuts={() => keysDlg.current?.showModal()}
+				monthCost={monthCost}
 				searchRef={searchRef}
 				onDrawer={(t) => {
 					setCanvas(undefined);
@@ -501,6 +515,11 @@ export function App() {
 					)}
 					<span className="conv-title">{title || (sideOpen ? "" : "Assistente")}</span>
 					<span className="spacer" />
+					{convCost && convCost.turns > 0 && (
+						<span className="cost-chip" title={`Custo desta conversa: ${fmtBrl(convCost.brl)} (${fmtUsd(convCost.usd)}) em ${convCost.turns} ${convCost.turns === 1 ? "resposta" : "respostas"}. Estimativa pelos preços do provedor.`}>
+							Conversa: {fmtBrl(convCost.brl)}
+						</span>
+					)}
 					<ModelPicker pref={modelPref} setPref={setModelPref} disabled={busy} />
 				</div>
 				{notice && (

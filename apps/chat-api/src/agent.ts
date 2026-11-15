@@ -17,6 +17,7 @@ import { bashTool, generatePdfTool, parseDocumentTool } from "./tools.ts";
 import { officeTools } from "./office/tools.ts";
 import { guardedFileTools } from "./fs-guard.ts";
 import { foreignToolCallsAsText } from "./crossmodel.ts";
+import { emptyUsage, gatewayPrices, type TurnUsage } from "./usage.ts";
 
 const agentDir = join(config.tmpRoot, "agent");
 const PROVIDER = "gateway";
@@ -36,6 +37,7 @@ export function modelChoices() {
 async function modelRuntime(): Promise<ModelRuntime> {
 	if (runtime) return runtime;
 	await mkdir(agentDir, { recursive: true });
+	const prices = await gatewayPrices(modelChoices().map((m) => m.id));
 	const modelsPath = join(agentDir, "models.json");
 	await writeFile(
 		modelsPath,
@@ -56,7 +58,8 @@ async function modelRuntime(): Promise<ModelRuntime> {
 						contextWindow: config.llm.contextWindow,
 						// Reasoning and the answer share max_tokens on OpenRouter.
 						maxTokens: 32768,
-						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+						// Real prices, so pi reports each call's cost (H58).
+						cost: prices[m.id] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 						compat: { thinkingFormat: "openrouter", supportsReasoningEffort: true, ...(m.id.startsWith("anthropic/") ? { cacheControlFormat: "anthropic" } : {}) },
 					})),
 				},
@@ -168,7 +171,7 @@ export function reloadNote(entries: unknown[], alwaysLoaded: string[] = []): str
 	];
 }
 
-export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; text: string }> {
+export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; text: string; usage: TurnUsage }> {
 	const cwd = input.workspace;
 	const settingsManager = SettingsManager.inMemory({
 		compaction: { enabled: true },
@@ -177,6 +180,9 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 	});
 	const usedServers = new Set([...previouslyLoadedTools(input.entries)].map((t) => t.split("__")[1]));
 	const modelId = input.model && modelChoices().some((m) => m.id === input.model) ? input.model : config.llm.model;
+	const billed = { usd: 0, seen: 0 };
+	const usage = emptyUsage(modelId);
+	let imagesUsd = 0;
 	const resourceLoader = new DefaultResourceLoader({
 		cwd,
 		agentDir,
@@ -198,6 +204,12 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 			(pi) => {
 				if (input.gate) pi.on("tool_call", (e) => input.gate!.check({ toolCallId: e.toolCallId, toolName: e.toolName, input: e.input }));
 				pi.on("context", (e) => ({ messages: foreignToolCallsAsText(e.messages, modelId) }));
+				// OpenRouter reports what it billed in the last stream chunk (usage.cost, USD): the price
+				// list can differ from the provider it routed to (H58), so this wins when present.
+				pi.on("provider_stream_event", (e) => {
+					const cost = (e.data as { usage?: { cost?: unknown } } | undefined)?.usage?.cost;
+					if (typeof cost === "number" && Number.isFinite(cost)) (billed.usd += cost, billed.seen++);
+				});
 			},
 			createToolSearchExtension(),
 			createMcpExtension({
@@ -241,6 +253,19 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 	});
 
 	const unsubscribe = session.subscribe((event) => {
+		if (event.type === "message_end" && event.message.role === "assistant") {
+			const u = (event.message as { usage?: { input?: number; output?: number; cacheRead?: number; cost?: { total?: number } } }).usage;
+			usage.calls++;
+			usage.input += u?.input ?? 0;
+			usage.output += u?.output ?? 0;
+			usage.cacheRead += u?.cacheRead ?? 0;
+			usage.usd += u?.cost?.total ?? 0;
+		}
+		if (event.type === "tool_execution_end" && event.toolName === "generate_image" && !event.isError) {
+			// The image tool reports the provider's cost in its result ("US$0.021").
+			const cost = /US\$([\d.]+)/.exec(JSON.stringify(event.result ?? ""))?.[1];
+			if (cost) (imagesUsd += Number(cost), usage.images++);
+		}
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 			input.onEvent({ type: "delta", text: event.assistantMessageEvent.delta });
 		} else if (event.type === "tool_execution_start") {
@@ -269,7 +294,10 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 			console.warn(`[turn] ended with stopReason=${last.stopReason} ${last.errorMessage ?? ""}`);
 			if (last.stopReason === "error") input.onEvent({ type: "error", message: last.errorMessage ?? "model error" });
 		}
-		return { entries: session.sessionManager.getEntries(), text: session.getLastAssistantText() ?? "" };
+		// Billed cost when every model call reported one; else the price-list estimate.
+		if (billed.seen >= usage.calls && billed.seen > 0) usage.usd = billed.usd;
+		usage.usd += imagesUsd;
+		return { entries: session.sessionManager.getEntries(), text: session.getLastAssistantText() ?? "", usage };
 	} finally {
 		unsubscribe();
 		session.dispose();

@@ -77,6 +77,7 @@ export interface ConversationDetail {
 	files: FileInfo[];
 	feedback: Record<string, "up" | "down">;
 	interrupts?: Interrupt[];
+	cost?: import("./cost").Spend;
 }
 export interface LibraryFile {
 	id: string;
@@ -175,6 +176,7 @@ const send = (method: string, body?: unknown): RequestInit => ({
 
 export const api = {
 	conversations: () => req<ConversationSummary[]>("api/conversations"),
+	usage: () => req<{ month: import("./cost").Spend; usdBrl: number }>("api/usage"),
 	models: () => req<{ models: ModelChoice[]; default: string; efforts: Effort[]; defaultEffort: Effort }>("api/models"),
 	conversation: (id: string) => req<ConversationDetail>(`api/conversations/${id}`),
 	rename: (id: string, title: string) => req(`api/conversations/${id}`, send("PATCH", { title })),

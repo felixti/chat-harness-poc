@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { extname, join, relative } from "node:path";
 import { config } from "./config.ts";
+import { openLedger } from "./usage.ts";
 import { EFFORTS, modelChoices, runTurn, type Effort, type McpServer } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
@@ -24,6 +25,7 @@ import { authorizeRedirect, completeAuthorization, connectedServers, disconnect,
 import { listFiles, openTurn, readFileFromStore, userVisible, workspacePath, writeFileToStore } from "./workspace.ts";
 
 const store = await openStore(config.mongoUrl);
+const ledger = await openLedger(config.mongoUrl);
 const ID = /^[a-zA-Z0-9-]{8,64}$/;
 
 /** Identity: in the cluster the gateway authenticates (Entra OIDC) and forwards the user. */
@@ -198,6 +200,10 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				summary = cur.summary ?? summary;
 				if (cur.saved.length) run.custom("memory_saved", cur.saved);
 			}
+			// Cost (H58): recorded before saving the conversation, so a save conflict does not lose it.
+			await ledger.add(user, id, result.usage).catch((e) => console.warn(`[usage] ${(e as Error).message}`));
+			const [convSpend, monthSpend] = await Promise.all([ledger.conversation(user, id), ledger.month(user)]).catch(() => [undefined, undefined]);
+			if (convSpend && monthSpend) run.custom("usage", { turn: { usd: result.usage.usd, brl: result.usage.usd * config.usdBrl, model: result.usage.model, input: result.usage.input + result.usage.cacheRead, output: result.usage.output }, conversation: convSpend, month: monthSpend });
 			await store.save({
 				id,
 				user,
@@ -260,6 +266,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (req.method === "GET" && !url.pathname.startsWith("/api/") && (await staticFile(res, url.pathname))) return;
 	const user = userOf(req);
 	if (url.pathname === "/api/me") return json(res, 200, { user });
+	if (url.pathname === "/api/usage" && req.method === "GET") return json(res, 200, { month: await ledger.month(user), usdBrl: config.usdBrl });
 	if (url.pathname === "/api/models" && req.method === "GET") return json(res, 200, { models: modelChoices(), default: config.llm.model, efforts: EFFORTS, defaultEffort: "medium" });
 	if (url.pathname === "/api/conversations" && req.method === "GET") return json(res, 200, await store.list(user));
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
@@ -322,6 +329,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 				messages: entriesToView(c.entries),
 				files: userVisible(await listFiles(user, id)),
 				feedback: await store.feedbackOf(user, id),
+				cost: await ledger.conversation(user, id),
 				interrupts: (c.pending ?? []).map(({ id: iid, reason, message, toolCallId, responseSchema, toolName, input, questions }) => ({ id: iid, reason, message, toolCallId, responseSchema, metadata: { toolName, input, questions } })),
 			});
 		}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Check, FolderOpen, Keyboard, ListChecks, Monitor, Moon, MoreHorizontal, PanelLeft, Pencil, Plug, Search, SquarePen, Sun, Trash2 } from "lucide-react";
 import { isTyping } from "./vim";
 import { setThemePref, themePref, type ThemePref } from "./theme";
+import { fmtBrl, fmtUsd, monthName, type Spend } from "./cost";
 import type { ConversationSummary } from "./api";
 
 export type DrawerTab = "memory" | "files" | "connectors";
@@ -35,6 +36,7 @@ export function Sidebar({
 	vim,
 	onShortcuts,
 	searchRef,
+	monthCost,
 }: {
 	open: boolean;
 	list: ConversationSummary[];
@@ -49,6 +51,8 @@ export function Sidebar({
 	setSelecting: (v: boolean) => void;
 	vim: boolean;
 	onShortcuts: () => void;
+	/** The user's spend this month (H58). */
+	monthCost?: Spend;
 	searchRef: React.RefObject<HTMLInputElement | null>;
 	onDrawer: (t: DrawerTab) => void;
 	drawer?: DrawerTab;
@@ -295,6 +299,11 @@ export function Sidebar({
 				<button type="button" className="side-link" onClick={onShortcuts}>
 					<Keyboard size={17} /> Atalhos {vim && <span className="count">vim</span>}
 				</button>
+				{monthCost && (
+					<p className="month-cost" title={`${monthCost.turns} respostas em ${monthName()} · ${fmtUsd(monthCost.usd)}. Estimativa pelos preços do provedor; não inclui a memória em segundo plano.`}>
+						Gasto em {monthName()}: <strong>{fmtBrl(monthCost.brl)}</strong>
+					</p>
+				)}
 				<ThemeSwitch />
 			</div>
 			{menu && (
