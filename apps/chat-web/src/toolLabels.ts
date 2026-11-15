@@ -64,3 +64,20 @@ export function toolLabel(name: string, args: unknown): string {
 			return name.replace(/_/g, " ");
 	}
 }
+
+/** Past tense for a finished turn's summary ("Consultou a memória, Gerou a planilha · 3 etapas"). */
+export function toolDone(name: string): string {
+	if (name.startsWith("mcp__brave__")) return name.includes("llm_context") ? "Leu páginas da web" : "Pesquisou na web";
+	if (name.startsWith("mcp__github__")) return "Consultou o GitHub";
+	if (name.startsWith("mcp__context7__")) return "Consultou documentação";
+	if (name.startsWith("mcp__")) return "Usou um conector";
+	const DONE: Record<string, string> = {
+		read: "Leu arquivos", write: "Escreveu arquivos", edit: "Editou arquivos", ls: "Listou arquivos", bash: "Processou os dados",
+		parse_document: "Leu o documento", tool_search: "Escolheu as ferramentas", describe_data: "Analisou os dados", query_data: "Consultou os dados",
+		generate_pptx: "Montou a apresentação", generate_docx: "Gerou o documento Word", generate_xlsx: "Gerou a planilha", generate_pdf: "Gerou o PDF",
+		generate_dashboard: "Montou o dashboard", generate_image: "Criou uma imagem", memory: "Atualizou a memória", remember: "Guardou um fato",
+		recall: "Consultou a memória", forget: "Esqueceu um fato", session_search: "Buscou conversas anteriores", skill_save: "Salvou o procedimento",
+		skill_delete: "Apagou um procedimento", my_files: "Procurou nos seus arquivos", attach_file: "Anexou um arquivo",
+	};
+	return DONE[name] ?? name.replace(/_/g, " ");
+}

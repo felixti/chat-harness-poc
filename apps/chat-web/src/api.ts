@@ -57,6 +57,7 @@ export interface LibraryFile {
 }
 export interface Skill {
 	name: string;
+	label?: string;
 	description: string;
 	personal?: boolean;
 }

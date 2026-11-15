@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Brain, Check, ChevronRight, Copy, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Pencil, Presentation, RefreshCw, ThumbsDown, ThumbsUp, LayoutDashboard } from "lucide-react";
 import { fileUrl, type FileInfo, type Message, type ToolStep } from "./api";
 import { Markdown, copyText } from "./Markdown";
-import { toolLabel } from "./toolLabels";
+import { toolDone, toolLabel } from "./toolLabels";
 
 export function Steps({ steps, running }: { steps: ToolStep[]; running: boolean }) {
 	const [open, setOpen] = useState(false);
@@ -11,7 +11,7 @@ export function Steps({ steps, running }: { steps: ToolStep[]; running: boolean 
 	const errors = steps.filter((s) => s.isError).length;
 	const label = running
 		? toolLabel(current.name, current.args)
-		: `${steps.length === 1 ? "1 etapa" : `${steps.length} etapas`}${errors ? ` · ${errors} com erro` : ""} · ${[...new Set(steps.map((s) => toolLabel(s.name, s.args).split(":")[0]))].slice(0, 3).join(", ")}`;
+		: `${[...new Set(steps.map((s) => toolDone(s.name)))].slice(0, 3).join(", ")} · ${steps.length === 1 ? "1 etapa" : `${steps.length} etapas`}${errors ? `, ${errors} com erro` : ""}`;
 	return (
 		<div className="steps">
 			<button type="button" className="steps-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
@@ -185,6 +185,11 @@ export function AssistantMessage({
 	const used = m.memory ? m.memory.core + m.memory.facts.length + m.memory.conversations.length : 0;
 	return (
 		<div className={`msg assistant${last ? " last" : ""}`}>
+			{m.streaming && !m.parts.length && (
+				<div className="thinking running-label" role="status">
+					Pensando…
+				</div>
+			)}
 			<Steps steps={steps} running={running} />
 			{text ? <Markdown text={text} conv={conv} final={!m.streaming} /> : null}
 			{m.streaming && text && <span className="caret" aria-hidden="true" />}

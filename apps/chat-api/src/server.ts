@@ -64,6 +64,14 @@ function json(res: ServerResponse, status: number, data: unknown) {
 	res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(data));
 }
 
+/** First words of the first message, cut at a word boundary. */
+function titleOf(message: string): string {
+	const t = message.replace(/\s+/g, " ").replace(/\(arquivos anexados:[^)]*\)/, "").trim() || "Nova conversa";
+	if (t.length <= 60) return t;
+	const cut = t.slice(0, 60);
+	return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 30)).replace(/[,.;:]$/, "")}…`;
+}
+
 /** Retrieved memory for this turn; tells the portal what was used ("memória usada" chip). */
 async function memoryContext(user: string, message: string, id: string, facts: FactGraph | undefined, send: (e: unknown) => void): Promise<string> {
 	const [{ prompt, used }, core] = await Promise.all([retrieve(user, message, id, store, facts), coreEntries(user).catch(() => ({ user: [], memory: [] }))]);
@@ -122,7 +130,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				if (cur.saved.length) send({ type: "memory", saved: cur.saved });
 				console.log(`[curator] saved ${cur.saved.length}${cur.summary ? ", summary updated" : ""}`);
 			}
-			await store.save({ id, user, title: existing?.title ?? input.message.slice(0, 60), entries: result.entries, updatedAt: new Date(), summary, version: existing?.version });
+			await store.save({ id, user, title: existing?.title ?? titleOf(input.message), entries: result.entries, updatedAt: new Date(), summary, version: existing?.version });
 			send({ type: "done", conversationId: id, files: userVisible(files) });
 		} catch (e) {
 			send({ type: "error", message: (e as Error).message });
@@ -166,7 +174,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
 	if (url.pathname === "/api/skills" && req.method === "GET") {
 		const mine = config.connectors.masterKey ? await listSkills(user).catch(() => []) : [];
-		return json(res, 200, [...(await companySkills()), ...mine.map((s) => ({ name: `my-${s.name}`, description: s.description, personal: true }))]);
+		return json(res, 200, [...(await companySkills()), ...mine.map((s) => ({ name: `my-${s.name}`, label: `Meu: ${s.name.replace(/-/g, " ")}`, description: s.description, personal: true }))]);
 	}
 	const cv = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})(\/feedback)?$/);
 	if (cv) {

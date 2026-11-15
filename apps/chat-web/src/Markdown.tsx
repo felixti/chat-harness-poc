@@ -96,7 +96,8 @@ function sized(svg: string): string {
 
 const toSvgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
-function Figure({ svg, source, lang }: { svg: string; source: string; lang: string }) {
+function Figure({ svg, source, lang, exportSvg }: { svg: string; source: string; lang: string; exportSvg?: () => Promise<string> }) {
+	const out = exportSvg ?? (() => Promise.resolve(svg));
 	const [showCode, setShowCode] = useState(false);
 	return (
 		<div className="block">
@@ -106,9 +107,9 @@ function Figure({ svg, source, lang }: { svg: string; source: string; lang: stri
 					<Code2 size={14} />
 					<span className="txt">Código</span>
 				</button>
-				<CopyAction get={() => copySvgAsPng(svg)} label="Copiar imagem" icon={<ImageIcon size={14} />} />
+				<CopyAction get={async () => copySvgAsPng(await out())} label="Copiar imagem" icon={<ImageIcon size={14} />} />
 				<CopyAction get={() => copyText(source)} label="Copiar código" />
-				<button type="button" className="act" onClick={() => download(`${lang}.svg`, svg, "image/svg+xml")} aria-label="Baixar SVG">
+				<button type="button" className="act" onClick={async () => download(`${lang}.svg`, await out(), "image/svg+xml")} aria-label="Baixar SVG">
 					<Download size={14} />
 				</button>
 			</div>
@@ -127,6 +128,29 @@ function Figure({ svg, source, lang }: { svg: string; source: string; lang: stri
 
 let mermaidLoad: Promise<typeof import("mermaid").default> | undefined;
 let mermaidSeq = 0;
+let mermaidQueue: Promise<unknown> = Promise.resolve();
+
+/** Renders one diagram with a theme. Calls are serialized: initialize() is global in mermaid. */
+function renderMermaid(source: string, theme: "dark" | "neutral"): Promise<string> {
+	mermaidLoad ??= import("mermaid").then((m) => m.default);
+	const job = mermaidQueue.then(async () => {
+		const m = await mermaidLoad!;
+		// htmlLabels off: labels are plain SVG text, so the diagram survives being shown as an image.
+		m.initialize({
+			startOnLoad: false,
+			theme,
+			securityLevel: "strict",
+			htmlLabels: false,
+			flowchart: { htmlLabels: false },
+			fontFamily: "ui-sans-serif, Segoe UI, Roboto, Arial",
+		} as Parameters<typeof m.initialize>[0]);
+		return sized((await m.render(`mmd-${++mermaidSeq}`, source)).svg);
+	});
+	mermaidQueue = job.catch(() => undefined);
+	return job;
+}
+
+const isDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
 
 function Mermaid({ source, final }: { source: string; final: boolean }) {
 	const [svg, setSvg] = useState<string>();
@@ -134,28 +158,16 @@ function Mermaid({ source, final }: { source: string; final: boolean }) {
 	useEffect(() => {
 		if (!final) return;
 		let alive = true;
-		mermaidLoad ??= import("mermaid").then((m) => {
-			const dark = matchMedia("(prefers-color-scheme: dark)").matches;
-			// htmlLabels off: labels are plain SVG text, so the diagram survives being shown as an image.
-			m.default.initialize({
-				startOnLoad: false,
-				theme: dark ? "dark" : "neutral",
-				securityLevel: "strict",
-				htmlLabels: false,
-				flowchart: { htmlLabels: false },
-				fontFamily: "ui-sans-serif, Segoe UI, Roboto, Arial",
-			} as Parameters<typeof m.default.initialize>[0]);
-			return m.default;
-		});
-		mermaidLoad
-			.then((m) => m.render(`mmd-${++mermaidSeq}`, source))
-			.then((r) => alive && setSvg(sized(r.svg)))
+		renderMermaid(source, isDark() ? "dark" : "neutral")
+			.then((r) => alive && setSvg(r))
 			.catch((e) => alive && setError(String(e?.message ?? e).split("\n")[0]));
 		return () => {
 			alive = false;
 		};
 	}, [source, final]);
-	if (svg) return <Figure svg={svg} source={source} lang="mermaid" />;
+	// Copies and downloads always use the light theme: they get pasted into slides and documents.
+	const exportSvg = () => (isDark() ? renderMermaid(source, "neutral") : Promise.resolve(svg!));
+	if (svg) return <Figure svg={svg} source={source} lang="mermaid" exportSvg={exportSvg} />;
 	return (
 		<div className="block">
 			<div className="block-head">
@@ -188,7 +200,7 @@ function CodeBlock({ lang, source, children, final }: { lang: string; source: st
 	return (
 		<div className="block">
 			<div className="block-head">
-				<span className="lang">{ascii ? "diagrama" : lang || "texto"}</span>
+				<span className={ascii || !lang ? "lang ui" : "lang"}>{ascii ? "diagrama" : lang || "texto"}</span>
 				<CopyAction get={() => copyText(source)} />
 			</div>
 			<pre className={ascii ? "ascii" : undefined}>{ascii ? source : <code>{children}</code>}</pre>
@@ -216,7 +228,7 @@ function Table({ children }: { children: ReactNode }) {
 	return (
 		<div className="block">
 			<div className="block-head">
-				<span className="lang">tabela</span>
+				<span className="lang ui">tabela</span>
 				<CopyAction get={() => copyText(tsv())} label="Copiar para Excel" />
 			</div>
 			<div className="table-wrap">

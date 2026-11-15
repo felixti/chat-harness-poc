@@ -35,6 +35,7 @@ export function Composer({
 }) {
 	const [text, setText] = useState("");
 	const [skills, setSkills] = useState<string[]>([]);
+	const labelOf = (n: string) => catalog.find((s) => s.name === n)?.label ?? n;
 	const [catalog, setCatalog] = useState<Skill[]>([]);
 	const [library, setLibrary] = useState<LibraryFile[]>([]);
 	const [sel, setSel] = useState(0);
@@ -67,12 +68,12 @@ export function Composer({
 	const items = useMemo<MenuItem[]>(() => {
 		if (slash !== undefined)
 			return catalog
-				.filter((s) => s.name.includes(slash.toLowerCase()) && !skills.includes(s.name))
+				.filter((s) => `${s.name} ${s.label ?? ""}`.toLowerCase().includes(slash.toLowerCase()) && !skills.includes(s.name))
 				.slice(0, 12)
 				.map((s) => ({
 					key: s.name,
-					title: s.name,
-					detail: s.description,
+					title: s.label ?? s.name,
+					detail: `/${s.name} · ${s.description}`,
 					pick: () => {
 						setSkills((k) => [...k, s.name]);
 						setText("");
@@ -184,7 +185,7 @@ export function Composer({
 					<div className="chips">
 						{skills.map((s) => (
 							<span className="chip skill" key={s}>
-								<span>/{s}</span>
+								<span>{labelOf(s)}</span>
 								<button type="button" aria-label={`Remover skill ${s}`} onClick={() => setSkills((k) => k.filter((x) => x !== s))}>
 									<X size={12} />
 								</button>

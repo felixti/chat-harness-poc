@@ -7,10 +7,10 @@ import { Sidebar, type DrawerTab } from "./Sidebar";
 import { Drawer } from "./Drawer";
 
 const STARTERS = [
-	{ title: "Montar uma apresentação", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
-	{ title: "Analisar uma planilha", text: "Analise a planilha anexada e me diga os 3 pontos principais." },
-	{ title: "Criar um dashboard", text: "Monte um dashboard HTML com os dados da planilha anexada, com filtros por " },
-	{ title: "Resumir um documento", text: "Resuma o documento anexado em 5 tópicos e liste as decisões pendentes." },
+	{ title: "Montar uma apresentação", hint: "Deck no padrão da empresa, com gráficos e fontes", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
+	{ title: "Analisar uma planilha", hint: "Anexe um Excel ou CSV e receba os destaques", text: "Analise a planilha anexada e me diga os 3 pontos principais." },
+	{ title: "Criar um dashboard", hint: "Painel HTML interativo a partir dos seus dados", text: "Monte um dashboard HTML com os dados da planilha anexada, com filtros por " },
+	{ title: "Resumir um documento", hint: "PDF, Word ou PowerPoint em tópicos e decisões", text: "Resuma o documento anexado em 5 tópicos e liste as decisões pendentes." },
 ];
 const isMobile = () => matchMedia("(max-width: 860px)").matches;
 const newId = () => crypto.randomUUID();
@@ -135,7 +135,7 @@ export function App() {
 					convId = ev.conversationId;
 					if (!conv) {
 						setConv(convId);
-						setTitle(text.slice(0, 60));
+						setTitle(display ?? text);
 						history.replaceState(null, "", `#${convId}`);
 					}
 				} else if (ev.type === "delta") {
@@ -306,7 +306,7 @@ export function App() {
 							{STARTERS.map((s) => (
 								<button key={s.title} type="button" className="starter" onClick={() => setSeed({ text: s.text, n: Date.now() })}>
 									<strong>{s.title}</strong>
-									{s.text}
+									{s.hint}
 								</button>
 							))}
 						</div>

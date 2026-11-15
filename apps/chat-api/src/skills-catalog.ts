@@ -14,19 +14,23 @@ const PT: Record<string, string> = {
 	research: "Pesquisa na web com fontes",
 };
 
-let cache: { name: string; description: string }[] | undefined;
+const LABEL: Record<string, string> = {
+	pptx: "Apresentação", docx: "Documento Word", pdf: "PDF", "xlsx-csv": "Planilha", dashboard: "Dashboard", design: "Design", research: "Pesquisa",
+};
 
-export async function companySkills(): Promise<{ name: string; description: string }[]> {
+let cache: { name: string; label: string; description: string }[] | undefined;
+
+export async function companySkills(): Promise<{ name: string; label: string; description: string }[]> {
 	if (cache) return cache;
-	const out: { name: string; description: string }[] = [];
+	const out: { name: string; label: string; description: string }[] = [];
 	for (const d of await readdir(config.skillsDir, { withFileTypes: true }).catch(() => [])) {
 		if (!d.isDirectory()) continue;
 		const md = await readFile(join(config.skillsDir, d.name, "SKILL.md"), "utf8").catch(() => "");
 		const fm = /^---\n([\s\S]*?)\n---/.exec(md)?.[1] ?? "";
 		const name = /^name:\s*(.+)$/m.exec(fm)?.[1]?.trim();
 		const description = /^description:\s*(.+)$/m.exec(fm)?.[1]?.trim().replace(/^["']|["']$/g, "");
-		if (name) out.push({ name, description: PT[name] ?? description ?? "" });
+		if (name) out.push({ name, label: LABEL[name] ?? name, description: PT[name] ?? description ?? "" });
 	}
-	cache = out.sort((a, b) => a.name.localeCompare(b.name));
+	cache = out.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 	return cache;
 }
