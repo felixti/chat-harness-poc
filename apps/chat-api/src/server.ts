@@ -51,6 +51,16 @@ async function mcpServersFor(user: string): Promise<McpServer[]> {
 			url: config.braveMcpUrl,
 			description: "Web and news search (Brave): current facts, statistics, sources and LLM-ready page context for research.",
 		});
+	// CrawlForge (H60): shared app key from Key Vault. Its sync calls run up to ~120 s.
+	if (config.crawlforge.url && config.crawlforge.apiKey)
+		servers.push({
+			name: "crawlforge",
+			url: config.crawlforge.url,
+			description:
+				"Web crawling and research (CrawlForge): scrape a URL to markdown/tables/links (also PDFs and JS-heavy pages), web search, extract structured data from a page with a schema, grounded answers with sources (ask), multi-step research (agent_run, research). Use it when a page must be read in full or a question needs several searches; keep agent_run and research for questions that need several sources (they take up to two minutes). Both return a finished report with sources: answer from it, and do not re-scrape its sources one by one.",
+			headers: { "x-api-key": config.crawlforge.apiKey },
+			timeout: 150,
+		});
 	// Per-user connectors (GitHub, ...): token from the sealed vault, never from the workspace.
 	servers.push(...(await connectedServers(user)));
 	return servers;

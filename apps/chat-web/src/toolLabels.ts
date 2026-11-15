@@ -12,6 +12,7 @@ export function toolLabel(name: string, args: unknown): string {
 	if (name.startsWith("mcp__github__")) return "Consultando o GitHub";
 	if (name.startsWith("mcp__azuredevops__")) return azdoLabel(name);
 	if (name.startsWith("mcp__context7__")) return "Consultando documentação técnica";
+	if (name.startsWith("mcp__crawlforge__")) return crawlLabel(name, a);
 	if (name.startsWith("mcp__")) return `Usando ${name.split("__")[1] ?? "um conector"}`;
 	switch (name) {
 		case "read":
@@ -74,6 +75,7 @@ export function toolDone(name: string): string {
 	if (name.startsWith("mcp__github__")) return "Consultou o GitHub";
 	if (name.startsWith("mcp__azuredevops__")) return "Consultou o Azure DevOps";
 	if (name.startsWith("mcp__context7__")) return "Consultou documentação";
+	if (name.startsWith("mcp__crawlforge__")) return name.endsWith("scrape") || name.endsWith("extract") ? "Leu páginas da web" : name.endsWith("search") ? "Pesquisou na web" : "Pesquisou a fundo na web";
 	if (name.startsWith("mcp__")) return "Usou um conector";
 	const DONE: Record<string, string> = {
 		read: "Leu arquivos", write: "Escreveu arquivos", edit: "Editou arquivos", ls: "Listou arquivos", bash: "Processou os dados",
@@ -95,4 +97,15 @@ function azdoLabel(name: string): string {
 	if (t.startsWith("work")) return "Consultando sprints no Azure DevOps";
 	if (t.startsWith("testplan")) return "Consultando planos de teste no Azure DevOps";
 	return "Consultando o Azure DevOps";
+}
+
+function crawlLabel(name: string, a: Record<string, unknown>): string {
+	const host = typeof a.url === "string" ? (a.url.match(/^https?:\/\/([^/]+)/)?.[1] ?? a.url) : "";
+	const q = typeof a.query === "string" ? `: ${a.query}` : "";
+	if (name.endsWith("scrape")) return `Lendo ${host || "a página"}`;
+	if (name.endsWith("extract")) return `Extraindo dados de ${host || "a página"}`;
+	if (name.endsWith("memory_search")) return `Buscando nas páginas já lidas${q}`;
+	if (name.endsWith("search")) return `Pesquisando na web${q}`;
+	if (name.endsWith("ask")) return `Pesquisando e respondendo${q}`;
+	return `Pesquisando a fundo${q}`; // agent_run, research
 }

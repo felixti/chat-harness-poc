@@ -19,6 +19,8 @@ spec:
     remoteRef: {key: microsoft-oauth-client-secret}
   - secretKey: azuredevops-client-secret
     remoteRef: {key: azuredevops-oauth-client-secret}
+  - secretKey: crawlforge-api-key
+    remoteRef: {key: crawlforge-api-key}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -73,6 +75,7 @@ spec:
         - {name: USD_BRL, value: "5.40"}   # cost shown in the portal (H58); update with the month's rate
         - {name: IMAGE_MODEL, value: "minimax/minimax-h3-image"}   # generate_image at 1K; fallback google/gemini-3.1-flash-lite-image
         - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
+        - {name: CRAWLFORGE_MCP_URL, value: "https://crawlforge.felixtek.cloud/mcp"}   # key: Key Vault crawlforge-api-key (H60)
         - {name: PUBLIC_URL, value: "https://chat.20-121-208-105.sslip.io"}
         - {name: CONNECTORS_CONTAINER, value: chat-credentials}
         - {name: MEMORY_CONTAINER, value: chat-memory}
@@ -108,6 +111,6 @@ spec:
           - secret:
               name: chat-connectors
               optional: true
-              items: [{key: master-key, path: connectors-master-key}, {key: github-client-secret, path: github-client-secret}, {key: microsoft-client-secret, path: microsoft-client-secret}, {key: azuredevops-client-secret, path: azuredevops-client-secret}]
+              items: [{key: master-key, path: connectors-master-key}, {key: github-client-secret, path: github-client-secret}, {key: microsoft-client-secret, path: microsoft-client-secret}, {key: azuredevops-client-secret, path: azuredevops-client-secret}, {key: crawlforge-api-key, path: crawlforge-api-key}]
       # Scratch for one turn at a time; Blob is the truth, losing the pod loses nothing.
       - {name: tmp, emptyDir: {sizeLimit: 4Gi}}

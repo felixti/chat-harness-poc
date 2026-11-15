@@ -46,7 +46,7 @@ spec:
     - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: envoy-gateway-system}}
       podSelector: {matchLabels: {gateway.envoyproxy.io/owning-gateway-name: llm-gateway}}
     ports: [{port: 10080}]
-  - to:     # HTTPS out: Blob, Entra (workload identity), MCP servers (Context7)
+  - to:     # HTTPS out: Blob, Entra (workload identity), MCP servers (Context7, CrawlForge)
     - ipBlock:
         cidr: 0.0.0.0/0
         except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]

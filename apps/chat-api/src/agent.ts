@@ -78,6 +78,8 @@ export interface McpServer {
 	headers?: Record<string, string>;
 	/** "direct": tools always declared (per-user connectors); "deferred": loaded via tool_search. */
 	exposure?: "direct" | "deferred";
+	/** Per-call timeout in seconds (adapter default 60). */
+	timeout?: number;
 }
 
 export interface TurnInput {
@@ -224,7 +226,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 						scope: "extension" as const,
 						// A server this conversation already used stays declared: a deferred tool loaded in an
 						// earlier message is gone in this one, and the model then calls an unrelated tool (H48).
-						config: { type: "http" as const, url: s.url, headers: s.headers, description: s.description, exposure: s.exposure ?? (usedServers.has(s.name) ? ("direct" as const) : ("deferred" as const)) },
+						config: { type: "http" as const, url: s.url, headers: s.headers, description: s.description, ...(s.timeout ? { timeout: s.timeout } : {}), exposure: s.exposure ?? (usedServers.has(s.name) ? ("direct" as const) : ("deferred" as const)) },
 					})),
 				}),
 			}),

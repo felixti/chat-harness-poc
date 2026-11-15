@@ -59,6 +59,11 @@ export const config = {
 	/** In-cluster Brave Search MCP (http://brave-mcp/mcp); empty = no web search. */
 	braveMcpUrl: env.BRAVE_MCP_URL ?? "",
 	context7ApiKey: secret("CONTEXT7_API_KEY", "context7-api-key"),
+	/** CrawlForge MCP (scrape, search, deep research); off unless both are set (H60). */
+	crawlforge: {
+		url: env.CRAWLFORGE_MCP_URL ?? "",
+		apiKey: secret("CRAWLFORGE_API_KEY", "crawlforge-api-key"),
+	},
 	/** Public origin of the chat, for OAuth redirect URIs. */
 	publicUrl: (env.PUBLIC_URL ?? "http://localhost:8080").replace(/\/$/, ""),
 	connectors: {
