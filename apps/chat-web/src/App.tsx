@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelLeft, SquarePen, X } from "lucide-react";
-import { api, chat, fileUrl, HttpError, type CanvasEvent, type ConversationSummary, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type ToolStep } from "./api";
+import { api, chat, fileUrl, HttpError, SessionExpired, type CanvasEvent, type ConversationSummary, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type ToolStep } from "./api";
 
 /** Steps held by an open interrupt read as "waiting", not as failed. */
 function markWaiting(parts: (ToolStep | { type: "text"; text: string })[], interrupts?: Interrupt[]) {
@@ -27,6 +27,8 @@ const newId = () => crypto.randomUUID();
 export function App() {
 	const [list, setList] = useState<ConversationSummary[]>([]);
 	const [conv, setConv] = useState<string>();
+	const convRef = useRef<string | undefined>(undefined);
+	convRef.current = conv;
 	const [title, setTitle] = useState("");
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [files, setFiles] = useState<FileInfo[]>([]);
@@ -36,7 +38,7 @@ export function App() {
 	const [drawer, setDrawer] = useState<DrawerTab>();
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [toast, setToast] = useState<string>();
-	const [notice, setNotice] = useState<{ text: string; error?: boolean }>();
+	const [notice, setNotice] = useState<{ text: string; error?: boolean; action?: { label: string; run: () => void } }>();
 	const [seed, setSeed] = useState<{ text: string; n: number }>();
 	const [attachments, setAttachments] = useState<Attachment[]>([]);
 	const [dragging, setDragging] = useState(false);
@@ -62,6 +64,30 @@ export function App() {
 		setToast(t);
 		setTimeout(() => setToast(undefined), 2600);
 	}, []);
+	// The sign-in session ended (Envoy answered 401): offer to sign in again, keeping the
+	// conversation and the unsent text across the login redirect.
+	useEffect(() => {
+		const onExpired = () =>
+			setNotice({
+				text: "Sua sessão expirou. Entre de novo para continuar; o texto que você digitou fica guardado.",
+				error: true,
+				action: {
+					label: "Entrar de novo",
+					run: () => {
+						const draft = document.querySelector<HTMLTextAreaElement>(".composer textarea")?.value;
+						try {
+							sessionStorage.setItem("assistente.relogin", JSON.stringify({ conv: convRef.current, draft }));
+						} catch {
+							/* private mode: the sign-in still works */
+						}
+						location.reload();
+					},
+				},
+			});
+		addEventListener("session-expired", onExpired);
+		return () => removeEventListener("session-expired", onExpired);
+	}, []);
+
 	const refreshList = useCallback(() => void api.conversations().then(setList).catch(() => {}), []);
 
 	useEffect(() => {
@@ -80,7 +106,16 @@ export function App() {
 		} catch {
 			after = undefined;
 		}
-		const c = location.hash.slice(1) || after?.conv;
+		// Back from signing in again: reopen the conversation and restore the unsent text.
+		let relogin: { conv?: string; draft?: string } | undefined;
+		try {
+			relogin = JSON.parse(sessionStorage.getItem("assistente.relogin") ?? "null") ?? undefined;
+			sessionStorage.removeItem("assistente.relogin");
+		} catch {
+			relogin = undefined;
+		}
+		if (relogin?.draft) setSeed({ text: relogin.draft, n: Date.now() });
+		const c = location.hash.slice(1) || after?.conv || relogin?.conv;
 		// A new conversation that only had attachments does not exist on the server yet: keep its id.
 		if (c) void open(c, () => (pendingConv.current = c));
 		if (after?.picker && p.get("status") === "ok") {
@@ -243,7 +278,11 @@ export function App() {
 				}
 			}
 		} catch (e) {
-			if (ctrl.signal.aborted) patch((a) => ({ ...a, streaming: false, error: a.parts.length ? undefined : "Resposta interrompida." }));
+			if (e instanceof SessionExpired) {
+				// Nothing was sent: put the text back in the composer for after the sign-in.
+				setMessages((m) => m.filter((x) => x.id !== live.id && x.id !== user.id));
+				if (!resume) setSeed({ text, n: Date.now() });
+			} else if (ctrl.signal.aborted) patch((a) => ({ ...a, streaming: false, error: a.parts.length ? undefined : "Resposta interrompida." }));
 			else if (e instanceof HttpError && e.status === 409) {
 				setMessages((m) => m.filter((x) => x.id !== live.id && x.id !== user.id));
 				setNotice({ text: resume ? "Esse pedido de aprovação já foi respondido ou expirou." : "Esta conversa está respondendo em outra aba ou dispositivo. Aguarde terminar e tente de novo.", error: true });
@@ -465,6 +504,11 @@ export function App() {
 					<div className="notice-wrap" style={{ padding: "0 24px" }}>
 						<div className={`notice${notice.error ? " error" : ""}`} role="status">
 							<span style={{ flex: 1 }}>{notice.text}</span>
+							{notice.action && (
+								<button type="button" className="btn small" onClick={notice.action.run}>
+									{notice.action.label}
+								</button>
+							)}
 							<button type="button" className="icon-btn small" aria-label="Fechar aviso" onClick={() => setNotice(undefined)}>
 								<X size={15} />
 							</button>

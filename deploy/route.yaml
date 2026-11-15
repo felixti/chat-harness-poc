@@ -44,9 +44,16 @@ spec:
       issuer: https://login.microsoftonline.com/5f9bf155-4fca-4d0c-8201-ca5e6100f66e/v2.0
     clientID: f1f0c17c-91cb-4f28-9cb1-2362016be1e8
     clientSecret: {name: chat-oidc}
-    scopes: [openid, profile, email]
+    # offline_access makes Entra issue a refresh token, so Envoy renews the ~1h ID token silently
+    # (without it the session cookies expired and portal requests got a login redirect).
+    scopes: [openid, profile, email, offline_access]
     logoutPath: /oauth2/logout
     refreshToken: true
+    # Portal API calls (fetch) cannot follow a redirect to the Entra login page: answer them
+    # with 401 so the portal shows "Entrar de novo" (apps/chat-web/src/api.ts apiFetch).
+    denyRedirect:
+      headers:
+      - {name: x-requested-with, value: fetch}
     forwardIDToken: {header: x-id-token}
   jwt:
     providers:

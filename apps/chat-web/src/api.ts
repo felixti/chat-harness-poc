@@ -135,8 +135,25 @@ export class HttpError extends Error {
 	}
 }
 
+/** The Entra ID sign-in session ended. Envoy answers portal requests with 401 instead of a
+ *  redirect to the login page (denyRedirect in deploy/route.yaml), which fetch cannot follow. */
+export class SessionExpired extends Error {}
+
+/** fetch for the portal API: marks the request so Envoy does not redirect it, and turns a
+ *  gateway 401 (not JSON; chat-api's own 401s are) into SessionExpired + a window event. */
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+	const headers = new Headers(init.headers);
+	headers.set("x-requested-with", "fetch");
+	const r = await fetch(path, { ...init, headers });
+	if (r.status === 401 && !r.headers.get("content-type")?.includes("json")) {
+		dispatchEvent(new Event("session-expired"));
+		throw new SessionExpired("Sua sessão expirou.");
+	}
+	return r;
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-	const r = await fetch(path, init);
+	const r = await apiFetch(path, init);
 	if (!r.ok) {
 		const j = (await r.json().catch(() => ({}))) as { error?: string; code?: string };
 		throw new HttpError(r.status, j.error ?? `HTTP ${r.status}`, j.code);
@@ -218,7 +235,7 @@ export async function* chat(
 		forwardedProps: { skills: input.skills ?? [], edit: !!input.edit },
 		...(input.resume ? { resume: input.resume } : {}),
 	};
-	const r = await fetch("api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
+	const r = await apiFetch("api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
 	if (!r.ok || !r.body) {
 		const j = (await r.json().catch(() => ({}))) as { error?: string };
 		throw new HttpError(r.status, j.error ?? `HTTP ${r.status}`);
