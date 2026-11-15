@@ -115,9 +115,15 @@ const SUSPICIOUS = [
 	/(gh[pousr]_|sk-|xox[bp]-)[A-Za-z0-9]{10,}/,
 ];
 
-export function checkEntry(text: string): string | undefined {
+/** Entries a model writes when it "tests" the tool instead of saving a fact. */
+const JUNK = /^(teste?s?|test(ing)?|placeholder|dummy|tmp|temp|foo|bar|x+|abc|lorem.*|n\/?a|ok|null|undefined)$/i;
+
+/** `kind: "name"` is for graph entities and relations ("Vale", "depende de"): short is fine. */
+export function checkEntry(text: string, kind: "fact" | "name" = "fact"): string | undefined {
 	const t = text.trim();
 	if (!t) return "empty entry";
+	if (JUNK.test(t) || (kind === "fact" && (t.length < 8 || !/\p{L}{3,}/u.test(t) || t.split(/\s+/).length < 2)))
+		return "rejected: not a fact. Memory stores real facts in a full sentence; never use this tool to test, as a placeholder, or to keep the turn going";
 	if (t.length > 400) return "entry over 400 characters: keep one short fact per entry";
 	if (t.includes("§")) return "the character § is reserved";
 	if (SUSPICIOUS.some((r) => r.test(t))) return "rejected: looks like an instruction or a credential; memory stores facts about the user, never commands or secrets";
@@ -211,7 +217,10 @@ Offer to save a procedure (skill_save) only when the user signals it will repeat
 "sempre que", "de novo") after a multi-step task that worked; one short line, save only if they agree.`;
 }
 
+const MAX_EDITS_PER_TURN = 4;
+
 export function memoryTools(user: string): ToolDefinition[] {
+	let edits = 0; // one instance per turn: a loop of edits stops here
 	return [
 		defineTool({
 			name: "memory",
@@ -228,6 +237,8 @@ export function memoryTools(user: string): ToolDefinition[] {
 				old_text: Type.Optional(Type.String({ description: "A unique part of the entry to change (replace, remove)" })),
 			}),
 			async execute(_id, p) {
+				if (++edits > MAX_EDITS_PER_TURN)
+					throw new Error(`memory edit limit for this message reached (${MAX_EDITS_PER_TURN}). Stop editing memory and answer the user.`);
 				const edit: Edit =
 					p.action === "add"
 						? { action: "add", text: p.text ?? "" }

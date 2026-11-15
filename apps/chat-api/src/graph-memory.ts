@@ -325,8 +325,12 @@ export class FactGraph {
 	/** Returns the new fact id, or "" when the same live fact already exists (curator and agent
 	 *  may both save it). */
 	async remember(s: { name: string; kind: Kind }, rel: string, o: { name: string; kind: Kind }, note?: string): Promise<string> {
-		for (const t of [s.name, rel, o.name, note ?? "x"]) {
-			const bad = checkEntry(t);
+		for (const t of [s.name, rel, o.name]) {
+			const bad = checkEntry(t, "name");
+			if (bad) throw new Error(bad);
+		}
+		if (note) {
+			const bad = checkEntry(note, "name"); // short details ("nov/2026") are fine; secrets and injections are not
 			if (bad) throw new Error(bad);
 		}
 		const { g } = await this.open();

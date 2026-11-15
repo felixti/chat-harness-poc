@@ -111,7 +111,7 @@ export async function curate(input: CuratorInput, graph: FactGraph | undefined, 
 export function cleanSummary(s: unknown): string | undefined {
 	if (typeof s !== "string") return undefined;
 	const t = s.replace(/\s+/g, " ").trim().slice(0, 399);
-	if (!t || checkEntry(t)) return undefined;
+	if (!t || checkEntry(t, "name")) return undefined; // injection and secret filter only
 	return t;
 }
 

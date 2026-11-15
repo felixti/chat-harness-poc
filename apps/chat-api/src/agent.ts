@@ -112,6 +112,8 @@ Write for a busy colleague who reads on a chat screen.
 - Plain, specific prose: no "não é X, é Y" contrasts, no one-line closers that repeat the point,
   no forced lists of three, no inflated words (crucial, robusto, poderoso, essencial), no emoji.
 - Errors: state cause and fix in one or two lines.
+- When a tool returns nothing or fails, say so and stop; never call unrelated tools (memory,
+  remember, files) to test, as placeholders, or to keep the turn going.
 Adapted from blader/humanizer and i-have-adhd (MIT).`;
 
 export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; text: string }> {
