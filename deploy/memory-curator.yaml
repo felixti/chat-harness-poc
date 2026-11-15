@@ -33,7 +33,7 @@ spec:
             seccompProfile: {type: RuntimeDefault}
           containers:
           - name: memory-curator
-            image: ghcr.io/felixti/chat-harness-chat-api:15bcf56908fd860bdc977f18612500b8d57360de
+            image: ghcr.io/felixti/chat-harness-chat-api:f5b67c3af7ee225255f5fa05052186502cb07fc3
             args: ["--experimental-strip-types", "src/jobs/memory-curator.ts"]
             env:
             - {name: MONGO_URL, value: "mongodb://ferret@ferretdb:27017/chat"}   # password from /var/run/secrets/chat/db-password
