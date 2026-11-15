@@ -125,6 +125,13 @@ export interface Fact {
 	note: string;
 }
 
+export type Effort = "low" | "medium" | "high";
+export interface ModelChoice {
+	id: string;
+	label: string;
+	note: string;
+}
+
 export class HttpError extends Error {
 	status: number;
 	code?: string;
@@ -168,6 +175,7 @@ const send = (method: string, body?: unknown): RequestInit => ({
 
 export const api = {
 	conversations: () => req<ConversationSummary[]>("api/conversations"),
+	models: () => req<{ models: ModelChoice[]; default: string; efforts: Effort[]; defaultEffort: Effort }>("api/models"),
 	conversation: (id: string) => req<ConversationDetail>(`api/conversations/${id}`),
 	rename: (id: string, title: string) => req(`api/conversations/${id}`, send("PATCH", { title })),
 	remove: (id: string) => req(`api/conversations/${id}`, send("DELETE")),
@@ -222,7 +230,7 @@ export interface ResumeEntry {
 
 /** POST an AG-UI RunAgentInput to /api/chat and yield events. Aborting stops the run on the server. */
 export async function* chat(
-	input: { threadId: string; message?: string; skills?: string[]; edit?: boolean; resume?: ResumeEntry[] },
+	input: { threadId: string; message?: string; skills?: string[]; edit?: boolean; resume?: ResumeEntry[]; model?: string; effort?: Effort },
 	signal: AbortSignal,
 ): AsyncGenerator<AguiEvent> {
 	const body = {
@@ -232,7 +240,7 @@ export async function* chat(
 		messages: input.message ? [{ id: crypto.randomUUID(), role: "user", content: input.message }] : [],
 		tools: [],
 		context: [],
-		forwardedProps: { skills: input.skills ?? [], edit: !!input.edit },
+		forwardedProps: { skills: input.skills ?? [], edit: !!input.edit, ...(input.model ? { model: input.model } : {}), ...(input.effort ? { effort: input.effort } : {}) },
 		...(input.resume ? { resume: input.resume } : {}),
 	};
 	const r = await apiFetch("api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });

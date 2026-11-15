@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { extname, join, relative } from "node:path";
 import { config } from "./config.ts";
-import { runTurn, type McpServer } from "./agent.ts";
+import { EFFORTS, modelChoices, runTurn, type Effort, type McpServer } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
 import { retrieve, clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
@@ -90,7 +90,7 @@ type ChatInput = {
 	threadId?: string;
 	runId?: string;
 	messages?: { id?: string; role: string; content: unknown }[];
-	forwardedProps?: { skills?: string[]; edit?: boolean };
+	forwardedProps?: { skills?: string[]; edit?: boolean; model?: string; effort?: Effort };
 	resume?: ResumeEntry[];
 	conversationId?: string;
 	message?: string;
@@ -171,6 +171,8 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				entries: edit ? beforeLastUserMessage(existing?.entries ?? []) : (existing?.entries ?? []),
 				message,
 				pinnedSkills: skills,
+				model: input.forwardedProps?.model,
+				effort: input.forwardedProps?.effort,
 				mcpServers: await mcpServersFor(user),
 				gate,
 				...(memoryOn && facts
@@ -258,6 +260,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (req.method === "GET" && !url.pathname.startsWith("/api/") && (await staticFile(res, url.pathname))) return;
 	const user = userOf(req);
 	if (url.pathname === "/api/me") return json(res, 200, { user });
+	if (url.pathname === "/api/models" && req.method === "GET") return json(res, 200, { models: modelChoices(), default: config.llm.model, efforts: EFFORTS, defaultEffort: "medium" });
 	if (url.pathname === "/api/conversations" && req.method === "GET") return json(res, 200, await store.list(user));
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
 	if (url.pathname === "/api/skills" && req.method === "GET") {

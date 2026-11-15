@@ -35,6 +35,13 @@ export const config = {
 		apiKey: env.LLM_API_KEY ?? "injected-by-platform-gateway",
 		model: env.LLM_MODEL ?? "deepseek/deepseek-v4.1-flash-1017",
 		contextWindow: Number(env.LLM_CONTEXT_WINDOW ?? 200000),
+		/** Models the user can pick in the portal (H57): "id|label|note" separated by commas. The
+		 *  first one that matches LLM_MODEL is the default. */
+		models: (env.LLM_MODELS ?? "deepseek/deepseek-v4.1-flash-1017|DeepSeek V4.1 Flash|O mais econômico,anthropic/claude-haiku-5.5|Claude Haiku 5.5|Bom e barato · ~5× o custo,google/gemini-4-hydrogen|Gemini 4 Hydrogen|O mais capaz · ~75× o custo")
+			.split(",")
+			.map((x) => x.trim().split("|"))
+			.filter(([id]) => id)
+			.map(([id, label, note]) => ({ id, label: label || id, note: note ?? "" })),
 	},
 	/** OpenRouter image model for generate_image (through the same gateway). MiniMax H3 at 1K:
 	 *  ~US$0.021/image and closer to the theme palette; Gemini Flash Lite Image is the fast fallback. */

@@ -14,6 +14,7 @@ import { Drawer } from "./Drawer";
 import { DrivePicker } from "./DrivePicker";
 import { CanvasPanel, type CanvasTarget } from "./CanvasPanel";
 import { SELECT_SHORTCUTS, SHORTCUTS, useVimKeys, useVimSetting } from "./vim";
+import { loadModelPref, ModelPicker, type ModelPref } from "./ModelPicker";
 
 const STARTERS = [
 	{ title: "Montar uma apresentação", hint: "Deck no padrão da empresa, com gráficos e fontes", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
@@ -40,6 +41,7 @@ export function App() {
 	const [toast, setToast] = useState<string>();
 	const [notice, setNotice] = useState<{ text: string; error?: boolean; action?: { label: string; run: () => void } }>();
 	const [seed, setSeed] = useState<{ text: string; n: number }>();
+	const [modelPref, setModelPref] = useState<ModelPref>(loadModelPref);
 	const [attachments, setAttachments] = useState<Attachment[]>([]);
 	const [dragging, setDragging] = useState(false);
 	const [preview, setPreview] = useState<FileInfo>();
@@ -210,7 +212,7 @@ export function App() {
 		const argText = new Map<string, string>();
 		let convId = id;
 		try {
-			for await (const ev of chat({ threadId: id, message: resume ? undefined : text, skills, edit, resume }, ctrl.signal)) {
+			for await (const ev of chat({ threadId: id, message: resume ? undefined : text, skills, edit, resume, ...modelPref }, ctrl.signal)) {
 				switch (ev.type) {
 					case "RUN_STARTED":
 						convId = ev.threadId;
@@ -499,6 +501,7 @@ export function App() {
 					)}
 					<span className="conv-title">{title || (sideOpen ? "" : "Assistente")}</span>
 					<span className="spacer" />
+					<ModelPicker pref={modelPref} setPref={setModelPref} disabled={busy} />
 				</div>
 				{notice && (
 					<div className="notice-wrap" style={{ padding: "0 24px" }}>

@@ -56,3 +56,4 @@ current ~R$1.50/h cluster cost.
 | 2026-11-15 | 2 | Canvas robustness (H54): recovery instructions on missing `html`/`edits`, skill prefers small edits; Price x SAC re-run passes. |
 | 2026-11-15 | 2 | Theme switch (H55): light default, Claro / Escuro / Sistema; mermaid and canvas follow it. |
 | 2026-11-15 | 2 | Model test (H56): chat-api on google/gemini-4-hydrogen; revert to DeepSeek after the test. |
+| 2026-11-15 | 2 | Model + effort picker (H57): DeepSeek / Haiku 5.5 / Gemini 4 Hydrogen, low/medium/high; cross-model tool history as context; default back to DeepSeek. 82 API tests. |

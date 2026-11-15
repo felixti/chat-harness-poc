@@ -16,11 +16,21 @@ import { config } from "./config.ts";
 import { bashTool, generatePdfTool, parseDocumentTool } from "./tools.ts";
 import { officeTools } from "./office/tools.ts";
 import { guardedFileTools } from "./fs-guard.ts";
+import { foreignToolCallsAsText } from "./crossmodel.ts";
 
 const agentDir = join(config.tmpRoot, "agent");
 const PROVIDER = "gateway";
 
 let runtime: ModelRuntime | undefined;
+
+export type Effort = "low" | "medium" | "high";
+export const EFFORTS: Effort[] = ["low", "medium", "high"];
+
+/** Models offered in the portal; the configured default always included. */
+export function modelChoices() {
+	const list = config.llm.models;
+	return list.some((m) => m.id === config.llm.model) ? list : [{ id: config.llm.model, label: config.llm.model, note: "" }, ...list];
+}
 
 /** Model access through the platform LLM gateway (OpenAI-compatible; key injected by Envoy). */
 async function modelRuntime(): Promise<ModelRuntime> {
@@ -36,17 +46,19 @@ async function modelRuntime(): Promise<ModelRuntime> {
 					baseUrl: config.llm.baseUrl,
 					apiKey: config.llm.apiKey,
 					api: "openai-completions",
-					models: [
-						{
-							id: config.llm.model,
-							name: config.llm.model,
-							reasoning: false,
-							input: ["text", "image"],
-							contextWindow: config.llm.contextWindow,
-							maxTokens: 16384,
-							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-						},
-					],
+					// Every model the portal offers (H57), with reasoning effort sent the OpenRouter way
+					// (`reasoning: {effort}`); the gateway URL is not openrouter.ai, so it is not auto-detected.
+					models: modelChoices().map((m) => ({
+						id: m.id,
+						name: m.label,
+						reasoning: true,
+						input: ["text", "image"],
+						contextWindow: config.llm.contextWindow,
+						// Reasoning and the answer share max_tokens on OpenRouter.
+						maxTokens: 32768,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+						compat: { thinkingFormat: "openrouter", supportsReasoningEffort: true, ...(m.id.startsWith("anthropic/") ? { cacheControlFormat: "anthropic" } : {}) },
+					})),
 				},
 			},
 		}),
@@ -83,6 +95,9 @@ export interface TurnInput {
 	};
 	/** Per-turn folder with the user's personal skills (my-*), loaded like company skills, read-only. */
 	userSkillsDir?: string;
+	/** Model and reasoning effort picked in the portal (H57); validated, else the defaults. */
+	model?: string;
+	effort?: Effort;
 	onEvent: (event: { type: string; [k: string]: unknown }) => void;
 	signal?: AbortSignal;
 }
@@ -161,6 +176,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		defaultTools: ["+tool_search"],
 	});
 	const usedServers = new Set([...previouslyLoadedTools(input.entries)].map((t) => t.split("__")[1]));
+	const modelId = input.model && modelChoices().some((m) => m.id === input.model) ? input.model : config.llm.model;
 	const resourceLoader = new DefaultResourceLoader({
 		cwd,
 		agentDir,
@@ -181,6 +197,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 			// The gate runs before any tool (MCP ones included, and calls made from codemode).
 			(pi) => {
 				if (input.gate) pi.on("tool_call", (e) => input.gate!.check({ toolCallId: e.toolCallId, toolName: e.toolName, input: e.input }));
+				pi.on("context", (e) => ({ messages: foreignToolCallsAsText(e.messages, modelId) }));
 			},
 			createToolSearchExtension(),
 			createMcpExtension({
@@ -204,14 +221,14 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 	await resourceLoader.reload();
 
 	const rt = await modelRuntime();
-	const model = rt.getModel(PROVIDER, config.llm.model);
-	if (!model) throw new Error(`model ${config.llm.model} not configured`);
+	const model = rt.getModel(PROVIDER, modelId);
+	if (!model) throw new Error(`model ${modelId} not configured`);
 
 	const { session } = await createAgentSession({
 		cwd,
 		agentDir,
 		model,
-		thinkingLevel: "off",
+		thinkingLevel: input.effort && EFFORTS.includes(input.effort) ? input.effort : "medium",
 		modelRuntime: rt,
 		resourceLoader,
 		settingsManager,
