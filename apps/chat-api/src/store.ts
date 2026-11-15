@@ -11,6 +11,8 @@ export interface Conversation {
 	updatedAt: Date;
 	/** Curator's 1-2 sentence summary: what was asked and the outcome (episodic memory). */
 	summary?: string;
+	/** AG-UI interrupts waiting for the user (approvals, questions); cleared by the next turn. */
+	pending?: import("./approvals.ts").Pending[];
 	/** Last time the memory curator processed this conversation (nightly job). */
 	curatedAt?: Date;
 	/** Optimistic concurrency: save() succeeds only if the stored version is still this one
@@ -217,7 +219,7 @@ export class MongoStore implements ConversationStore {
 	async get(user: string, id: string) {
 		// Filter by user too: a conversation id alone never grants access.
 		const d = await this.col.findOne({ _id: id, user });
-		return d ? { id: d._id, user: d.user, title: d.title, entries: d.entries, updatedAt: d.updatedAt, summary: d.summary, curatedAt: d.curatedAt, version: d.version ?? 0 } : undefined;
+		return d ? { id: d._id, user: d.user, title: d.title, entries: d.entries, updatedAt: d.updatedAt, summary: d.summary, curatedAt: d.curatedAt, pending: d.pending, version: d.version ?? 0 } : undefined;
 	}
 
 	async save(c: Conversation) {

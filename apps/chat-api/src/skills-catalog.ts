@@ -12,10 +12,11 @@ const PT: Record<string, string> = {
 	dashboard: "Dashboards HTML interativos e one-pagers a partir de dados",
 	design: "Regras visuais para qualquer entregável",
 	research: "Pesquisa na web com fontes",
+	clarify: "Perguntas rápidas para refinar um pedido antes de começar",
 };
 
 const LABEL: Record<string, string> = {
-	pptx: "Apresentação", docx: "Documento Word", pdf: "PDF", "xlsx-csv": "Planilha", dashboard: "Dashboard", design: "Design", research: "Pesquisa",
+	clarify: "Refinar pedido", pptx: "Apresentação", docx: "Documento Word", pdf: "PDF", "xlsx-csv": "Planilha", dashboard: "Dashboard", design: "Design", research: "Pesquisa",
 };
 
 let cache: { name: string; label: string; description: string }[] | undefined;

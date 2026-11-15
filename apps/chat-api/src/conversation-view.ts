@@ -17,7 +17,10 @@ type Entry = { type?: string; id?: string; timestamp?: string; message?: { role?
 
 /** The harness wraps pinned skills around the user's words; show only the words. */
 export function cleanUserText(t: string): string {
-	return t.replace(/^\/skill:[\w-]+\s+/, "").replace(/^First read and follow these skills: [^\n]*\n\n/, "");
+	return t
+		.replace(/^\/skill:[\w-]+\s+/, "")
+		.replace(/^First read and follow these skills: [^\n]*\n\n/, "")
+		.replace(/\n\n<harness>[\s\S]*?<\/harness>\s*$/, "");
 }
 
 export function entriesToView(entries: unknown[]): ViewMessage[] {

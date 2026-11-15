@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelLeft, SquarePen, X } from "lucide-react";
-import { api, chat, fileUrl, HttpError, type ConversationSummary, type FileInfo, type LibraryFile, type Message, type ToolStep } from "./api";
+import { api, chat, fileUrl, HttpError, type ConversationSummary, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type ToolStep } from "./api";
+
+/** Steps held by an open interrupt read as "waiting", not as failed. */
+function markWaiting(parts: (ToolStep | { type: "text"; text: string })[], interrupts?: Interrupt[]) {
+	const waiting = new Set((interrupts ?? []).map((i) => i.toolCallId));
+	return parts.map((p) => (p.type === "tool" && waiting.has(p.id) ? { ...p, isError: false, waiting: true } : p));
+}
 import { AssistantMessage, UserMessage } from "./Message";
 import { Composer, type Attachment } from "./Composer";
 import { Sidebar, type DrawerTab } from "./Sidebar";
@@ -91,7 +97,13 @@ export function App() {
 			const d = await api.conversation(id);
 			setConv(id);
 			setTitle(d.title);
-			setMessages(d.messages);
+			const msgs = d.messages;
+			const lastA = msgs.map((m) => m.role).lastIndexOf("assistant");
+			if (d.interrupts?.length && lastA >= 0 && msgs[lastA].role === "assistant") {
+				const m = msgs[lastA] as Extract<Message, { role: "assistant" }>;
+				msgs[lastA] = { ...m, interrupts: d.interrupts, parts: markWaiting(m.parts, d.interrupts) };
+			}
+			setMessages(msgs);
 			setFiles(d.files);
 			setVotes(d.feedback);
 			setNotice(undefined);
@@ -120,16 +132,17 @@ export function App() {
 		if (isMobile()) setSideOpen(false);
 	}
 
-	async function run(text: string, skills: string[], edit = false, display?: string) {
-		const id = conv ?? pendingConv.current;
+	async function run(text: string, skills: string[], edit = false, display?: string, resume?: ResumeEntry[]) {
+		const id = ensureConv();
 		const before = new Set(files.map((f) => f.path));
 		const user: Message = { role: "user", id: `local-${Date.now()}`, text: display ?? text };
 		const live: Extract<Message, { role: "assistant" }> = { role: "assistant", id: `live-${Date.now()}`, parts: [], streaming: true };
 		setMessages((m) => {
-			let base = m;
+			// A new run answers (or supersedes) any open interrupt card.
+			let base = m.map((x) => (x.role === "assistant" && x.interrupts ? { ...x, interrupts: undefined } : x));
 			if (edit) {
-				const lastUser = m.map((x) => x.role).lastIndexOf("user");
-				base = lastUser >= 0 ? m.slice(0, lastUser) : m;
+				const lastUser = base.map((x) => x.role).lastIndexOf("user");
+				base = lastUser >= 0 ? base.slice(0, lastUser) : base;
 			}
 			return [...base, user, live];
 		});
@@ -144,51 +157,79 @@ export function App() {
 				cur = f(cur);
 				return m.map((x) => (x.id === live.id ? cur : x));
 			});
+		const setTool = (toolCallId: string, f: (t: ToolStep) => ToolStep) =>
+			patch((a) => ({ ...a, parts: a.parts.map((p) => (p.type === "tool" && p.id === toolCallId ? f(p) : p)) }));
+		const argText = new Map<string, string>();
 		let convId = id;
 		try {
-			for await (const ev of chat({ conversationId: id, message: text, skills, edit }, ctrl.signal)) {
-				if (ev.type === "start") {
-					convId = ev.conversationId;
-					if (!conv) {
-						setConv(convId);
-						setTitle(display ?? text);
-						history.replaceState(null, "", `#${convId}`);
-					}
-				} else if (ev.type === "delta") {
-					patch((a) => {
-						const parts = [...a.parts];
-						const lastPart = parts[parts.length - 1];
-						if (lastPart?.type === "text") parts[parts.length - 1] = { type: "text", text: lastPart.text + ev.text };
-						else parts.push({ type: "text", text: ev.text });
-						return { ...a, parts };
-					});
-				} else if (ev.type === "tool") {
-					patch((a) => ({ ...a, parts: [...a.parts, { type: "tool", id: `${a.parts.length}`, name: ev.name, args: ev.args, running: true } as ToolStep] }));
-				} else if (ev.type === "tool_end") {
-					patch((a) => {
-						const parts = [...a.parts];
-						for (let i = parts.length - 1; i >= 0; i--) {
-							const p = parts[i];
-							if (p.type === "tool" && p.running && p.name === ev.name) {
-								parts[i] = { ...p, running: false, isError: ev.isError };
-								break;
-							}
+			for await (const ev of chat({ threadId: id, message: resume ? undefined : text, skills, edit, resume }, ctrl.signal)) {
+				switch (ev.type) {
+					case "RUN_STARTED":
+						convId = ev.threadId;
+						if (!conv) {
+							setConv(convId);
+							setTitle(display ?? text);
+							history.replaceState(null, "", `#${convId}`);
 						}
-						return { ...a, parts };
-					});
-				} else if (ev.type === "memory_used") patch((a) => ({ ...a, memory: { core: ev.core, facts: ev.facts, conversations: ev.conversations } }));
-				else if (ev.type === "memory") patch((a) => ({ ...a, saved: ev.saved }));
-				else if (ev.type === "error") patch((a) => ({ ...a, error: `Algo deu errado: ${ev.message}` }));
-				else if (ev.type === "done") {
-					setFiles(ev.files);
-					patch((a) => ({ ...a, streaming: false, newFiles: ev.files.filter((f) => !before.has(f.path)) }));
+						break;
+					case "TEXT_MESSAGE_CONTENT":
+						patch((a) => {
+							const parts = [...a.parts];
+							const lastPart = parts[parts.length - 1];
+							if (lastPart?.type === "text") parts[parts.length - 1] = { type: "text", text: lastPart.text + ev.delta };
+							else parts.push({ type: "text", text: ev.delta });
+							return { ...a, parts };
+						});
+						break;
+					case "TOOL_CALL_START":
+						patch((a) => ({ ...a, parts: [...a.parts, { type: "tool", id: ev.toolCallId, name: ev.toolCallName, args: {}, running: true }] }));
+						break;
+					case "TOOL_CALL_ARGS": {
+						const t = (argText.get(ev.toolCallId) ?? "") + ev.delta;
+						argText.set(ev.toolCallId, t);
+						try {
+							const args = JSON.parse(t);
+							setTool(ev.toolCallId, (p) => ({ ...p, args }));
+						} catch {
+							/* partial JSON: wait for the rest */
+						}
+						break;
+					}
+					case "TOOL_CALL_RESULT":
+						setTool(ev.toolCallId, (p) => ({ ...p, running: false, isError: !!ev.metadata?.isError }));
+						break;
+					case "CUSTOM":
+						if (ev.name === "memory_used") patch((a) => ({ ...a, memory: ev.value as MemoryUsed }));
+						else if (ev.name === "memory_saved") patch((a) => ({ ...a, saved: ev.value as string[] }));
+						else if (ev.name === "model_error") patch((a) => ({ ...a, error: `Algo deu errado: ${(ev.value as { message?: string }).message ?? ""}` }));
+						else if (ev.name === "files") {
+							const fs = ev.value as FileInfo[];
+							setFiles(fs);
+							patch((a) => ({ ...a, newFiles: fs.filter((f) => !before.has(f.path)) }));
+						}
+						break;
+					case "RUN_FINISHED": {
+						const interrupts = ev.outcome?.type === "interrupt" ? ev.outcome.interrupts : undefined;
+						const waiting = new Set((interrupts ?? []).map((i) => i.toolCallId));
+						patch((a) => ({
+							...a,
+							streaming: false,
+							interrupts,
+							// A call held for approval is not a failure: show it as waiting.
+							parts: a.parts.map((p) => (p.type === "tool" && waiting.has(p.id) ? { ...p, isError: false, running: false, waiting: true } : p)),
+						}));
+						break;
+					}
+					case "RUN_ERROR":
+						patch((a) => ({ ...a, error: `Algo deu errado: ${ev.message}` }));
+						break;
 				}
 			}
 		} catch (e) {
 			if (ctrl.signal.aborted) patch((a) => ({ ...a, streaming: false, error: a.parts.length ? undefined : "Resposta interrompida." }));
 			else if (e instanceof HttpError && e.status === 409) {
 				setMessages((m) => m.filter((x) => x.id !== live.id && x.id !== user.id));
-				setNotice({ text: "Esta conversa está respondendo em outra aba ou dispositivo. Aguarde terminar e tente de novo.", error: true });
+				setNotice({ text: resume ? "Esse pedido de aprovação já foi respondido ou expirou." : "Esta conversa está respondendo em outra aba ou dispositivo. Aguarde terminar e tente de novo.", error: true });
 			} else patch((a) => ({ ...a, streaming: false, error: `Não consegui responder: ${(e as Error).message}` }));
 		} finally {
 			patch((a) => ({ ...a, streaming: false }));
@@ -205,7 +246,8 @@ export function App() {
 						const extras = cur;
 						const msgs = d.messages;
 						const lastA = msgs.map((m) => m.role).lastIndexOf("assistant");
-						if (lastA >= 0 && msgs[lastA].role === "assistant") msgs[lastA] = { ...msgs[lastA], memory: extras.memory, saved: extras.saved, newFiles: extras.newFiles, error: extras.error };
+						if (lastA >= 0 && msgs[lastA].role === "assistant")
+							msgs[lastA] = { ...msgs[lastA], memory: extras.memory, saved: extras.saved, newFiles: extras.newFiles, error: extras.error, interrupts: d.interrupts?.length ? d.interrupts : undefined, parts: markWaiting(msgs[lastA].parts, d.interrupts) };
 						setMessages(msgs);
 						setTitle(d.title);
 						setVotes(d.feedback);
@@ -213,6 +255,12 @@ export function App() {
 					.catch(() => {});
 		}
 	}
+
+	/** Answer an interrupt card: approval (approved true/false) or the answers to questions. */
+	function respond(interrupt: Interrupt, entry: Omit<ResumeEntry, "interruptId">, display: string) {
+		void run(display, [], false, display, [{ interruptId: interrupt.id, ...entry }]);
+	}
+
 
 	const send = (text: string, skills: string[]) => void run(text, skills);
 	const lastUser = [...messages].reverse().find((m) => m.role === "user") as Extract<Message, { role: "user" }> | undefined;
@@ -389,6 +437,7 @@ export function App() {
 											onRegenerate={() => lastUser && void run(lastUser.text, [], true)}
 											onPreview={openPreview}
 											onCloud={cloud}
+											onRespond={respond}
 										/>
 									),
 								)}

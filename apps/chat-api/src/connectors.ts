@@ -77,8 +77,13 @@ export function connectors(): Connector[] {
 			description: `Azure DevOps organization ${ado.organization} as the signed-in user: work items and queries, repos and pull requests, pipelines and builds, wiki, iterations, test plans.`,
 			authorizeUrl: `https://login.microsoftonline.com/${ado.tenant}/oauth2/v2.0/authorize`,
 			tokenUrl: `https://login.microsoftonline.com/${ado.tenant}/oauth2/v2.0/token`,
-			// Read scopes only; writing (create work items, PRs, run pipelines) is a separate decision.
-			scopes: [...["Ado.Mcp.Tools", "repos.read", "wit.read", "pipelines.read", "wiki.read", "work.read", "testplan.read"].map((x) => `${api}/${x}`), "offline_access"],
+			// Read always; write only when enabled, and every write call then waits for the user's
+			// approval (approvals.ts). No *.manage scopes: administrative actions stay out of the chat.
+			scopes: [
+				...["Ado.Mcp.Tools", "repos.read", "wit.read", "pipelines.read", "wiki.read", "work.read", "testplan.read"].map((x) => `${api}/${x}`),
+				...(ado.readOnly ? [] : ["repos.write", "wit.write", "pipelines.write", "wiki.write", "work.write", "testplan.write"].map((x) => `${api}/${x}`)),
+				"offline_access",
+			],
 			authParams: { response_type: "code", response_mode: "query" },
 			clientId: ado.clientId,
 			clientSecret: ado.clientSecret,
@@ -331,7 +336,7 @@ export async function connectedServers(user: string): Promise<McpServer[]> {
 		out.push({
 			name: c.id,
 			url: c.mcpUrl,
-			description: `${c.description} Connected as ${cred.account || "the user"}.${c.mcpHeaders?.["X-MCP-Readonly"] ? " Read-only." : ""}`,
+			description: `${c.description} Connected as ${cred.account || "the user"}.${c.mcpHeaders?.["X-MCP-Readonly"] ? " Read-only." : " Write actions pause for the user's approval in the chat: call them with complete arguments, then wait."}`,
 			headers: { authorization: `Bearer ${token}`, ...c.mcpHeaders },
 		});
 	}

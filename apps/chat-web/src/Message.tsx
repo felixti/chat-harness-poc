@@ -3,15 +3,17 @@ import { Brain, Check, ChevronRight, CloudUpload, Copy, Download, ExternalLink, 
 import { fileUrl, type FileInfo, type Message, type ToolStep } from "./api";
 import { Markdown, copyText } from "./Markdown";
 import { toolDone, toolLabel } from "./toolLabels";
+import { InterruptCards, type Respond } from "./InterruptCard";
 
 export function Steps({ steps, running }: { steps: ToolStep[]; running: boolean }) {
 	const [open, setOpen] = useState(false);
 	if (!steps.length) return null;
 	const current = steps[steps.length - 1];
 	const errors = steps.filter((s) => s.isError).length;
+	const waiting = steps.some((s) => s.waiting);
 	const label = running
 		? toolLabel(current.name, current.args)
-		: `${[...new Set(steps.map((s) => toolDone(s.name)))].slice(0, 3).join(", ")} · ${steps.length === 1 ? "1 etapa" : `${steps.length} etapas`}${errors ? `, ${errors} com erro` : ""}`;
+		: `${[...new Set(steps.filter((s) => !s.waiting).map((s) => toolDone(s.name)))].slice(0, 3).join(", ") || "Preparou a ação"} · ${steps.length === 1 ? "1 etapa" : `${steps.length} etapas`}${errors ? `, ${errors} com erro` : ""}${waiting ? " · aguardando você" : ""}`;
 	return (
 		<div className="steps">
 			<button type="button" className="steps-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
@@ -24,7 +26,7 @@ export function Steps({ steps, running }: { steps: ToolStep[]; running: boolean 
 						<li key={s.id || i}>
 							<span className={s.isError ? "err" : undefined}>
 								{toolLabel(s.name, s.args)}
-								{s.isError ? " · falhou" : ""}
+								{s.waiting ? " · aguardando você" : s.isError ? " · falhou" : ""}
 							</span>
 							<span className="tech">
 								{s.name} {JSON.stringify(s.args ?? {}).slice(0, 220)}
@@ -180,6 +182,7 @@ export function AssistantMessage({
 	onRegenerate,
 	onPreview,
 	onCloud,
+	onRespond,
 }: {
 	m: Extract<Message, { role: "assistant" }>;
 	conv?: string;
@@ -190,6 +193,7 @@ export function AssistantMessage({
 	onRegenerate: () => void;
 	onPreview: (f: FileInfo) => void;
 	onCloud?: CloudAction;
+	onRespond?: Respond;
 }) {
 	const [memOpen, setMemOpen] = useState(false);
 	const steps = m.parts.filter((p): p is ToolStep => p.type === "tool");
@@ -221,6 +225,7 @@ export function AssistantMessage({
 					))}
 				</div>
 			)}
+			{m.interrupts && m.interrupts.length > 0 && onRespond && <InterruptCards interrupts={m.interrupts} onRespond={onRespond} disabled={busy} />}
 			{m.saved && m.saved.length > 0 && (
 				<div className="saved-line">
 					<Brain size={13} /> Guardei na memória: {m.saved.join(" · ")}

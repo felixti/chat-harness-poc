@@ -74,6 +74,8 @@ export interface TurnInput {
 	extraTools?: ToolDefinition[];
 	/** Per-user system prompt additions (core memory snapshot). */
 	systemAppend?: string;
+	/** Human-in-the-loop gate (approvals, ask_user): consulted before every tool call. */
+	gate?: { check(call: { toolCallId: string; toolName: string; input: unknown }): { block: true; reason: string; terminate: true } | undefined };
 	/** Per-turn folder with the user's personal skills (my-*), loaded like company skills, read-only. */
 	userSkillsDir?: string;
 	onEvent: (event: { type: string; [k: string]: unknown }) => void;
@@ -107,7 +109,9 @@ Write for a busy colleague who reads on a chat screen.
   - a decision only they can make blocks the work: ask one question, with your recommendation;
   - something is risky or wrong (a broken number, a missing source, a destructive action).
 - When the intent is unclear (a file uploaded with no request), say in 2 or 3 lines what it is
-  and ask one short question about what they want. Do not analyze everything up front.
+  and ask what they want with ask_user (2-4 options). Do not analyze everything up front.
+- When missing context would change a deliverable (audience, format, scope), follow the clarify
+  skill: ask_user with at most 3 multiple-choice questions, each with your recommended option.
 - After reading a file, use what you read to do the task; do not summarize it unless asked.
 - Plain, specific prose: no "não é X, é Y" contrasts, no one-line closers that repeat the point,
   no forced lists of three, no inflated words (crucial, robusto, poderoso, essencial), no emoji.
@@ -140,6 +144,10 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		}),
 		appendSystemPrompt: [SYSTEM_APPEND, ...(input.systemAppend ? [input.systemAppend] : [])],
 		extensionFactories: [
+			// The gate runs before any tool (MCP ones included, and calls made from codemode).
+			(pi) => {
+				if (input.gate) pi.on("tool_call", (e) => input.gate!.check({ toolCallId: e.toolCallId, toolName: e.toolName, input: e.input }));
+			},
 			createToolSearchExtension(),
 			createMcpExtension({
 				logPath: join(agentDir, "mcp.log"),
@@ -183,9 +191,9 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 			input.onEvent({ type: "delta", text: event.assistantMessageEvent.delta });
 		} else if (event.type === "tool_execution_start") {
-			input.onEvent({ type: "tool", name: event.toolName, args: event.args });
+			input.onEvent({ type: "tool", id: event.toolCallId, name: event.toolName, args: event.args });
 		} else if (event.type === "tool_execution_end") {
-			input.onEvent({ type: "tool_end", name: event.toolName, isError: event.isError });
+			input.onEvent({ type: "tool_end", id: event.toolCallId, name: event.toolName, isError: event.isError, result: event.result });
 		}
 	});
 	input.signal?.addEventListener("abort", () => void session.abort());

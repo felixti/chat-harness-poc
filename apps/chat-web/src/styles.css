@@ -391,3 +391,27 @@ dialog.picker[open] { display: flex; }
 .seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--bg-hover); justify-self: start; }
 .seg button { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 13px; color: var(--fg-3); }
 .seg button[aria-checked="true"] { background: var(--bg-raised); color: var(--fg); box-shadow: 0 1px 2px rgba(20, 20, 19, 0.08); }
+
+/* ---------- AG-UI interrupts: approval and questions ---------- */
+.int-list { display: grid; gap: 10px; margin-top: 12px; }
+.int-card { border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 14px 16px; background: var(--bg-raised); display: grid; gap: 10px; max-width: 620px; }
+.int-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; color: var(--fg); }
+.int-head svg { color: var(--accent); }
+.int-msg { margin: 0; color: var(--fg); }
+.int-details { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--fg-3); justify-self: start; }
+.int-details[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.int-details .chev { transition: transform 150ms ease-out; }
+.int-json { margin: 0; padding: 10px 12px; background: var(--bg-code); border: 1px solid var(--line); border-radius: 8px; font-size: 12px; overflow-x: auto; max-height: 220px; }
+.int-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.int-note { margin: -2px 0 0; font-size: 12px; color: var(--fg-3); text-align: right; }
+.int-q { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.int-q legend { font-weight: 500; margin-bottom: 8px; padding: 0; }
+.int-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
+.int-opt { text-align: left; display: grid; gap: 2px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); transition: border-color 150ms ease-out, background 150ms ease-out; }
+.int-opt:hover { background: var(--bg-hover); }
+.int-opt[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.int-opt .lbl { font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.int-opt .rec { font-size: 11px; font-weight: 500; color: var(--accent); }
+.int-opt .desc { font-size: 12.5px; color: var(--fg-3); }
+.int-other { height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); }
+.int-other::placeholder { color: var(--fg-3); }

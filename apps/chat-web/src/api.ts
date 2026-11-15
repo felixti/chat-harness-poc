@@ -11,6 +11,8 @@ export interface ToolStep {
 	args: unknown;
 	isError?: boolean;
 	running?: boolean;
+	/** Held by an AG-UI interrupt until the user approves. */
+	waiting?: boolean;
 }
 export interface TextPart {
 	type: "text";
@@ -21,6 +23,19 @@ export interface MemoryUsed {
 	facts: string[];
 	conversations: string[];
 }
+/** AG-UI interrupt (approval or questions), as sent in RUN_FINISHED.outcome. */
+export interface Interrupt {
+	id: string;
+	reason: "tool_call" | "input_required";
+	message: string;
+	toolCallId?: string;
+	metadata?: {
+		toolName?: string;
+		input?: unknown;
+		questions?: { id: string; question: string; options: { label: string; description?: string }[]; recommended?: string; multiSelect?: boolean }[];
+	};
+}
+
 export interface FileInfo {
 	path: string;
 	size: number;
@@ -36,6 +51,7 @@ export type Message =
 			newFiles?: FileInfo[];
 			error?: string;
 			streaming?: boolean;
+			interrupts?: Interrupt[];
 	  };
 export interface ConversationDetail {
 	id: string;
@@ -43,6 +59,7 @@ export interface ConversationDetail {
 	messages: Message[];
 	files: FileInfo[];
 	feedback: Record<string, "up" | "down">;
+	interrupts?: Interrupt[];
 }
 export interface LibraryFile {
 	id: string;
@@ -145,18 +162,41 @@ export const api = {
 export const fileUrl = (conv: string, path: string, inline = false) =>
 	`api/conversations/${conv}/files/${encodeURIComponent(path)}${inline ? "?inline=1" : ""}`;
 
-export type StreamEvent =
-	| { type: "start"; conversationId: string }
-	| { type: "delta"; text: string }
-	| { type: "tool"; name: string; args: unknown }
-	| { type: "tool_end"; name: string; isError?: boolean }
-	| { type: "memory_used"; core: number; facts: string[]; conversations: string[] }
-	| { type: "memory"; saved: string[] }
-	| { type: "done"; conversationId: string; files: FileInfo[] }
-	| { type: "error"; message: string };
+/** AG-UI events the portal handles (https://github.com/ag-ui-protocol/ag-ui). */
+export type AguiEvent =
+	| { type: "RUN_STARTED"; threadId: string; runId: string }
+	| { type: "TEXT_MESSAGE_START"; messageId: string }
+	| { type: "TEXT_MESSAGE_CONTENT"; messageId: string; delta: string }
+	| { type: "TEXT_MESSAGE_END"; messageId: string }
+	| { type: "TOOL_CALL_START"; toolCallId: string; toolCallName: string }
+	| { type: "TOOL_CALL_ARGS"; toolCallId: string; delta: string }
+	| { type: "TOOL_CALL_END"; toolCallId: string }
+	| { type: "TOOL_CALL_RESULT"; toolCallId: string; content: string; metadata?: { isError?: boolean } }
+	| { type: "CUSTOM"; name: string; value: unknown }
+	| { type: "RUN_FINISHED"; threadId: string; runId: string; outcome?: { type: "success" } | { type: "interrupt"; interrupts: Interrupt[] } }
+	| { type: "RUN_ERROR"; message: string; code?: string };
 
-/** POST /api/chat and yield SSE events. Aborting the signal stops the turn on the server too. */
-export async function* chat(body: { conversationId?: string; message: string; skills?: string[]; edit?: boolean }, signal: AbortSignal): AsyncGenerator<StreamEvent> {
+export interface ResumeEntry {
+	interruptId: string;
+	status: "resolved" | "cancelled";
+	payload?: unknown;
+}
+
+/** POST an AG-UI RunAgentInput to /api/chat and yield events. Aborting stops the run on the server. */
+export async function* chat(
+	input: { threadId: string; message?: string; skills?: string[]; edit?: boolean; resume?: ResumeEntry[] },
+	signal: AbortSignal,
+): AsyncGenerator<AguiEvent> {
+	const body = {
+		threadId: input.threadId,
+		runId: crypto.randomUUID(),
+		state: {},
+		messages: input.message ? [{ id: crypto.randomUUID(), role: "user", content: input.message }] : [],
+		tools: [],
+		context: [],
+		forwardedProps: { skills: input.skills ?? [], edit: !!input.edit },
+		...(input.resume ? { resume: input.resume } : {}),
+	};
 	const r = await fetch("api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
 	if (!r.ok || !r.body) {
 		const j = (await r.json().catch(() => ({}))) as { error?: string };
@@ -173,7 +213,7 @@ export async function* chat(body: { conversationId?: string; message: string; sk
 		while ((i = buf.indexOf("\n\n")) >= 0) {
 			const line = buf.slice(0, i);
 			buf = buf.slice(i + 2);
-			if (line.startsWith("data: ")) yield JSON.parse(line.slice(6)) as StreamEvent;
+			if (line.startsWith("data: ")) yield JSON.parse(line.slice(6)) as AguiEvent;
 		}
 	}
 }

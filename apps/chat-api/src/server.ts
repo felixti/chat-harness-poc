@@ -13,6 +13,8 @@ import { beforeLastUserMessage, entriesToView } from "./conversation-view.ts";
 import { companySkills } from "./skills-catalog.ts";
 import { deletePrefix } from "./workspace.ts";
 import { curate } from "./curator.ts";
+import { AguiRun, resultText, type ResumeEntry } from "./agui.ts";
+import { askUserTool, Gate, resumeMessage, stripHidden } from "./approvals.ts";
 import { browse, exportedOf, importFiles, saveToOneDrive, type View } from "./m365.ts";
 import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } from "./library.ts";
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
@@ -74,17 +76,38 @@ function titleOf(message: string): string {
 }
 
 /** Retrieved memory for this turn; tells the portal what was used ("memória usada" chip). */
-async function memoryContext(user: string, message: string, id: string, facts: FactGraph | undefined, send: (e: unknown) => void): Promise<string> {
-	const [{ prompt, used }, core] = await Promise.all([retrieve(user, message, id, store, facts), coreEntries(user).catch(() => ({ user: [], memory: [] }))]);
-	used.core = core.user.length + core.memory.length;
-	if (used.core || used.facts.length || used.conversations.length) send({ type: "memory_used", ...used });
+async function memoryContext(user: string, message: string, id: string, facts: FactGraph | undefined, used: (v: unknown) => void): Promise<string> {
+	const [{ prompt, used: u }, core] = await Promise.all([retrieve(user, message, id, store, facts), coreEntries(user).catch(() => ({ user: [], memory: [] }))]);
+	u.core = core.user.length + core.memory.length;
+	if (u.core || u.facts.length || u.conversations.length) used(u);
 	return prompt;
 }
 
+/** AG-UI RunAgentInput (the portal) or the original { conversationId, message } shape. */
+type ChatInput = {
+	threadId?: string;
+	runId?: string;
+	messages?: { id?: string; role: string; content: unknown }[];
+	forwardedProps?: { skills?: string[]; edit?: boolean };
+	resume?: ResumeEntry[];
+	conversationId?: string;
+	message?: string;
+	skills?: string[];
+	edit?: boolean;
+};
+
+const lastUserText = (msgs: ChatInput["messages"]): string | undefined => {
+	const m = [...(msgs ?? [])].reverse().find((x) => x.role === "user");
+	if (!m) return undefined;
+	return typeof m.content === "string" ? m.content : Array.isArray(m.content) ? (m.content as { type?: string; text?: string }[]).filter((c) => c.type === "text").map((c) => c.text).join("\n") : undefined;
+};
+
 async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
-	const input = JSON.parse((await body(req, 1_000_000)).toString()) as { conversationId?: string; message: string; skills?: string[]; edit?: boolean };
-	const id = input.conversationId ?? randomUUID();
-	if (!ID.test(id) || !input.message) return json(res, 400, { error: "bad request" });
+	const input = JSON.parse((await body(req, 1_000_000)).toString()) as ChatInput;
+	const id = input.threadId ?? input.conversationId ?? randomUUID();
+	const skills = input.forwardedProps?.skills ?? input.skills;
+	const edit = input.forwardedProps?.edit ?? input.edit ?? false;
+	if (!ID.test(id)) return json(res, 400, { error: "bad request" });
 	// Lease + fresh workspace from Blob; 409 before streaming when another turn holds it.
 	const turn = await openTurn(user, id);
 	const memoryOn = config.memory.enabled && !!config.connectors.masterKey;
@@ -93,47 +116,71 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 	let finished = false;
 	try {
 		const existing = await store.get(user, id);
+		// A resume answers the interrupts saved with the conversation (any replica can serve it).
+		let message = input.message ?? lastUserText(input.messages);
+		const gate = new Gate();
+		if (input.resume?.length) {
+			const r = resumeMessage(existing?.pending ?? [], input.resume);
+			message = r.message;
+			for (const a of r.allow) gate.allow(a.toolName, a.input);
+		}
+		if (!message) return json(res, 400, { error: "bad request: no user message" });
 		res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
-		const send = (e: unknown) => res.write(`data: ${JSON.stringify(e)}\n\n`);
+		const run = new AguiRun((e) => res.write(`data: ${JSON.stringify(e)}\n\n`), id, input.runId as string | undefined);
 		const savedByAgent: string[] = [];
 		const onEvent = (e: { type: string; [k: string]: unknown }) => {
-			if (e.type === "tool" && (e.name === "memory" || e.name === "remember")) savedByAgent.push(JSON.stringify(e.args));
-			send(e);
+			if (e.type === "delta") run.text(String(e.text));
+			else if (e.type === "tool") {
+				if (e.name === "memory" || e.name === "remember") savedByAgent.push(JSON.stringify(e.args));
+				run.toolStart(String(e.id), String(e.name), e.args);
+			} else if (e.type === "tool_end") run.toolResult(String(e.id), resultText(e.result), !!e.isError);
+			else if (e.type === "error") run.custom("model_error", { message: e.message });
 		};
 		const abort = new AbortController();
 		res.on("close", () => abort.abort());
-		send({ type: "start", conversationId: id });
+		run.started();
 		try {
 			const result = await runTurn({
 				workspace: turn.dir,
 				// edit/regenerate: replay from before the last user message (the old answer is replaced).
-				entries: input.edit ? beforeLastUserMessage(existing?.entries ?? []) : (existing?.entries ?? []),
-				message: input.message,
-				pinnedSkills: input.skills,
+				entries: edit ? beforeLastUserMessage(existing?.entries ?? []) : (existing?.entries ?? []),
+				message,
+				pinnedSkills: skills,
 				mcpServers: await mcpServersFor(user),
+				gate,
 				...(memoryOn && facts
-					? { systemAppend: (await corePrompt(user)) + (await memoryContext(user, input.message, id, facts, send)), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store)], userSkillsDir: mySkills?.dir }
-					: { extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store)] }),
+					? { systemAppend: (await corePrompt(user)) + (await memoryContext(user, message, id, facts, (v) => run.custom("memory_used", v))), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool()], userSkillsDir: mySkills?.dir }
+					: { extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool()] }),
 				onEvent,
 				signal: abort.signal,
 			});
 			const files = await turn.finish();
 			finished = true;
 			let summary = existing?.summary;
-			// The answer is already on screen; the curator runs before "done" so the panel refreshes.
+			const userWords = stripHidden(message);
+			// The answer is already on screen; the curator runs before RUN_FINISHED so the panel refreshes.
 			if (memoryOn && config.memory.curator && config.memory.curatorMode === "inline") {
-				const cur = await curate({ user, userMessage: input.message, assistantReply: result.text, alreadySaved: savedByAgent, previousSummary: existing?.summary }, facts).catch((e) => {
+				const cur = await curate({ user, userMessage: userWords, assistantReply: result.text, alreadySaved: savedByAgent, previousSummary: existing?.summary }, facts).catch((e) => {
 					console.warn(`[curator] ${(e as Error).message}`);
 					return { saved: [] as string[], summary: undefined };
 				});
 				summary = cur.summary ?? summary;
-				if (cur.saved.length) send({ type: "memory", saved: cur.saved });
-				console.log(`[curator] saved ${cur.saved.length}${cur.summary ? ", summary updated" : ""}`);
+				if (cur.saved.length) run.custom("memory_saved", cur.saved);
 			}
-			await store.save({ id, user, title: existing?.title ?? titleOf(input.message), entries: result.entries, updatedAt: new Date(), summary, curatedAt: existing?.curatedAt, version: existing?.version });
-			if (memoryOn && config.memory.curator && config.memory.curatorMode === "async") {
+			await store.save({
+				id,
+				user,
+				title: existing?.title ?? titleOf(userWords),
+				entries: result.entries,
+				updatedAt: new Date(),
+				summary,
+				curatedAt: existing?.curatedAt,
+				pending: gate.interrupts.length ? gate.interrupts : undefined,
+				version: existing?.version,
+			});
+			if (memoryOn && config.memory.curator && config.memory.curatorMode === "async" && !input.resume?.length) {
 				// After the answer, off the request path; the nightly job catches anything this misses.
-				const later = { user, userMessage: input.message, assistantReply: result.text, alreadySaved: savedByAgent, previousSummary: existing?.summary };
+				const later = { user, userMessage: userWords, assistantReply: result.text, alreadySaved: savedByAgent, previousSummary: existing?.summary };
 				setImmediate(() => {
 					const g = new FactGraph(user, id);
 					void curate(later, g)
@@ -142,9 +189,10 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 						.finally(() => g.dispose().catch(() => undefined));
 				});
 			}
-			send({ type: "done", conversationId: id, files: userVisible(files) });
+			run.custom("files", userVisible(files));
+			run.finished(gate.interrupts.map(({ id: iid, reason, message: msg, toolCallId, responseSchema, toolName, input: args, questions }) => ({ id: iid, reason, message: msg, toolCallId, responseSchema, metadata: { toolName, input: args, questions } })));
 		} catch (e) {
-			send({ type: "error", message: (e as Error).message });
+			run.error((e as Error).message);
 		}
 		res.end();
 	} finally {
@@ -199,7 +247,16 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 		if (req.method === "GET") {
 			const c = await store.get(user, id);
 			if (!c) return json(res, 404, { error: "conversation not found" });
-			return json(res, 200, { id, title: c.title, summary: c.summary, updatedAt: c.updatedAt, messages: entriesToView(c.entries), files: userVisible(await listFiles(user, id)), feedback: await store.feedbackOf(user, id) });
+			return json(res, 200, {
+				id,
+				title: c.title,
+				summary: c.summary,
+				updatedAt: c.updatedAt,
+				messages: entriesToView(c.entries),
+				files: userVisible(await listFiles(user, id)),
+				feedback: await store.feedbackOf(user, id),
+				interrupts: (c.pending ?? []).map(({ id: iid, reason, message, toolCallId, responseSchema, toolName, input, questions }) => ({ id: iid, reason, message, toolCallId, responseSchema, metadata: { toolName, input, questions } })),
+			});
 		}
 		if (req.method === "PATCH") {
 			const { title } = JSON.parse((await body(req, 10_000)).toString()) as { title?: string };
