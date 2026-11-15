@@ -10,6 +10,7 @@ export function toolLabel(name: string, args: unknown): string {
 		return `Pesquisando na web${a.query ? `: ${a.query}` : ""}`;
 	}
 	if (name.startsWith("mcp__github__")) return "Consultando o GitHub";
+	if (name.startsWith("mcp__azuredevops__")) return azdoLabel(name);
 	if (name.startsWith("mcp__context7__")) return "Consultando documentação técnica";
 	if (name.startsWith("mcp__")) return `Usando ${name.split("__")[1] ?? "um conector"}`;
 	switch (name) {
@@ -69,6 +70,7 @@ export function toolLabel(name: string, args: unknown): string {
 export function toolDone(name: string): string {
 	if (name.startsWith("mcp__brave__")) return name.includes("llm_context") ? "Leu páginas da web" : "Pesquisou na web";
 	if (name.startsWith("mcp__github__")) return "Consultou o GitHub";
+	if (name.startsWith("mcp__azuredevops__")) return "Consultou o Azure DevOps";
 	if (name.startsWith("mcp__context7__")) return "Consultou documentação";
 	if (name.startsWith("mcp__")) return "Usou um conector";
 	const DONE: Record<string, string> = {
@@ -80,4 +82,15 @@ export function toolDone(name: string): string {
 		skill_delete: "Apagou um procedimento", my_files: "Procurou nos seus arquivos", attach_file: "Anexou um arquivo",
 	};
 	return DONE[name] ?? name.replace(/_/g, " ");
+}
+
+function azdoLabel(name: string): string {
+	const t = name.slice("mcp__azuredevops__".length);
+	if (t.startsWith("wit") || t === "search_workitem") return "Consultando work items no Azure DevOps";
+	if (t.startsWith("repo") || t === "search_code") return "Consultando repositórios no Azure DevOps";
+	if (t.startsWith("pipelines")) return "Consultando pipelines no Azure DevOps";
+	if (t.startsWith("wiki") || t === "search_wiki") return "Consultando a wiki no Azure DevOps";
+	if (t.startsWith("work")) return "Consultando sprints no Azure DevOps";
+	if (t.startsWith("testplan")) return "Consultando planos de teste no Azure DevOps";
+	return "Consultando o Azure DevOps";
 }

@@ -66,6 +66,16 @@ export const config = {
 			 *  Add Sites.Read.All for SharePoint site browsing on work accounts. */
 			scopes: (env.MICROSOFT_SCOPES ?? "openid profile offline_access User.Read Files.Read.All Files.ReadWrite").split(/\s+/),
 		},
+		azuredevops: {
+			clientId: env.AZDO_CLIENT_ID ?? "",
+			clientSecret: secret("AZDO_CLIENT_SECRET", "azuredevops-client-secret"),
+			/** Entra tenant that backs the Azure DevOps organization (single-tenant app). */
+			tenant: env.AZDO_TENANT ?? "",
+			organization: env.AZDO_ORG ?? "",
+			/** Read-only by default (X-MCP-Readonly + read scopes only). */
+			readOnly: env.AZDO_MCP_READONLY !== "false",
+			toolsets: env.AZDO_MCP_TOOLSETS ?? "repos,wit,pipelines,wiki,work,testplan",
+		},
 		github: {
 			clientId: env.GITHUB_CLIENT_ID ?? "",
 			clientSecret: secret("GITHUB_CLIENT_SECRET", "github-client-secret"),

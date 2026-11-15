@@ -17,6 +17,8 @@ spec:
     remoteRef: {key: github-oauth-client-secret}
   - secretKey: microsoft-client-secret
     remoteRef: {key: microsoft-oauth-client-secret}
+  - secretKey: azuredevops-client-secret
+    remoteRef: {key: azuredevops-oauth-client-secret}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -74,6 +76,9 @@ spec:
         - {name: CONNECTORS_CONTAINER, value: chat-credentials}
         - {name: MEMORY_CONTAINER, value: chat-memory}
         - {name: GITHUB_CLIENT_ID, value: "Ov23lipiqkWBqCka0Sgk"}   # GitHub OAuth App client ID (public)
+        - {name: AZDO_CLIENT_ID, value: "350bddb7-1b60-4df7-b643-4b7d6461b851"}   # Entra app chat-harness-azure-devops (single tenant)
+        - {name: AZDO_TENANT, value: "5f9bf155-4fca-4d0c-8201-ca5e6100f66e"}
+        - {name: AZDO_ORG, value: "felix-demo"}
         - {name: MICROSOFT_CLIENT_ID, value: "0ea6ada6-2ef2-43fe-b6f2-ba6433182343"}   # Entra app chat-harness-microsoft-files (work + personal accounts)
         ports: [{name: http, containerPort: 8080}]
         readinessProbe:
@@ -101,6 +106,6 @@ spec:
           - secret:
               name: chat-connectors
               optional: true
-              items: [{key: master-key, path: connectors-master-key}, {key: github-client-secret, path: github-client-secret}, {key: microsoft-client-secret, path: microsoft-client-secret}]
+              items: [{key: master-key, path: connectors-master-key}, {key: github-client-secret, path: github-client-secret}, {key: microsoft-client-secret, path: microsoft-client-secret}, {key: azuredevops-client-secret, path: azuredevops-client-secret}]
       # Scratch for one turn at a time; Blob is the truth, losing the pod loses nothing.
       - {name: tmp, emptyDir: {sizeLimit: 4Gi}}

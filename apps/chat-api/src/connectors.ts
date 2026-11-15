@@ -67,6 +67,34 @@ export function connectors(): Connector[] {
 				return u.login ? `@${u.login}` : "";
 			},
 		});
+	const ado = config.connectors.azuredevops;
+	if (ado.clientId && ado.clientSecret && ado.tenant && ado.organization) {
+		const api = "api://2a72489c-aab2-4b65-b93a-a91edccf33b8"; // the "Azure DevOps MCP" resource
+		out.push({
+			id: "azuredevops",
+			name: "Azure DevOps",
+			summary: `Work items, repositórios, pull requests, pipelines e wiki da organização ${ado.organization}.`,
+			description: `Azure DevOps organization ${ado.organization} as the signed-in user: work items and queries, repos and pull requests, pipelines and builds, wiki, iterations, test plans.`,
+			authorizeUrl: `https://login.microsoftonline.com/${ado.tenant}/oauth2/v2.0/authorize`,
+			tokenUrl: `https://login.microsoftonline.com/${ado.tenant}/oauth2/v2.0/token`,
+			// Read scopes only; writing (create work items, PRs, run pipelines) is a separate decision.
+			scopes: [...["Ado.Mcp.Tools", "repos.read", "wit.read", "pipelines.read", "wiki.read", "work.read", "testplan.read"].map((x) => `${api}/${x}`), "offline_access"],
+			authParams: { response_type: "code", response_mode: "query" },
+			clientId: ado.clientId,
+			clientSecret: ado.clientSecret,
+			mcpUrl: `https://mcp.dev.azure.com/${encodeURIComponent(ado.organization)}`,
+			mcpHeaders: { "X-MCP-Toolsets": ado.toolsets, ...(ado.readOnly ? { "X-MCP-Readonly": "true" } : {}) },
+			// The token is for the MCP resource (not Graph): the account name comes from its claims.
+			async account(token) {
+				try {
+					const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()) as { preferred_username?: string; upn?: string; name?: string };
+					return claims.preferred_username ?? claims.upn ?? claims.name ?? "";
+				} catch {
+					return "";
+				}
+			},
+		});
+	}
 	const ms = config.connectors.microsoft;
 	if (ms.clientId && ms.clientSecret)
 		out.push({
@@ -294,11 +322,17 @@ export async function connectedServers(user: string): Promise<McpServer[]> {
 			return undefined;
 		});
 		if (!cred) continue;
+		// Short-lived tokens (Entra: ~1 h) are refreshed here, before the turn opens the MCP session.
+		const token = await accessToken(user, c.id).catch((e) => {
+			console.warn(`[connectors] ${c.id}: ${(e as Error).message}`);
+			return undefined;
+		});
+		if (!token) continue;
 		out.push({
 			name: c.id,
 			url: c.mcpUrl,
 			description: `${c.description} Connected as ${cred.account || "the user"}.${c.mcpHeaders?.["X-MCP-Readonly"] ? " Read-only." : ""}`,
-			headers: { authorization: `Bearer ${cred.accessToken}`, ...c.mcpHeaders },
+			headers: { authorization: `Bearer ${token}`, ...c.mcpHeaders },
 		});
 	}
 	return out;
