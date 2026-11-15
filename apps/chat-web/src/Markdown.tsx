@@ -5,7 +5,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "reac
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { Check, Copy, Code2, Download, Image as ImageIcon } from "lucide-react";
+import { Check, Copy, Code2, Download, Image as ImageIcon, Maximize2, X } from "lucide-react";
 import { fileUrl } from "./api";
 
 export async function copyText(text: string) {
@@ -94,11 +94,24 @@ function sized(svg: string): string {
 	}
 }
 
+/** Scale a diagram to the column width and a bounded height, never upscaling and never below
+ *  65% (labels stay legible at ~10px): what still does not fit scrolls inside the figure. */
+const FIT_MAX_H = () => Math.min(520, innerHeight * 0.6);
+function fit(img: HTMLImageElement) {
+	const box = img.parentElement;
+	if (!box || !img.naturalWidth) return;
+	const cs = getComputedStyle(box);
+	const avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+	const scale = Math.max(0.65, Math.min(1, avail / img.naturalWidth, FIT_MAX_H() / img.naturalHeight));
+	img.style.width = `${Math.round(img.naturalWidth * scale)}px`;
+}
+
 const toSvgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
 function Figure({ svg, source, lang, exportSvg }: { svg: string; source: string; lang: string; exportSvg?: () => Promise<string> }) {
 	const out = exportSvg ?? (() => Promise.resolve(svg));
 	const [showCode, setShowCode] = useState(false);
+	const zoom = useRef<HTMLDialogElement>(null);
 	return (
 		<div className="block">
 			<div className="block-head">
@@ -107,6 +120,11 @@ function Figure({ svg, source, lang, exportSvg }: { svg: string; source: string;
 					<Code2 size={14} />
 					<span className="txt">Código</span>
 				</button>
+				{!showCode && (
+					<button type="button" className="act" aria-label="Ampliar" title="Ampliar" onClick={() => zoom.current?.showModal()}>
+						<Maximize2 size={14} />
+					</button>
+				)}
 				<CopyAction get={async () => copySvgAsPng(await out())} label="Copiar imagem" icon={<ImageIcon size={14} />} />
 				<CopyAction get={() => copyText(source)} label="Copiar código" />
 				<button type="button" className="act" onClick={async () => download(`${lang}.svg`, await out(), "image/svg+xml")} aria-label="Baixar SVG">
@@ -119,9 +137,18 @@ function Figure({ svg, source, lang, exportSvg }: { svg: string; source: string;
 				</pre>
 			) : (
 				<div className="figure">
-					<img src={toSvgUrl(svg)} alt={`Diagrama ${lang}`} />
+					{/* Fits the column (never upscaled); click opens it full screen at readable size. */}
+					<img src={toSvgUrl(svg)} alt={`Diagrama ${lang}`} title="Clique para ampliar" onLoad={(e) => fit(e.currentTarget)} onClick={() => zoom.current?.showModal()} />
 				</div>
 			)}
+			<dialog className="zoom" ref={zoom} aria-label={`Diagrama ${lang} ampliado`} onClick={(e) => e.target === e.currentTarget && zoom.current?.close()}>
+				<button type="button" className="icon-btn close" aria-label="Fechar" onClick={() => zoom.current?.close()}>
+					<X size={18} />
+				</button>
+				<div className="zoom-body">
+					<img src={toSvgUrl(svg)} alt={`Diagrama ${lang}`} />
+				</div>
+			</dialog>
 		</div>
 	);
 }

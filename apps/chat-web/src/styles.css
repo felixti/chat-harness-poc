@@ -231,9 +231,15 @@ code, pre, kbd { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .block-head button.act[aria-pressed="true"] { background: var(--bg-active); color: var(--fg); }
 .block pre { margin: 0; padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.55; tab-size: 4; }
 .block pre.ascii { white-space: pre; line-height: 1.25; }
-.block .figure { padding: 16px; display: flex; justify-content: safe center; background: var(--bg); overflow-x: auto; }
-/* Natural size: labels stay readable; wide diagrams scroll instead of shrinking. */
-.block .figure img { max-width: none; height: auto; flex-shrink: 0; }
+/* fit() in Markdown.tsx scales to the column and ~520px high, never below 65%; the rest scrolls here. "Ampliar" shows full size. */
+.block .figure { padding: 16px; display: flex; justify-content: safe center; align-items: flex-start; background: var(--bg); overflow: auto; max-height: calc(min(520px, 60vh) + 32px); }
+.block .figure img { max-width: none; height: auto; flex-shrink: 0; cursor: zoom-in; }
+dialog.zoom { width: 96vw; height: 92vh; max-width: none; max-height: none; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); box-shadow: var(--shadow); overflow: hidden; }
+dialog.zoom::backdrop { background: rgba(10, 10, 10, 0.5); }
+dialog.zoom .close { position: absolute; top: 8px; right: 8px; z-index: 1; background: var(--bg-raised); }
+dialog.zoom .zoom-body { width: 100%; height: 100%; overflow: auto; display: flex; padding: 24px; }
+/* Fits the screen when it can; otherwise natural size with scroll ("margin: auto" keeps it centred and reachable). */
+dialog.zoom .zoom-body img { margin: auto; max-width: none; flex-shrink: 0; }
 .block .figure.pending { color: var(--fg-3); font-size: 13px; min-height: 80px; }
 .table-wrap { overflow-x: auto; background: var(--bg); }
 .md table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
