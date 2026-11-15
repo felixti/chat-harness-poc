@@ -225,6 +225,13 @@ export async function readFileFromStore(user: string, conversation: string, rel:
 	return data;
 }
 
+/** Deletes everything of one conversation (the user deleted it). */
+export async function deletePrefix(user: string, conversation: string): Promise<void> {
+	const s = objectStore();
+	const prefix = prefixOf(user, conversation);
+	for (const f of await s.list(prefix)) await s.delete(prefix + f.path);
+}
+
 /** User uploads go straight to Blob; the next turn downloads them. */
 export async function writeFileToStore(user: string, conversation: string, rel: string, data: Buffer): Promise<void> {
 	await objectStore().put(prefixOf(user, conversation) + rel, data);

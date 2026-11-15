@@ -10,3 +10,8 @@ terraform.tfvars
 testdata/*
 !testdata/README.md
 !testdata/fetch.sh
+
+# build output (the image builds it from apps/chat-web)
+apps/chat-api/public/
+# impeccable runtime captures
+.impeccable/review/

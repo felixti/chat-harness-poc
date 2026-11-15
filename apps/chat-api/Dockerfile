@@ -6,12 +6,20 @@ COPY apps/chat-api/package.json apps/chat-api/package-lock.json ./
 # --ignore-scripts: no install-time code runs (protobufjs postinstall is not needed).
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
+# Portal (React + Vite) built here and served by chat-api: no CDN at runtime.
+FROM node:24-slim AS web
+WORKDIR /app/apps/chat-web
+COPY apps/chat-web/package.json apps/chat-web/package-lock.json ./
+RUN npm ci --ignore-scripts && npm cache clean --force
+COPY apps/chat-web/ ./
+RUN npx vite build
+
 FROM gcr.io/distroless/nodejs24-debian13:nonroot
 WORKDIR /app/apps/chat-api
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/chat-api/package.json ./
 COPY apps/chat-api/src ./src
-COPY apps/chat-api/public ./public
+COPY --from=web /app/apps/chat-api/public ./public
 COPY apps/chat-api/assets ./assets
 COPY skills /app/skills
 ENV NODE_ENV=production \

@@ -82,6 +82,11 @@ export interface ConversationStore {
 	get(user: string, id: string): Promise<Conversation | undefined>;
 	save(c: Conversation): Promise<void>;
 	list(user: string): Promise<ConversationSummary[]>;
+	rename(user: string, id: string, title: string): Promise<boolean>;
+	remove(user: string, id: string): Promise<boolean>;
+	/** Thumbs up/down on an assistant turn (null clears it). Kept apart from the history document. */
+	feedback(user: string, id: string, turn: string, value: "up" | "down" | null): Promise<void>;
+	feedbackOf(user: string, id: string): Promise<Record<string, "up" | "down">>;
 	/** Most recent conversations with their summaries (episodic context for every turn). */
 	recent(user: string, limit: number, exclude?: string): Promise<Episode[]>;
 	/** Earlier conversations of this user matching any keyword (episodic memory). */
@@ -90,6 +95,30 @@ export interface ConversationStore {
 
 export class MemoryStore implements ConversationStore {
 	private readonly items = new Map<string, Conversation>();
+	private readonly votes = new Map<string, Record<string, "up" | "down">>();
+	async rename(user: string, id: string, title: string) {
+		const c = this.items.get(id);
+		if (!c || c.user !== user) return false;
+		c.title = title;
+		return true;
+	}
+	async remove(user: string, id: string) {
+		const c = this.items.get(id);
+		if (!c || c.user !== user) return false;
+		this.items.delete(id);
+		this.votes.delete(`${user}/${id}`);
+		return true;
+	}
+	async feedback(user: string, id: string, turn: string, value: "up" | "down" | null) {
+		const k = `${user}/${id}`;
+		const v = { ...(this.votes.get(k) ?? {}) };
+		if (value) v[turn] = value;
+		else delete v[turn];
+		this.votes.set(k, v);
+	}
+	async feedbackOf(user: string, id: string) {
+		return this.votes.get(`${user}/${id}`) ?? {};
+	}
 	async get(user: string, id: string) {
 		const c = this.items.get(id);
 		return c && c.user === user ? c : undefined;
@@ -120,17 +149,43 @@ export class MemoryStore implements ConversationStore {
 
 type Doc = Omit<Conversation, "id"> & { _id: string; text?: string };
 
+type Vote = { _id: string; user: string; conversation: string; turn: string; value: "up" | "down"; at: Date };
+
 export class MongoStore implements ConversationStore {
 	private readonly col: Collection<Doc>;
-	private constructor(col: Collection<Doc>) {
+	private readonly votes: Collection<Vote>;
+	private constructor(col: Collection<Doc>, votes: Collection<Vote>) {
 		this.col = col;
+		this.votes = votes;
+	}
+
+	async rename(user: string, id: string, title: string) {
+		return (await this.col.updateOne({ _id: id, user }, { $set: { title } })).matchedCount === 1;
+	}
+
+	async remove(user: string, id: string) {
+		await this.votes.deleteMany({ user, conversation: id });
+		return (await this.col.deleteOne({ _id: id, user })).deletedCount === 1;
+	}
+
+	async feedback(user: string, id: string, turn: string, value: "up" | "down" | null) {
+		const _id = `${user}/${id}/${turn}`;
+		if (!value) await this.votes.deleteOne({ _id });
+		else await this.votes.replaceOne({ _id }, { user, conversation: id, turn, value, at: new Date() }, { upsert: true });
+	}
+
+	async feedbackOf(user: string, id: string) {
+		const rows = await this.votes.find({ user, conversation: id }).toArray();
+		return Object.fromEntries(rows.map((r) => [r.turn, r.value]));
 	}
 
 	static async connect(url: string): Promise<MongoStore> {
 		const client = await new MongoClient(url, { appName: "chat-api" }).connect();
 		const col = client.db().collection<Doc>("conversations");
 		await col.createIndex({ user: 1, updatedAt: -1 });
-		return new MongoStore(col);
+		const votes = client.db().collection<Vote>("feedback");
+		await votes.createIndex({ user: 1, conversation: 1 });
+		return new MongoStore(col, votes);
 	}
 
 	async get(user: string, id: string) {

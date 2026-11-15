@@ -2,13 +2,16 @@ import "./no-subprocess.ts"; // first: enforce the "no subprocess" runtime rule
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { relative } from "node:path";
+import { extname, join, relative } from "node:path";
 import { config } from "./config.ts";
 import { runTurn, type McpServer } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
-import { retrievedPrompt, clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
+import { retrieve, clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
 import { FactGraph, graphTools } from "./graph-memory.ts";
+import { beforeLastUserMessage, entriesToView } from "./conversation-view.ts";
+import { companySkills } from "./skills-catalog.ts";
+import { deletePrefix } from "./workspace.ts";
 import { curate } from "./curator.ts";
 import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } from "./library.ts";
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
@@ -61,8 +64,16 @@ function json(res: ServerResponse, status: number, data: unknown) {
 	res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(data));
 }
 
+/** Retrieved memory for this turn; tells the portal what was used ("memória usada" chip). */
+async function memoryContext(user: string, message: string, id: string, facts: FactGraph | undefined, send: (e: unknown) => void): Promise<string> {
+	const [{ prompt, used }, core] = await Promise.all([retrieve(user, message, id, store, facts), coreEntries(user).catch(() => ({ user: [], memory: [] }))]);
+	used.core = core.user.length + core.memory.length;
+	if (used.core || used.facts.length || used.conversations.length) send({ type: "memory_used", ...used });
+	return prompt;
+}
+
 async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
-	const input = JSON.parse((await body(req, 1_000_000)).toString()) as { conversationId?: string; message: string; skills?: string[] };
+	const input = JSON.parse((await body(req, 1_000_000)).toString()) as { conversationId?: string; message: string; skills?: string[]; edit?: boolean };
 	const id = input.conversationId ?? randomUUID();
 	if (!ID.test(id) || !input.message) return json(res, 400, { error: "bad request" });
 	// Lease + fresh workspace from Blob; 409 before streaming when another turn holds it.
@@ -86,12 +97,13 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 		try {
 			const result = await runTurn({
 				workspace: turn.dir,
-				entries: existing?.entries ?? [],
+				// edit/regenerate: replay from before the last user message (the old answer is replaced).
+				entries: input.edit ? beforeLastUserMessage(existing?.entries ?? []) : (existing?.entries ?? []),
 				message: input.message,
 				pinnedSkills: input.skills,
 				mcpServers: await mcpServersFor(user),
 				...(memoryOn && facts
-					? { systemAppend: (await corePrompt(user)) + (await retrievedPrompt(user, input.message, id, store, facts)), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store)], userSkillsDir: mySkills?.dir }
+					? { systemAppend: (await corePrompt(user)) + (await memoryContext(user, input.message, id, facts, send)), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store)], userSkillsDir: mySkills?.dir }
 					: { extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store)] }),
 				onEvent,
 				signal: abort.signal,
@@ -125,17 +137,62 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 	}
 }
 
+const TYPES: Record<string, string> = {
+	".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml",
+	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".woff2": "font/woff2",
+	".json": "application/json", ".ico": "image/x-icon", ".pdf": "application/pdf", ".txt": "text/plain; charset=utf-8", ".md": "text/plain; charset=utf-8", ".csv": "text/csv; charset=utf-8",
+};
+const PUBLIC = new URL("../public/", import.meta.url).pathname;
+
+/** The portal (Vite build in public/): hashed assets cached long, index.html never. */
+async function staticFile(res: ServerResponse, pathname: string): Promise<boolean> {
+	const rel = pathname === "/" ? "index.html" : pathname.slice(1);
+	if (rel.includes("..") || rel.startsWith("api/")) return false;
+	const file = join(PUBLIC, rel);
+	const data = await readFile(file).catch(() => undefined);
+	if (!data) return false;
+	const ext = extname(file).toLowerCase();
+	res.writeHead(200, { "content-type": TYPES[ext] ?? "application/octet-stream", "cache-control": rel.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache" }).end(data);
+	return true;
+}
+
 async function route(req: IncomingMessage, res: ServerResponse) {
 	const url = new URL(req.url ?? "/", "http://x");
 	if (url.pathname === "/healthz") return res.writeHead(200).end("ok");
-	if (url.pathname === "/" || url.pathname === "/index.html") {
-		const html = await readFile(new URL("../public/index.html", import.meta.url));
-		return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
-	}
+	if (req.method === "GET" && !url.pathname.startsWith("/api/") && (await staticFile(res, url.pathname))) return;
 	const user = userOf(req);
 	if (url.pathname === "/api/me") return json(res, 200, { user });
 	if (url.pathname === "/api/conversations" && req.method === "GET") return json(res, 200, await store.list(user));
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
+	if (url.pathname === "/api/skills" && req.method === "GET") {
+		const mine = config.connectors.masterKey ? await listSkills(user).catch(() => []) : [];
+		return json(res, 200, [...(await companySkills()), ...mine.map((s) => ({ name: `my-${s.name}`, description: s.description, personal: true }))]);
+	}
+	const cv = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})(\/feedback)?$/);
+	if (cv) {
+		const id = cv[1];
+		if (cv[2] && req.method === "POST") {
+			const { turn, value } = JSON.parse((await body(req, 10_000)).toString()) as { turn?: string; value?: "up" | "down" | null };
+			if (!turn || (value !== "up" && value !== "down" && value !== null)) return json(res, 400, { error: "turn and value up|down|null" });
+			await store.feedback(user, id, turn, value);
+			return json(res, 200, { ok: true });
+		}
+		if (req.method === "GET") {
+			const c = await store.get(user, id);
+			if (!c) return json(res, 404, { error: "conversation not found" });
+			return json(res, 200, { id, title: c.title, summary: c.summary, updatedAt: c.updatedAt, messages: entriesToView(c.entries), files: userVisible(await listFiles(user, id)), feedback: await store.feedbackOf(user, id) });
+		}
+		if (req.method === "PATCH") {
+			const { title } = JSON.parse((await body(req, 10_000)).toString()) as { title?: string };
+			if (!title?.trim()) return json(res, 400, { error: "title" });
+			return json(res, (await store.rename(user, id, title.trim().slice(0, 120))) ? 200 : 404, { ok: true });
+		}
+		if (req.method === "DELETE") {
+			await store.remove(user, id);
+			await deletePrefix(user, id);
+			return json(res, 200, { ok: true });
+		}
+	}
 
 	if (url.pathname === "/api/files" && req.method === "GET") return json(res, 200, await listLibrary(user, store, url.searchParams.get("q") ?? undefined));
 	if (url.pathname === "/api/files" && req.method === "DELETE") {
@@ -167,6 +224,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 			const rel = relative(workspace, insideWorkspace(workspace, decodeURIComponent(m[3])));
 			const name = rel.split("/").pop()!.replace(/["\r\n]/g, "_");
 			const data = await readFileFromStore(user, m[1], rel);
+			// ?inline=1: previews in the portal (images, HTML in a sandboxed frame, text); default: download.
+			if (url.searchParams.get("inline") === "1")
+				return res.writeHead(200, { "content-type": TYPES[extname(name).toLowerCase()] ?? "application/octet-stream", "content-disposition": "inline", "x-content-type-options": "nosniff" }).end(data);
 			return res.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": `attachment; filename="${name}"` }).end(data);
 		}
 		if (m[2] === "uploads" && req.method === "POST" && m[3]) {
