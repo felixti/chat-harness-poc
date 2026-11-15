@@ -5,6 +5,15 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="color-scheme" content="light dark" />
 		<title>Assistente</title>
+		<script>
+			// Theme before first paint (src/theme.ts): light unless the user chose dark or system.
+			(function () {
+				var t = "light";
+				try { t = localStorage.getItem("assistente.theme") || "light"; } catch (e) {}
+				if (t === "system") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+				document.documentElement.dataset.theme = t === "dark" ? "dark" : "light";
+			})();
+		</script>
 		<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23141413'/%3E%3Cpath d='M9 21.5 15.2 9h1.6L23 21.5h-3l-1.3-2.8h-5.4L12 21.5zm5.3-5.2h3.4L16 12.5z' fill='%23fff'/%3E%3C/svg%3E" />
 	</head>
 	<body>

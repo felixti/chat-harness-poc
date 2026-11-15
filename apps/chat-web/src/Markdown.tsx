@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { Check, Copy, Code2, Download, Image as ImageIcon, Maximize2, X } from "lucide-react";
 import { fileUrl } from "./api";
+import { useTheme } from "./theme";
 
 export async function copyText(text: string) {
 	await navigator.clipboard.writeText(text);
@@ -177,23 +178,23 @@ function renderMermaid(source: string, theme: "dark" | "neutral"): Promise<strin
 	return job;
 }
 
-const isDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
 
 function Mermaid({ source, final }: { source: string; final: boolean }) {
 	const [svg, setSvg] = useState<string>();
 	const [error, setError] = useState<string>();
+	const theme = useTheme();
 	useEffect(() => {
 		if (!final) return;
 		let alive = true;
-		renderMermaid(source, isDark() ? "dark" : "neutral")
+		renderMermaid(source, theme === "dark" ? "dark" : "neutral")
 			.then((r) => alive && setSvg(r))
 			.catch((e) => alive && setError(String(e?.message ?? e).split("\n")[0]));
 		return () => {
 			alive = false;
 		};
-	}, [source, final]);
+	}, [source, final, theme]);
 	// Copies and downloads always use the light theme: they get pasted into slides and documents.
-	const exportSvg = () => (isDark() ? renderMermaid(source, "neutral") : Promise.resolve(svg!));
+	const exportSvg = () => (theme === "dark" ? renderMermaid(source, "neutral") : Promise.resolve(svg!));
 	if (svg) return <Figure svg={svg} source={source} lang="mermaid" exportSvg={exportSvg} />;
 	return (
 		<div className="block">

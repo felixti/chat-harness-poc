@@ -1,5 +1,5 @@
 /* Assistente: neutral surfaces, one accent, system type. Light by default (office laptop under
-   daylight), dark follows the OS. */
+   daylight); dark when the user picks it, or follows the OS on "Sistema" (src/theme.ts, H55). */
 :root {
 	--bg: #ffffff;
 	--bg-side: #f8f8f7;
@@ -25,29 +25,27 @@
 	--mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
 	color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-	:root {
-		--bg: #1d1d1c;
-		--bg-side: #161615;
-		--bg-raised: #262625;
-		--bg-hover: #2b2b2a;
-		--bg-active: #343432;
-		--bg-bubble: #2c2c2a;
-		--bg-code: #232322;
-		--fg: #ececea;
-		--fg-2: #c2c2bd;
-		--fg-3: #9a9a95;
-		--line: #2f2f2d;
-		--line-strong: #3d3d3a;
-		--accent: #7aa7f5;
-		--accent-soft: #1f2a3d;
-		--danger: #f97066;
-		--ok: #4ade80;
-		--send: #ececea;
-		--send-fg: #141413;
-		--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.35);
-		color-scheme: dark;
-	}
+:root[data-theme="dark"] {
+	--bg: #1d1d1c;
+	--bg-side: #161615;
+	--bg-raised: #262625;
+	--bg-hover: #2b2b2a;
+	--bg-active: #343432;
+	--bg-bubble: #2c2c2a;
+	--bg-code: #232322;
+	--fg: #ececea;
+	--fg-2: #c2c2bd;
+	--fg-3: #9a9a95;
+	--line: #2f2f2d;
+	--line-strong: #3d3d3a;
+	--accent: #7aa7f5;
+	--accent-soft: #1f2a3d;
+	--danger: #f97066;
+	--ok: #4ade80;
+	--send: #ececea;
+	--send-fg: #141413;
+	--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.35);
+	color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -253,12 +251,10 @@ dialog.zoom .zoom-body img { margin: auto; max-width: none; flex-shrink: 0; }
 .hljs-comment { color: var(--fg-3); font-style: italic; }
 .hljs-title, .hljs-section, .hljs-function .hljs-title { color: var(--accent); }
 .hljs-attr, .hljs-variable, .hljs-property { color: #b42318; }
-@media (prefers-color-scheme: dark) {
-	.hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: #d8a0f0; }
-	.hljs-string, .hljs-attr-value, .hljs-regexp { color: #8fd18f; }
-	.hljs-number, .hljs-literal { color: #f0b468; }
-	.hljs-attr, .hljs-variable, .hljs-property { color: #f6928a; }
-}
+[data-theme="dark"] .hljs-keyword, [data-theme="dark"] .hljs-selector-tag, [data-theme="dark"] .hljs-built_in { color: #d8a0f0; }
+[data-theme="dark"] .hljs-string, [data-theme="dark"] .hljs-attr-value, [data-theme="dark"] .hljs-regexp { color: #8fd18f; }
+[data-theme="dark"] .hljs-number, [data-theme="dark"] .hljs-literal { color: #f0b468; }
+[data-theme="dark"] .hljs-attr, [data-theme="dark"] .hljs-variable, [data-theme="dark"] .hljs-property { color: #f6928a; }
 .caret { display: inline-block; width: 8px; height: 1.05em; background: var(--fg); vertical-align: -0.15em; margin-left: 2px; border-radius: 2px; animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 
@@ -329,7 +325,7 @@ dialog.sheet {
 	box-shadow: var(--shadow);
 }
 dialog.sheet::backdrop { background: rgba(10, 10, 10, 0.35); }
-@media (prefers-color-scheme: dark) { dialog.sheet::backdrop { background: rgba(0, 0, 0, 0.62); } }
+[data-theme="dark"] dialog.sheet::backdrop { background: rgba(0, 0, 0, 0.62); }
 dialog.sheet header { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 18px; border-bottom: 1px solid var(--line); font-size: 14px; }
 dialog.sheet header strong { flex: 1; }
 dialog.sheet .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--fg-2); }
@@ -484,3 +480,9 @@ dialog.keys kbd { font-size: 12px; padding: 1px 6px; border: 1px solid var(--lin
 	.canvas-panel, .canvas-panel.wide { position: fixed; inset: 0; z-index: 30; width: auto; border-left: 0; }
 	.hide-mobile { display: none; }
 }
+
+/* theme switch (sidebar foot) */
+.theme-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; margin: 2px 6px 4px; border: 1px solid var(--line); border-radius: 999px; }
+.theme-switch button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 28px; border-radius: 999px; font-size: 12.5px; color: var(--fg-3); }
+.theme-switch button:hover { color: var(--fg); }
+.theme-switch button[aria-checked="true"] { background: var(--bg-active); color: var(--fg); font-weight: 550; }

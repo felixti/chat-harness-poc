@@ -3,6 +3,7 @@ import { Code2, Download, Eye, Maximize2, Minimize2, RotateCw, X } from "lucide-
 import { api, type CanvasDoc, type CanvasEvent } from "./api";
 import { buildCanvasPage } from "./canvasPage";
 import { copyText } from "./Markdown";
+import { useTheme } from "./theme";
 
 export interface CanvasTarget {
 	name: string;
@@ -11,7 +12,6 @@ export interface CanvasTarget {
 	live?: CanvasEvent;
 }
 
-const isDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
 
 /** Side panel that runs a canvas (H52): preview / code, versions, download, persistent state. */
 export function CanvasPanel({ conv, target, onClose, onSend, notify }: { conv?: string; target: CanvasTarget; onClose: () => void; onSend: (text: string) => void; notify: (t: string) => void }) {
@@ -22,6 +22,7 @@ export function CanvasPanel({ conv, target, onClose, onSend, notify }: { conv?: 
 	const [error, setError] = useState<string>();
 	const [reload, setReload] = useState(0);
 	const frame = useRef<HTMLIFrameElement>(null);
+	const theme = useTheme();
 	const state = useRef<unknown>({});
 	const token = useMemo(() => crypto.randomUUID(), [doc?.name, doc?.version, reload]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -46,14 +47,16 @@ export function CanvasPanel({ conv, target, onClose, onSend, notify }: { conv?: 
 	}, [conv, target.name, target.version, target.live?.version]);
 
 	useEffect(() => {
+		if (doc) state.current = doc.state;
+	}, [doc]);
+	useEffect(() => {
 		if (!doc) return;
-		state.current = doc.state;
 		let gone = false;
-		void buildCanvasPage(doc.html, { theme: isDark() ? "dark" : "light", state: doc.state, token, title: doc.title }).then((html) => !gone && setPage({ token, html }));
+		void buildCanvasPage(doc.html, { theme, state: state.current, token, title: doc.title }).then((html) => !gone && setPage({ token, html }));
 		return () => {
 			gone = true;
 		};
-	}, [doc, token]);
+	}, [doc, token, theme]);
 
 	// Messages from the page: only from this frame, with this frame's token.
 	useEffect(() => {

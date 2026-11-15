@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Check, FolderOpen, Keyboard, ListChecks, MoreHorizontal, PanelLeft, Pencil, Plug, Search, SquarePen, Trash2 } from "lucide-react";
+import { Brain, Check, FolderOpen, Keyboard, ListChecks, Monitor, Moon, MoreHorizontal, PanelLeft, Pencil, Plug, Search, SquarePen, Sun, Trash2 } from "lucide-react";
 import { isTyping } from "./vim";
+import { setThemePref, themePref, type ThemePref } from "./theme";
 import type { ConversationSummary } from "./api";
 
 export type DrawerTab = "memory" | "files" | "connectors";
@@ -294,6 +295,7 @@ export function Sidebar({
 				<button type="button" className="side-link" onClick={onShortcuts}>
 					<Keyboard size={17} /> Atalhos {vim && <span className="count">vim</span>}
 				</button>
+				<ThemeSwitch />
 			</div>
 			{menu && (
 				<div className="popover" ref={menuRef} style={{ left: menu.x, top: menu.y }} role="menu">
@@ -336,5 +338,35 @@ export function Sidebar({
 				</div>
 			)}
 		</nav>
+	);
+}
+
+const THEMES: { v: ThemePref; label: string; Icon: typeof Sun }[] = [
+	{ v: "light", label: "Claro", Icon: Sun },
+	{ v: "dark", label: "Escuro", Icon: Moon },
+	{ v: "system", label: "Sistema", Icon: Monitor },
+];
+
+/** Claro / Escuro / Sistema (H55). */
+function ThemeSwitch() {
+	const [pref, setPref] = useState<ThemePref>(themePref);
+	return (
+		<div className="theme-switch" role="radiogroup" aria-label="Tema">
+			{THEMES.map(({ v, label, Icon }) => (
+				<button
+					key={v}
+					type="button"
+					role="radio"
+					aria-checked={pref === v}
+					title={v === "system" ? "Seguir o tema do sistema" : `Tema ${label.toLowerCase()}`}
+					onClick={() => {
+						setThemePref(v);
+						setPref(v);
+					}}
+				>
+					<Icon size={14} /> {label}
+				</button>
+			))}
+		</div>
 	);
 }
