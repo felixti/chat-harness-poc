@@ -380,3 +380,14 @@ dialog.picker[open] { display: flex; }
 .picker-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
 .picker-foot .muted { flex: 1; font-size: 13px; }
 @media (max-width: 600px) { .picker-search { width: 100%; margin-left: 0; } .picker-row .sub { display: none; } .picker-foot .muted { font-size: 12px; } }
+
+/* ---------- Meus arquivos: search + type filter ---------- */
+.lib-tools { display: grid; gap: 8px; margin: 0 0 10px; }
+.lib-search { position: relative; display: flex; align-items: center; }
+.lib-search svg { position: absolute; left: 10px; color: var(--fg-3); pointer-events: none; }
+.lib-search input { width: 100%; height: 34px; padding: 0 34px 0 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-raised); }
+.lib-search input::placeholder { color: var(--fg-3); }
+.lib-search .icon-btn { position: absolute; right: 3px; }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--bg-hover); justify-self: start; }
+.seg button { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 13px; color: var(--fg-3); }
+.seg button[aria-checked="true"] { background: var(--bg-raised); color: var(--fg); box-shadow: 0 1px 2px rgba(20, 20, 19, 0.08); }

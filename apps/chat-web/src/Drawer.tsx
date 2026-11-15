@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, Network, Paperclip, X } from "lucide-react";
+import { Download, Network, Paperclip, Search, X } from "lucide-react";
 import { api, fileUrl, type Connector, type Fact, type FileInfo, type LibraryFile } from "./api";
 import type { DrawerTab } from "./Sidebar";
 import { FileCard, type CloudAction } from "./Message";
@@ -191,7 +191,13 @@ function FilesTab({ conv, files, onUse, onPreview, onCloud, refreshKey }: { conv
 	const [lib, setLib] = useState<LibraryFile[]>([]);
 	const load = useCallback(() => void api.library().then(setLib).catch(() => {}), []);
 	useEffect(load, [load, refreshKey]);
-	const others = lib.filter((f) => f.conversation !== conv);
+	const [q, setQ] = useState("");
+	const [kind, setKind] = useState<"all" | "upload" | "output">("all");
+	const fold = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+	const all = lib.filter((f) => f.conversation !== conv);
+	const terms = fold(q).split(/\s+/).filter(Boolean);
+	// Every word must match the file name or the conversation title, accents ignored.
+	const others = all.filter((f) => (kind === "all" || f.kind === kind) && terms.every((t) => fold(`${f.name} ${f.title ?? ""}`).includes(t)));
 	const days = (iso?: string) => (iso ? Math.max(0, Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000)) : undefined);
 	return (
 		<>
@@ -208,7 +214,34 @@ function FilesTab({ conv, files, onUse, onPreview, onCloud, refreshKey }: { conv
 			<div className="section">
 				<h3>De outras conversas</h3>
 				<p className="help">Arquivos enviados e gerados nos últimos 30 dias. Sem uso por 30 dias, são apagados.</p>
-				{!others.length && <p className="muted">Nenhum arquivo de outras conversas.</p>}
+				{all.length > 0 && (
+					<div className="lib-tools">
+						<div className="lib-search">
+							<Search size={15} />
+							<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome ou conversa" aria-label="Buscar nos seus arquivos" />
+							{q && (
+								<button type="button" className="icon-btn small" aria-label="Limpar busca" onClick={() => setQ("")}>
+									<X size={14} />
+								</button>
+							)}
+						</div>
+						<div className="seg" role="radiogroup" aria-label="Tipo de arquivo">
+							{(
+								[
+									["all", "Todos"],
+									["upload", "Enviados"],
+									["output", "Gerados"],
+								] as const
+							).map(([id, label]) => (
+								<button key={id} type="button" role="radio" aria-checked={kind === id} onClick={() => setKind(id)}>
+									{label}
+								</button>
+							))}
+						</div>
+					</div>
+				)}
+				{!all.length && <p className="muted">Nenhum arquivo de outras conversas.</p>}
+				{all.length > 0 && !others.length && <p className="muted">Nenhum arquivo encontrado{q ? ` para “${q}”` : ""}.</p>}
 				<ul className="list">
 					{others.map((f) => (
 						<Row
