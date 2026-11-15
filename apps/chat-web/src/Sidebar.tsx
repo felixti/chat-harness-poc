@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Check, FolderOpen, Keyboard, ListChecks, Monitor, Moon, MoreHorizontal, PanelLeft, Pencil, Plug, Search, SquarePen, Sun, Trash2 } from "lucide-react";
 import { isTyping } from "./vim";
+import { Logo } from "./Logo";
 import { setThemePref, themePref, type ThemePref } from "./theme";
 import { fmtBrl, fmtUsd, monthName, type Spend } from "./cost";
 import type { ConversationSummary } from "./api";
@@ -159,7 +160,7 @@ export function Sidebar({
 	return (
 		<nav className={`side${open ? "" : " closed"}`} aria-label="Conversas" aria-hidden={!open}>
 			<div className="side-top">
-				<span className="brand">Assistente</span>
+				<Logo />
 				<div>
 					<button type="button" className="icon-btn" aria-label="Fechar barra lateral" title="Fechar barra lateral" onClick={onToggle}>
 						<PanelLeft size={18} />

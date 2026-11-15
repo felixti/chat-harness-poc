@@ -76,7 +76,11 @@ code, pre, kbd { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 }
 .side.closed { margin-left: -264px; }
 .side-top { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 6px 14px; }
-.brand { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+/* brand (H59) */
+.logo { display: inline-flex; align-items: center; gap: 8px; }
+.logo-mark { color: var(--accent); flex: none; }
+.logo-word { font-weight: 650; font-size: 15.5px; letter-spacing: -0.015em; color: var(--fg); }
+.welcome-mark { color: var(--accent); justify-self: center; margin-bottom: -12px; }
 .icon-btn {
 	width: 34px; height: 34px; display: inline-grid; place-items: center; border-radius: 8px; color: var(--fg-2);
 	transition: background 150ms ease-out, color 150ms ease-out;

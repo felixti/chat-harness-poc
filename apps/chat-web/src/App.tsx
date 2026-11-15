@@ -16,6 +16,7 @@ import { CanvasPanel, type CanvasTarget } from "./CanvasPanel";
 import { SELECT_SHORTCUTS, SHORTCUTS, useVimKeys, useVimSetting } from "./vim";
 import { loadModelPref, ModelPicker, type ModelPref } from "./ModelPicker";
 import { fmtBrl, fmtUsd, type Spend } from "./cost";
+import { Logo, LogoMark } from "./Logo";
 
 const STARTERS = [
 	{ title: "Montar uma apresentação", hint: "Deck no padrão da empresa, com gráficos e fontes", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
@@ -513,7 +514,7 @@ export function App() {
 							</button>
 						</>
 					)}
-					<span className="conv-title">{title || (sideOpen ? "" : "Assistente")}</span>
+					{title ? <span className="conv-title">{title}</span> : !sideOpen && <Logo />}
 					<span className="spacer" />
 					{convCost && convCost.turns > 0 && (
 						<span className="cost-chip" title={`Custo desta conversa: ${fmtBrl(convCost.brl)} (${fmtUsd(convCost.usd)}) em ${convCost.turns} ${convCost.turns === 1 ? "resposta" : "respostas"}. Estimativa pelos preços do provedor.`}>
@@ -539,6 +540,7 @@ export function App() {
 				)}
 				{empty ? (
 					<div className="welcome">
+						<LogoMark size={44} className="welcome-mark" />
 						<h1>Como posso ajudar?</h1>
 						{composer}
 						<div className="starters">
