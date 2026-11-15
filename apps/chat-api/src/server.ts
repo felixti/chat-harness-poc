@@ -13,7 +13,7 @@ import { beforeLastUserMessage, entriesToView } from "./conversation-view.ts";
 import { companySkills } from "./skills-catalog.ts";
 import { deletePrefix } from "./workspace.ts";
 import { curate } from "./curator.ts";
-import { browse, importFiles, type View } from "./m365.ts";
+import { browse, exportedOf, importFiles, saveToOneDrive, type View } from "./m365.ts";
 import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } from "./library.ts";
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
@@ -223,6 +223,17 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 		const view = (url.searchParams.get("view") ?? "recent") as View;
 		if (!["recent", "mine", "shared", "folder", "search"].includes(view)) return json(res, 400, { error: "view" });
 		return json(res, 200, await browse(user, view, { driveId: url.searchParams.get("driveId") ?? undefined, id: url.searchParams.get("id") ?? undefined, q: url.searchParams.get("q") ?? undefined }));
+	}
+	const od = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})\/onedrive$/);
+	if (od && req.method === "GET") return json(res, 200, await exportedOf(user, od[1]));
+	if (od && req.method === "POST") {
+		const { path, again } = JSON.parse((await body(req, 10_000)).toString()) as { path?: string; again?: boolean };
+		try {
+			return json(res, 200, await saveToOneDrive(user, od[1], path ?? "", { again }));
+		} catch (e) {
+			const err = e as Error & { status?: number; code?: string };
+			return json(res, err.status ?? 500, { error: err.message, code: err.code ?? (err.status === 412 ? "connect" : undefined) });
+		}
 	}
 	const imp = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})\/import$/);
 	if (imp && req.method === "POST") {

@@ -42,10 +42,15 @@ class NotConnected extends Error {
 	}
 }
 
-async function graph(user: string, path: string): Promise<Response> {
+async function graph(user: string, path: string, init: { method?: string; body?: Buffer; contentType?: string } = {}): Promise<Response> {
 	const token = await accessToken(user, "microsoft");
 	if (!token) throw new NotConnected();
-	const r = await fetch(`${GRAPH}${path}`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+	const r = await fetch(`${GRAPH}${path}`, {
+		method: init.method ?? "GET",
+		headers: { authorization: `Bearer ${token}`, ...(init.contentType ? { "content-type": init.contentType } : {}) },
+		body: init.body ? new Uint8Array(init.body) : undefined,
+		signal: AbortSignal.timeout(init.body ? 120_000 : 30_000),
+	});
 	if (r.status === 401) throw Object.assign(new Error("Microsoft session expired: reconnect OneDrive / SharePoint"), { status: 401 });
 	return r;
 }
@@ -120,4 +125,58 @@ export async function importFiles(user: string, conversation: string, items: { d
 		out.push(`uploads/${name}`);
 	}
 	return out;
+}
+
+// --- save deliverables to the user's OneDrive ---------------------------------------------------
+
+const OFFICE_TYPES: Record<string, string> = {
+	pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	pdf: "application/pdf",
+	csv: "text/csv",
+	html: "text/html",
+};
+const FOLDER = "Assistente";
+const MAX_UPLOAD = 250 * 1024 * 1024; // Graph simple upload limit
+
+export interface Exported {
+	webUrl: string;
+	name: string;
+	itemId: string;
+	savedAt: string;
+}
+
+/** Where a conversation's deliverables were saved: work/onedrive.json, kept with the conversation
+ *  (hidden from the file panels) so "Abrir no PowerPoint" reopens the same copy. */
+const mapName = (user: string, conv: string) => `${user}/${conv}/work/onedrive.json`;
+
+export async function exportedOf(user: string, conv: string): Promise<Record<string, Exported>> {
+	const raw = await objectStore().get(mapName(user, conv));
+	try {
+		return raw ? (JSON.parse(raw.toString()) as Record<string, Exported>) : {};
+	} catch {
+		return {};
+	}
+}
+
+/** Uploads outputs/<file> to OneDrive › Assistente (never overwrites: Graph renames on conflict)
+ *  and returns the Office for the web link. A second call returns the copy already saved. */
+export async function saveToOneDrive(user: string, conv: string, path: string, opts: { again?: boolean } = {}): Promise<Exported & { existed: boolean }> {
+	if (!/^outputs\/[^/\0]+$/.test(path) || path.includes("..")) throw Object.assign(new Error("only files in outputs/ can be saved"), { status: 400 });
+	const name = path.slice("outputs/".length);
+	const type = OFFICE_TYPES[ext(name)];
+	if (!type) throw Object.assign(new Error(`${name}: type not supported for OneDrive`), { status: 415 });
+	const map = await exportedOf(user, conv);
+	if (map[path] && !opts.again) return { ...map[path], existed: true };
+	const data = await objectStore().get(`${user}/${conv}/${path}`);
+	if (!data) throw Object.assign(new Error(`${name}: file not found (expired?)`), { status: 404 });
+	if (data.length > MAX_UPLOAD) throw Object.assign(new Error(`${name}: over 250 MB`), { status: 413 });
+	const r = await graph(user, `/me/drive/root:/${FOLDER}/${encodeURIComponent(safeName(name))}:/content?@microsoft.graph.conflictBehavior=rename`, { method: "PUT", body: data, contentType: type });
+	const body = (await r.json().catch(() => ({}))) as { id?: string; name?: string; webUrl?: string; error?: { code?: string; message?: string } };
+	if (r.status === 403) throw Object.assign(new Error("reconnect OneDrive to allow saving (write permission missing)"), { status: 403, code: "reconsent" });
+	if (!r.ok || !body.webUrl || !body.id) throw Object.assign(new Error(`OneDrive: ${body.error?.message ?? r.status}`), { status: 502 });
+	const saved: Exported = { webUrl: body.webUrl, name: body.name ?? name, itemId: body.id, savedAt: new Date().toISOString() };
+	await objectStore().put(mapName(user, conv), Buffer.from(JSON.stringify({ ...map, [path]: saved })));
+	return { ...saved, existed: false };
 }

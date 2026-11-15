@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Brain, Check, ChevronRight, Copy, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Pencil, Presentation, RefreshCw, ThumbsDown, ThumbsUp, LayoutDashboard } from "lucide-react";
+import { Brain, Check, ChevronRight, CloudUpload, Copy, Download, ExternalLink, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Pencil, Presentation, RefreshCw, ThumbsDown, ThumbsUp, LayoutDashboard } from "lucide-react";
 import { fileUrl, type FileInfo, type Message, type ToolStep } from "./api";
 import { Markdown, copyText } from "./Markdown";
 import { toolDone, toolLabel } from "./toolLabels";
@@ -41,7 +41,10 @@ const ICONS: Record<string, typeof FileText> = { pptx: Presentation, xlsx: FileS
 const KINDS: Record<string, string> = { pptx: "Apresentação", docx: "Documento Word", xlsx: "Planilha", csv: "CSV", pdf: "PDF", html: "Página HTML", png: "Imagem", jpg: "Imagem", jpeg: "Imagem", md: "Texto" };
 export const sizeLabel = (n: number) => (n > 1_048_576 ? `${(n / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-export function FileCard({ conv, file, onPreview }: { conv: string; file: FileInfo; onPreview?: (f: FileInfo) => void }) {
+export type CloudAction = (f: FileInfo, mode: "open" | "save") => void;
+const OFFICE_APP: Record<string, string> = { pptx: "PowerPoint", docx: "Word", xlsx: "Excel" };
+
+export function FileCard({ conv, file, onPreview, onCloud }: { conv: string; file: FileInfo; onPreview?: (f: FileInfo) => void; onCloud?: CloudAction }) {
 	const name = file.path.split("/").pop() ?? file.path;
 	const ext = name.split(".").pop()?.toLowerCase() ?? "";
 	const Icon = ICONS[ext] ?? FileText;
@@ -59,6 +62,16 @@ export function FileCard({ conv, file, onPreview }: { conv: string; file: FileIn
 				</span>
 			</div>
 			<div className="acts">
+				{onCloud && file.path.startsWith("outputs/") && OFFICE_APP[ext] && (
+					<button type="button" className="icon-btn small" aria-label={`Abrir ${name} no ${OFFICE_APP[ext]} online`} title={`Abrir no ${OFFICE_APP[ext]} online`} onClick={() => onCloud(file, "open")}>
+						<ExternalLink size={16} />
+					</button>
+				)}
+				{onCloud && file.path.startsWith("outputs/") && (OFFICE_APP[ext] || ext === "pdf") && (
+					<button type="button" className="icon-btn small" aria-label={`Salvar ${name} no OneDrive`} title="Salvar no OneDrive" onClick={() => onCloud(file, "save")}>
+						<CloudUpload size={16} />
+					</button>
+				)}
 				{previewable && onPreview && (
 					<button type="button" className="icon-btn small" aria-label={`Visualizar ${name}`} title="Visualizar" onClick={() => onPreview(file)}>
 						<Eye size={16} />
@@ -166,6 +179,7 @@ export function AssistantMessage({
 	onVote,
 	onRegenerate,
 	onPreview,
+	onCloud,
 }: {
 	m: Extract<Message, { role: "assistant" }>;
 	conv?: string;
@@ -175,6 +189,7 @@ export function AssistantMessage({
 	onVote: (v: "up" | "down" | null) => void;
 	onRegenerate: () => void;
 	onPreview: (f: FileInfo) => void;
+	onCloud?: CloudAction;
 }) {
 	const [memOpen, setMemOpen] = useState(false);
 	const steps = m.parts.filter((p): p is ToolStep => p.type === "tool");
@@ -202,7 +217,7 @@ export function AssistantMessage({
 			{conv && files.length > 0 && (
 				<div className="files-row">
 					{files.map((f) => (
-						<FileCard key={f.path} conv={conv} file={f} onPreview={onPreview} />
+						<FileCard key={f.path} conv={conv} file={f} onPreview={onPreview} onCloud={onCloud} />
 					))}
 				</div>
 			)}

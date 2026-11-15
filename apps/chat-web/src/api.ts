@@ -93,17 +93,19 @@ export interface Fact {
 
 export class HttpError extends Error {
 	status: number;
-	constructor(status: number, message: string) {
+	code?: string;
+	constructor(status: number, message: string, code?: string) {
 		super(message);
 		this.status = status;
+		this.code = code;
 	}
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
 	const r = await fetch(path, init);
 	if (!r.ok) {
-		const j = (await r.json().catch(() => ({}))) as { error?: string };
-		throw new HttpError(r.status, j.error ?? `HTTP ${r.status}`);
+		const j = (await r.json().catch(() => ({}))) as { error?: string; code?: string };
+		throw new HttpError(r.status, j.error ?? `HTTP ${r.status}`, j.code);
 	}
 	return r.json() as Promise<T>;
 }
@@ -135,6 +137,7 @@ export const api = {
 	connectors: () => req<Connector[]>("api/connectors"),
 	drive: (view: string, p: { driveId?: string; id?: string; q?: string } = {}) =>
 		req<DriveEntry[]>(`api/m365/browse?${new URLSearchParams({ view, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v)) })}`),
+	saveToOneDrive: (conv: string, path: string, again = false) => req<{ webUrl: string; name: string; existed: boolean }>(`api/conversations/${conv}/onedrive`, send("POST", { path, again })),
 	importDrive: (conv: string, items: { driveId: string; id: string; name: string }[]) => req<{ paths: string[] }>(`api/conversations/${conv}/import`, send("POST", { items })),
 	disconnect: (id: string) => req(`api/connectors/${id}`, send("DELETE")),
 };

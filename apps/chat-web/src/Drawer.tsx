@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Network, Paperclip, X } from "lucide-react";
 import { api, fileUrl, type Connector, type Fact, type FileInfo, type LibraryFile } from "./api";
 import type { DrawerTab } from "./Sidebar";
-import { FileCard } from "./Message";
+import { FileCard, type CloudAction } from "./Message";
 
 const KIND_LABELS: Record<string, string> = { person: "pessoa", team: "time", project: "projeto", company: "empresa", product: "produto", topic: "tema", document: "documento", decision: "decisão", other: "outro" };
 const KIND_COLORS: Record<string, string> = { person: "#2563eb", team: "#7c3aed", project: "#059669", company: "#d97706", product: "#0891b2", topic: "#db2777", document: "#64748b", decision: "#dc2626", other: "#78716c" };
@@ -187,7 +187,7 @@ function GraphDialog({ dlg, facts }: { dlg: React.RefObject<HTMLDialogElement | 
 	);
 }
 
-function FilesTab({ conv, files, onUse, onPreview, refreshKey }: { conv?: string; files: FileInfo[]; onUse: (f: LibraryFile) => void; onPreview: (f: FileInfo) => void; refreshKey: number }) {
+function FilesTab({ conv, files, onUse, onPreview, onCloud, refreshKey }: { conv?: string; files: FileInfo[]; onUse: (f: LibraryFile) => void; onPreview: (f: FileInfo) => void; onCloud?: CloudAction; refreshKey: number }) {
 	const [lib, setLib] = useState<LibraryFile[]>([]);
 	const load = useCallback(() => void api.library().then(setLib).catch(() => {}), []);
 	useEffect(load, [load, refreshKey]);
@@ -200,7 +200,7 @@ function FilesTab({ conv, files, onUse, onPreview, refreshKey }: { conv?: string
 					<h3>Nesta conversa</h3>
 					<div className="files-row" style={{ marginTop: 0 }}>
 						{files.map((f) => (
-							<FileCard key={f.path} conv={conv} file={f} onPreview={onPreview} />
+							<FileCard key={f.path} conv={conv} file={f} onPreview={onPreview} onCloud={onCloud} />
 						))}
 					</div>
 				</div>
@@ -275,6 +275,7 @@ export function Drawer({
 	files,
 	onUse,
 	onPreview,
+	onCloud,
 	refreshKey,
 }: {
 	tab: DrawerTab;
@@ -284,6 +285,7 @@ export function Drawer({
 	files: FileInfo[];
 	onUse: (f: LibraryFile) => void;
 	onPreview: (f: FileInfo) => void;
+	onCloud?: CloudAction;
 	refreshKey: number;
 }) {
 	return (
@@ -308,7 +310,7 @@ export function Drawer({
 			</div>
 			<div className="drawer-body" role="tabpanel">
 				{tab === "memory" && <MemoryTab refreshKey={refreshKey} />}
-				{tab === "files" && <FilesTab conv={conv} files={files} onUse={onUse} onPreview={onPreview} refreshKey={refreshKey} />}
+				{tab === "files" && <FilesTab conv={conv} files={files} onUse={onUse} onPreview={onPreview} onCloud={onCloud} refreshKey={refreshKey} />}
 				{tab === "connectors" && <ConnectorsTab />}
 			</div>
 		</aside>

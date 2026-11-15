@@ -229,6 +229,32 @@ export function App() {
 			.catch((e) => notify(`Não consegui anexar: ${e.message}`));
 	}
 
+	/** Office for the web: save the deliverable to the user's OneDrive › Assistente and open it.
+	 *  The tab opens synchronously (popup blockers) and gets the link when the save returns. */
+	async function cloud(f: FileInfo, mode: "open" | "save") {
+		if (!conv) return;
+		const tab = mode === "open" ? window.open("about:blank", "_blank") : null;
+		try {
+			const r = await api.saveToOneDrive(conv, f.path);
+			if (tab) tab.location.href = r.webUrl;
+			else notify(r.existed ? `Já está no OneDrive › Assistente como ${r.name}.` : `Salvo no OneDrive › Assistente como ${r.name}.`);
+		} catch (e) {
+			tab?.close();
+			const err = e as HttpError;
+			if (err.status === 412 || err.code === "reconsent") {
+				const msg = err.code === "reconsent" ? "Para salvar, a Microsoft vai pedir permissão de escrita no seu OneDrive. Continuar?" : "Conecte sua conta Microsoft para salvar no OneDrive. Continuar?";
+				if (confirm(msg)) {
+					try {
+						sessionStorage.setItem("assistente.afterConnect", JSON.stringify({ conv }));
+					} catch {
+						/* storage blocked */
+					}
+					location.href = "api/connectors/microsoft/connect";
+				}
+			} else notify(`Não consegui salvar no OneDrive: ${err.message}`);
+		}
+	}
+
 	function openPreview(f: FileInfo) {
 		setPreview(f);
 		requestAnimationFrame(() => previewDlg.current?.showModal());
@@ -362,6 +388,7 @@ export function App() {
 											}}
 											onRegenerate={() => lastUser && void run(lastUser.text, [], true)}
 											onPreview={openPreview}
+											onCloud={cloud}
 										/>
 									),
 								)}
@@ -372,7 +399,7 @@ export function App() {
 				)}
 				{dragging && <div className="drop">Solte os arquivos para anexar</div>}
 			</main>
-			{drawer && <Drawer tab={drawer} setTab={setDrawer} onClose={() => setDrawer(undefined)} conv={conv} files={files} onUse={useFromLibrary} onPreview={openPreview} refreshKey={refreshKey} />}
+			{drawer && <Drawer tab={drawer} setTab={setDrawer} onClose={() => setDrawer(undefined)} conv={conv} files={files} onUse={useFromLibrary} onPreview={openPreview} onCloud={cloud} refreshKey={refreshKey} />}
 			<dialog className="sheet" ref={previewDlg} onClose={() => setPreview(undefined)}>
 				{preview && conv && (
 					<>

@@ -86,3 +86,39 @@ test("token exchange sends what Microsoft requires and keeps the refresh token",
 	const c = await loadCredential("user-m365-0004", "microsoft");
 	assert.deepEqual([c?.account, c?.refreshToken], ["pessoa@outlook.com", "r1"]);
 });
+
+test("save to OneDrive: outputs only, rename on conflict, remembered per conversation, 403 asks to reconnect", async () => {
+	const { saveToOneDrive, exportedOf } = await import("../src/m365.ts");
+	const { writeFileToStore } = await import("../src/workspace.ts");
+	await writeFileToStore(U, "conv-m365-02", "outputs/deck.pptx", Buffer.from("pptx"));
+	const prev = globalThis.fetch;
+	let puts = 0;
+	let deny = false;
+	globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+		const url = String(input);
+		if (url.includes("/oauth2/v2.0/token")) return Response.json({ access_token: "fresh", expires_in: 3600 });
+		if (init?.method === "PUT") {
+			if (deny) return Response.json({ error: { code: "accessDenied" } }, { status: 403 });
+			puts++;
+			assert.match(url, /\/me\/drive\/root:\/Assistente\/deck\.pptx:\/content\?@microsoft\.graph\.conflictBehavior=rename$/);
+			return Response.json({ id: `item${puts}`, name: puts === 1 ? "deck.pptx" : "deck 1.pptx", webUrl: `https://onedrive.live.com/edit?id=item${puts}` });
+		}
+		return new Response("{}", { status: 404 });
+	}) as typeof fetch;
+	try {
+		const a = await saveToOneDrive(U, "conv-m365-02", "outputs/deck.pptx");
+		assert.deepEqual([a.existed, a.webUrl], [false, "https://onedrive.live.com/edit?id=item1"]);
+		const b = await saveToOneDrive(U, "conv-m365-02", "outputs/deck.pptx");
+		assert.deepEqual([b.existed, puts], [true, 1]); // reopens the same copy
+		const c = await saveToOneDrive(U, "conv-m365-02", "outputs/deck.pptx", { again: true });
+		assert.deepEqual([c.name, puts], ["deck 1.pptx", 2]);
+		assert.equal((await exportedOf(U, "conv-m365-02"))["outputs/deck.pptx"].itemId, "item2");
+		await assert.rejects(saveToOneDrive(U, "conv-m365-02", "uploads/x.pptx"), (e: any) => e.status === 400);
+		await assert.rejects(saveToOneDrive(U, "conv-m365-02", "outputs/../../other/x.pptx"), (e: any) => e.status === 400);
+		deny = true;
+		await writeFileToStore(U, "conv-m365-02", "outputs/rel.docx", Buffer.from("docx"));
+		await assert.rejects(saveToOneDrive(U, "conv-m365-02", "outputs/rel.docx"), (e: any) => e.status === 403 && e.code === "reconsent");
+	} finally {
+		globalThis.fetch = prev;
+	}
+});

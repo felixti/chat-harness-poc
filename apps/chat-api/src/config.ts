@@ -62,8 +62,9 @@ export const config = {
 			clientSecret: secret("MICROSOFT_CLIENT_SECRET", "microsoft-client-secret"),
 			/** "common" = work and personal accounts; a tenant id restricts to the company. */
 			authority: env.MICROSOFT_AUTHORITY ?? "common",
-			/** Read-only. Add Sites.Read.All for SharePoint site browsing on work accounts. */
-			scopes: (env.MICROSOFT_SCOPES ?? "openid profile offline_access User.Read Files.Read.All").split(/\s+/),
+			/** Read what the user can see; write only to the user's own drive (save deliverables).
+			 *  Add Sites.Read.All for SharePoint site browsing on work accounts. */
+			scopes: (env.MICROSOFT_SCOPES ?? "openid profile offline_access User.Read Files.Read.All Files.ReadWrite").split(/\s+/),
 		},
 		github: {
 			clientId: env.GITHUB_CLIENT_ID ?? "",
