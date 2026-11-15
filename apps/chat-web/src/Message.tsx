@@ -1,9 +1,22 @@
 import { useState } from "react";
-import { Brain, Check, ChevronRight, CloudUpload, Copy, Download, ExternalLink, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Pencil, Presentation, RefreshCw, ThumbsDown, ThumbsUp, LayoutDashboard } from "lucide-react";
+import { AppWindow, Brain, Check, ChevronRight, CloudUpload, Copy, Download, ExternalLink, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Pencil, Presentation, RefreshCw, ThumbsDown, ThumbsUp, LayoutDashboard } from "lucide-react";
 import { fileUrl, type FileInfo, type Message, type ToolStep } from "./api";
 import { Markdown, copyText } from "./Markdown";
 import { toolDone, toolLabel } from "./toolLabels";
 import { InterruptCards, type Respond } from "./InterruptCard";
+
+/** Canvases created or changed in a reply (successful canvas calls, not reads). */
+function canvasesOf(steps: ToolStep[]) {
+	const out = new Map<string, { name: string; title: string; created: boolean }>();
+	for (const s of steps) {
+		const a = (s.args ?? {}) as { action?: string; name?: string; title?: string };
+		const created = a.action === "create";
+		if (s.name !== "canvas" || !a.name || a.action === "read" || s.isError || s.running) continue;
+		const prev = out.get(a.name);
+		out.set(a.name, { name: a.name, title: a.title ?? prev?.title ?? a.name, created: created || !!prev?.created });
+	}
+	return [...out.values()];
+}
 
 export function Steps({ steps, running }: { steps: ToolStep[]; running: boolean }) {
 	const [open, setOpen] = useState(false);
@@ -181,6 +194,8 @@ export function AssistantMessage({
 	onVote,
 	onRegenerate,
 	onPreview,
+	onCanvas,
+	canvasTitles,
 	onCloud,
 	onRespond,
 }: {
@@ -192,6 +207,9 @@ export function AssistantMessage({
 	onVote: (v: "up" | "down" | null) => void;
 	onRegenerate: () => void;
 	onPreview: (f: FileInfo) => void;
+	onCanvas?: (name: string) => void;
+	/** Titles of the conversation's canvases (an edit call does not repeat the title). */
+	canvasTitles?: Map<string, string>;
 	onCloud?: CloudAction;
 	onRespond?: Respond;
 }) {
@@ -213,6 +231,17 @@ export function AssistantMessage({
 			{text ? <Markdown text={text} conv={conv} final={!m.streaming} /> : null}
 			{m.streaming && text && <span className="caret" aria-hidden="true" />}
 			{m.error && <div className="notice error">{m.error}</div>}
+			{onCanvas && canvasesOf(steps).map((c) => (
+				<button key={c.name} type="button" className="canvas-card" onClick={() => onCanvas(c.name)}>
+					<span className="canvas-ico" aria-hidden="true">
+						<AppWindow size={18} />
+					</span>
+					<span className="canvas-meta">
+						<strong>{c.title === c.name ? (canvasTitles?.get(c.name) ?? c.title) : c.title}</strong>
+						<span>Canvas · {c.created ? "abrir no painel" : "nova versão · abrir no painel"}</span>
+					</span>
+				</button>
+			))}
 			{conv && thumbs.map((t) => (
 				<div className="deck-thumb" key={t.path}>
 					<img src={fileUrl(conv, t.path, true)} alt="Miniaturas dos slides" />

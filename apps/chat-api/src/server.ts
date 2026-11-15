@@ -1,4 +1,5 @@
 import "./no-subprocess.ts"; // first: enforce the "no subprocess" runtime rule
+import { canvasTool, getCanvas, listCanvases, MAX_STATE, putState } from "./canvas.ts";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -163,6 +164,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				}
 				message = withHidden(message, hidden);
 			}
+			const canvas = canvasTool(turn.dir, (c) => run.custom("canvas", c));
 			const result = await runTurn({
 				workspace: turn.dir,
 				// edit/regenerate: replay from before the last user message (the old answer is replaced).
@@ -172,8 +174,8 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				mcpServers: await mcpServersFor(user),
 				gate,
 				...(memoryOn && facts
-					? { systemAppend: (await corePrompt(user)) + (await memoryContext(user, message, id, facts, (v) => run.custom("memory_used", v))), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool()], userSkillsDir: mySkills?.dir }
-					: { extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool()] }),
+					? { systemAppend: (await corePrompt(user)) + (await memoryContext(user, message, id, facts, (v) => run.custom("memory_used", v))), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas], userSkillsDir: mySkills?.dir }
+					: { extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas] }),
 				onEvent,
 				signal: abort.signal,
 			});
@@ -274,6 +276,28 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 			deleted.push(id);
 		}
 		return json(res, 200, { deleted });
+	}
+	// Canvas: versions and the state the user set in the page (H52).
+	const cvs = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})\/canvas(?:\/([a-z0-9][a-z0-9-]{0,47})(\/state)?)?$/);
+	if (cvs) {
+		const [, id, name, state] = cvs;
+		if (!name && req.method === "GET") return json(res, 200, await listCanvases(user, id));
+		if (name && !state && req.method === "GET") {
+			const c = await getCanvas(user, id, name, Number(url.searchParams.get("v")) || undefined);
+			return c ? json(res, 200, c) : json(res, 404, { error: "canvas not found" });
+		}
+		if (name && state && req.method === "PUT") {
+			const raw = await body(req, MAX_STATE + 1000);
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(raw.toString());
+			} catch {
+				return json(res, 400, { error: "state must be JSON" });
+			}
+			await putState(user, id, name, parsed);
+			return json(res, 200, { ok: true });
+		}
+		return json(res, 405, { error: "method not allowed" });
 	}
 	const cv = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})(\/feedback)?$/);
 	if (cv) {

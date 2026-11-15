@@ -14,6 +14,23 @@ export interface ToolStep {
 	/** Held by an AG-UI interrupt until the user approves. */
 	waiting?: boolean;
 }
+export interface CanvasMeta {
+	name: string;
+	title: string;
+	versions: { v: number; at: string; note?: string }[];
+}
+export interface CanvasDoc extends CanvasMeta {
+	version?: number;
+	html: string;
+	state: unknown;
+}
+/** CUSTOM "canvas": a version saved during the running turn (not in storage until the turn ends). */
+export interface CanvasEvent {
+	name: string;
+	title: string;
+	version: number;
+	html: string;
+}
 export interface TextPart {
 	type: "text";
 	text: string;
@@ -137,6 +154,9 @@ export const api = {
 	conversation: (id: string) => req<ConversationDetail>(`api/conversations/${id}`),
 	rename: (id: string, title: string) => req(`api/conversations/${id}`, send("PATCH", { title })),
 	remove: (id: string) => req(`api/conversations/${id}`, send("DELETE")),
+	canvases: (conv: string) => req<CanvasMeta[]>(`api/conversations/${conv}/canvas`),
+	canvas: (conv: string, name: string, v?: number) => req<CanvasDoc>(`api/conversations/${conv}/canvas/${name}${v ? `?v=${v}` : ""}`),
+	saveCanvasState: (conv: string, name: string, state: unknown) => req(`api/conversations/${conv}/canvas/${name}/state`, send("PUT", state)),
 	removeMany: (ids: string[]) => req<{ deleted: string[] }>("api/conversations/delete", send("POST", { ids })),
 	feedback: (id: string, turn: string, value: "up" | "down" | null) => req(`api/conversations/${id}/feedback`, send("POST", { turn, value })),
 	files: (id: string) => req<FileInfo[]>(`api/conversations/${id}/files`),

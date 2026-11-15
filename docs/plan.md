@@ -51,3 +51,4 @@ current ~R$1.50/h cluster cost.
 | 2026-11-15 | 2 | OneDrive/SharePoint connector + picker deployed (H42). Pending: first real connect with a personal Microsoft account. Company rollout: admin consent + tenant authority + Sites.Read.All. |
 | 2026-11-15 | 2 | Usability (H49): optional vim-mode navigation + "Atalhos" dialog; multi-select delete in the history (one request, up to 100). Verified in a headless browser: v → j/x → d deleted 2 conversations. |
 | 2026-11-15 | 2 | Diagram sizing (H50): fit to column with 65% floor + full-screen "Ampliar". Verified with a real 14-step flowchart. |
+| 2026-11-15 | 2 | Canvas (H52): tool + skill + side panel, versions, persistent state, offline ECharts, CSP sandbox. E2E with the real model: checklist (state read back, v2) and simulator (live v3). 80 API tests. |

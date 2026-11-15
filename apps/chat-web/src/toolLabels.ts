@@ -61,6 +61,8 @@ export function toolLabel(name: string, args: unknown): string {
 			return "Procurando nos seus arquivos";
 		case "attach_file":
 			return `Anexando ${file}`;
+		case "canvas":
+			return a.action === "read" ? "Lendo o canvas" : a.action === "create" ? `Criando o canvas${a.title ? `: ${a.title}` : ""}` : "Ajustando o canvas";
 		default:
 			return name.replace(/_/g, " ");
 	}
@@ -79,7 +81,7 @@ export function toolDone(name: string): string {
 		generate_pptx: "Montou a apresentação", generate_docx: "Gerou o documento Word", generate_xlsx: "Gerou a planilha", generate_pdf: "Gerou o PDF",
 		generate_dashboard: "Montou o dashboard", generate_image: "Criou uma imagem", memory: "Atualizou a memória", remember: "Guardou um fato",
 		recall: "Consultou a memória", forget: "Esqueceu um fato", session_search: "Buscou conversas anteriores", skill_save: "Salvou o procedimento",
-		skill_delete: "Apagou um procedimento", my_files: "Procurou nos seus arquivos", attach_file: "Anexou um arquivo",
+		skill_delete: "Apagou um procedimento", my_files: "Procurou nos seus arquivos", attach_file: "Anexou um arquivo", canvas: "Montou o canvas",
 	};
 	return DONE[name] ?? name.replace(/_/g, " ");
 }

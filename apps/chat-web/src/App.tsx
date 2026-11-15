@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelLeft, SquarePen, X } from "lucide-react";
-import { api, chat, fileUrl, HttpError, type ConversationSummary, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type ToolStep } from "./api";
+import { api, chat, fileUrl, HttpError, type CanvasEvent, type ConversationSummary, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type ToolStep } from "./api";
 
 /** Steps held by an open interrupt read as "waiting", not as failed. */
 function markWaiting(parts: (ToolStep | { type: "text"; text: string })[], interrupts?: Interrupt[]) {
@@ -12,6 +12,7 @@ import { Composer, type Attachment } from "./Composer";
 import { Sidebar, type DrawerTab } from "./Sidebar";
 import { Drawer } from "./Drawer";
 import { DrivePicker } from "./DrivePicker";
+import { CanvasPanel, type CanvasTarget } from "./CanvasPanel";
 import { SELECT_SHORTCUTS, SHORTCUTS, useVimKeys, useVimSetting } from "./vim";
 
 const STARTERS = [
@@ -41,6 +42,11 @@ export function App() {
 	const [dragging, setDragging] = useState(false);
 	const [preview, setPreview] = useState<FileInfo>();
 	const [picker, setPicker] = useState(false);
+	const [canvas, setCanvas] = useState<CanvasTarget>();
+	// A canvas needs room: on laptop widths the history sidebar steps aside while it is open.
+	useEffect(() => {
+		if (canvas && innerWidth < 1440) setSideOpen(false);
+	}, [canvas?.name]); // eslint-disable-line react-hooks/exhaustive-deps
 	const abort = useRef<AbortController>(undefined);
 	const scroller = useRef<HTMLDivElement>(null);
 	const pinned = useRef(true);
@@ -112,6 +118,7 @@ export function App() {
 			setFiles(d.files);
 			setVotes(d.feedback);
 			setNotice(undefined);
+			setCanvas((c) => (id === conv ? c : undefined));
 			pendingConv.current = undefined;
 			history.replaceState(null, "", `#${id}`);
 			pinned.current = true;
@@ -125,6 +132,7 @@ export function App() {
 
 	function startNew() {
 		abort.current?.abort();
+		setCanvas(undefined);
 		setConv(undefined);
 		setTitle("");
 		setMessages([]);
@@ -206,7 +214,11 @@ export function App() {
 					case "CUSTOM":
 						if (ev.name === "memory_used") patch((a) => ({ ...a, memory: ev.value as MemoryUsed }));
 						else if (ev.name === "memory_saved") patch((a) => ({ ...a, saved: ev.value as string[] }));
-						else if (ev.name === "model_error") patch((a) => ({ ...a, error: `Algo deu errado: ${(ev.value as { message?: string }).message ?? ""}` }));
+						else if (ev.name === "canvas") {
+							const c = ev.value as CanvasEvent;
+							setDrawer(undefined);
+							setCanvas({ name: c.name, version: c.version, live: c });
+						} else if (ev.name === "model_error") patch((a) => ({ ...a, error: `Algo deu errado: ${(ev.value as { message?: string }).message ?? ""}` }));
 						else if (ev.name === "files") {
 							const fs = ev.value as FileInfo[];
 							setFiles(fs);
@@ -314,6 +326,15 @@ export function App() {
 	}
 
 	const empty = messages.length === 0;
+	const canvasTitles = new Map<string, string>();
+	for (const m of messages)
+		if (m.role === "assistant")
+			for (const p of m.parts) {
+				const a = (p.type === "tool" && p.name === "canvas" ? p.args : undefined) as { name?: string; title?: string } | undefined;
+				if (a?.name && a.title) canvasTitles.set(a.name, a.title);
+			}
+	// canvas.send(text) from a page: the text goes to the message box; the user sends it.
+	const sendFromCanvas = useCallback((text: string) => setSeed({ text, n: Date.now() }), []);
 
 	function deleteConv(id: string) {
 		return api.remove(id).then(() => {
@@ -419,7 +440,10 @@ export function App() {
 				vim={vim}
 				onShortcuts={() => keysDlg.current?.showModal()}
 				searchRef={searchRef}
-				onDrawer={(t) => setDrawer((d) => (d === t ? undefined : t))}
+				onDrawer={(t) => {
+					setCanvas(undefined);
+					setDrawer((d) => (d === t ? undefined : t));
+				}}
 				drawer={drawer}
 			/>
 			<main className="main">
@@ -496,6 +520,11 @@ export function App() {
 											onPreview={openPreview}
 											onCloud={cloud}
 											onRespond={respond}
+											canvasTitles={canvasTitles}
+											onCanvas={(name) => {
+												setDrawer(undefined);
+												setCanvas({ name });
+											}}
 										/>
 									),
 								)}
@@ -506,7 +535,16 @@ export function App() {
 				)}
 				{dragging && <div className="drop">Solte os arquivos para anexar</div>}
 			</main>
-			{drawer && <Drawer tab={drawer} setTab={setDrawer} onClose={() => setDrawer(undefined)} conv={conv} files={files} onUse={useFromLibrary} onPreview={openPreview} onCloud={cloud} refreshKey={refreshKey} />}
+			{canvas && (
+				<CanvasPanel
+					conv={conv}
+					target={canvas}
+					onClose={() => setCanvas(undefined)}
+					onSend={sendFromCanvas}
+					notify={notify}
+				/>
+			)}
+			{!canvas && drawer && <Drawer tab={drawer} setTab={setDrawer} onClose={() => setDrawer(undefined)} conv={conv} files={files} onUse={useFromLibrary} onPreview={openPreview} onCloud={cloud} refreshKey={refreshKey} />}
 			<dialog className="keys" ref={keysDlg} aria-label="Atalhos de teclado">
 				<header>
 					<strong>Atalhos de teclado</strong>

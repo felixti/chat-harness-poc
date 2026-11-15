@@ -451,3 +451,36 @@ dialog.keys dl.off { opacity: 0.5; }
 dialog.keys dt { color: var(--fg); }
 dialog.keys dd { margin: 0; color: var(--fg-2); }
 dialog.keys kbd { font-size: 12px; padding: 1px 6px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--bg); }
+
+/* ---------- canvas (H52) ---------- */
+.canvas-card {
+	display: flex; align-items: center; gap: 12px; width: min(100%, 380px); margin: 8px 0 4px; padding: 10px 14px 10px 10px; text-align: left;
+	border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raised);
+}
+.canvas-card:hover { background: var(--bg-hover); }
+.canvas-ico { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+.canvas-meta { display: grid; min-width: 0; }
+.canvas-meta strong { font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.canvas-meta span { font-size: 12.5px; color: var(--fg-3); }
+.canvas-panel {
+	width: clamp(420px, 46vw, 900px); border-left: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; min-height: 0; min-width: 0;
+}
+.canvas-panel.wide { width: clamp(420px, 68vw, 1400px); }
+.canvas-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); min-height: 52px; }
+.canvas-title { font-weight: 600; font-size: 14.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.canvas-ver { height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-raised); color: var(--fg-2); font-size: 12.5px; padding: 0 4px; max-width: 160px; }
+.canvas-head .spacer { flex: 1; }
+.tabs.small { flex: none; }
+.tabs.small .tab { height: 28px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; }
+.canvas-error { display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 16px; background: color-mix(in srgb, var(--danger) 9%, var(--bg)); color: var(--danger); font-size: 13px; border-bottom: 1px solid var(--line); }
+.canvas-error span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.canvas-body { flex: 1; min-height: 0; display: flex; }
+.canvas-body iframe { flex: 1; border: 0; width: 100%; height: 100%; background: var(--bg); }
+.canvas-code { flex: 1; overflow: auto; position: relative; background: var(--bg-code); }
+.canvas-code pre { margin: 0; padding: 16px; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.canvas-code .copy { position: sticky; top: 10px; float: right; margin: 10px 10px 0 0; background: var(--bg-raised); }
+.canvas-loading { margin: auto; color: var(--fg-3); font-size: 14px; }
+@media (max-width: 860px) {
+	.canvas-panel, .canvas-panel.wide { position: fixed; inset: 0; z-index: 30; width: auto; border-left: 0; }
+	.hide-mobile { display: none; }
+}

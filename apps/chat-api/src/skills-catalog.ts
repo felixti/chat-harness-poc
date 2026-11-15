@@ -13,10 +13,11 @@ const PT: Record<string, string> = {
 	design: "Regras visuais para qualquer entregável",
 	research: "Pesquisa na web com fontes",
 	clarify: "Perguntas rápidas para refinar um pedido antes de começar",
+	canvas: "Páginas interativas ao vivo: calculadoras, simuladores, checklists, linhas do tempo",
 };
 
 const LABEL: Record<string, string> = {
-	clarify: "Refinar pedido", pptx: "Apresentação", docx: "Documento Word", pdf: "PDF", "xlsx-csv": "Planilha", dashboard: "Dashboard", design: "Design", research: "Pesquisa",
+	clarify: "Refinar pedido", canvas: "Canvas", pptx: "Apresentação", docx: "Documento Word", pdf: "PDF", "xlsx-csv": "Planilha", dashboard: "Dashboard", design: "Design", research: "Pesquisa",
 };
 
 let cache: { name: string; label: string; description: string }[] | undefined;
