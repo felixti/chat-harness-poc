@@ -211,7 +211,8 @@ export async function completeAuthorization(user: string, id: string, code: stri
 	const r = await fetch(c.tokenUrl, {
 		method: "POST",
 		headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
-		body: new URLSearchParams({ client_id: c.clientId, client_secret: c.clientSecret, code, redirect_uri: callbackUrl(id), code_verifier: verifier }),
+		// grant_type and scope: required by the Microsoft identity platform, accepted by GitHub.
+		body: new URLSearchParams({ grant_type: "authorization_code", client_id: c.clientId, client_secret: c.clientSecret, code, redirect_uri: callbackUrl(id), code_verifier: verifier, scope: c.scopes.join(" ") }),
 		signal: AbortSignal.timeout(15_000),
 	});
 	const t = (await r.json().catch(() => ({}))) as TokenResponse;

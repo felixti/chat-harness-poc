@@ -63,3 +63,26 @@ test("the Microsoft authorize URL carries what the v2 endpoint requires", async 
 	assert.match(u.searchParams.get("scope") ?? "", /offline_access/);
 	assert.equal(u.searchParams.get("allow_signup"), null);
 });
+
+test("token exchange sends what Microsoft requires and keeps the refresh token", async () => {
+	const { makeState, completeAuthorization, loadCredential } = await import("../src/connectors.ts");
+	const { state } = makeState("user-m365-0004", "microsoft", Buffer.from(process.env.CONNECTORS_MASTER_KEY!, "base64"));
+	const prev = globalThis.fetch;
+	let sent: URLSearchParams | undefined;
+	globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+		if (String(input).includes("/token")) {
+			sent = new URLSearchParams(String(init?.body));
+			return Response.json({ access_token: "a1", refresh_token: "r1", expires_in: 3600, scope: "Files.Read.All" });
+		}
+		return Response.json({ mail: "pessoa@outlook.com" });
+	}) as typeof fetch;
+	try {
+		await completeAuthorization("user-m365-0004", "microsoft", "code-123", state);
+	} finally {
+		globalThis.fetch = prev;
+	}
+	for (const k of ["grant_type", "code", "redirect_uri", "code_verifier", "client_id", "client_secret", "scope"]) assert.ok(sent?.get(k), k);
+	assert.equal(sent?.get("grant_type"), "authorization_code");
+	const c = await loadCredential("user-m365-0004", "microsoft");
+	assert.deepEqual([c?.account, c?.refreshToken], ["pessoa@outlook.com", "r1"]);
+});

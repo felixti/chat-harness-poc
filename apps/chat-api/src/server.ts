@@ -308,7 +308,7 @@ async function connectorRoute(req: IncomingMessage, res: ServerResponse, user: s
 		else
 			await completeAuthorization(user, id, code, state).catch((e) => {
 				console.warn(`[connectors] ${id} callback: ${(e as Error).message}`);
-				status = "error";
+				status = `error: ${(e as Error).message.split(/ Trace ID:|\r?\n/)[0].slice(0, 200)}`;
 			});
 		return res.writeHead(302, { location: `/?connector=${id}&status=${encodeURIComponent(status)}` }).end();
 	}

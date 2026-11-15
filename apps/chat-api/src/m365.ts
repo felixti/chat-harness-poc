@@ -87,6 +87,8 @@ export async function browse(user: string, view: View, opts: { driveId?: string;
 		path = `/me/drive/root/search(q='${encodeURIComponent(q)}')?${sel}`;
 	} else path = `/me/drive/root/children?${sel}`;
 	const r = await graph(user, path);
+	// "recent" is being retired for some account types: show the drive root instead of an error.
+	if (!r.ok && view === "recent") return browse(user, "mine", opts);
 	const body = (await r.json().catch(() => ({}))) as { value?: GraphItem[]; error?: { message?: string } };
 	if (!r.ok) throw Object.assign(new Error(`OneDrive: ${body.error?.message ?? r.status}`), { status: r.status === 404 ? 404 : 502 });
 	const items = (body.value ?? []).map(entry).filter((e): e is DriveEntry => !!e);
