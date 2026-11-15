@@ -79,7 +79,7 @@ export function connectors(): Connector[] {
 			tokenUrl: `https://login.microsoftonline.com/${ms.authority}/oauth2/v2.0/token`,
 			scopes: ms.scopes,
 			// Lets the user pick the account (work or personal) instead of reusing the chat's SSO session.
-			authParams: { prompt: "select_account" },
+			authParams: { response_type: "code", response_mode: "query", prompt: "select_account" },
 			clientId: ms.clientId,
 			clientSecret: ms.clientSecret,
 			async account(token) {

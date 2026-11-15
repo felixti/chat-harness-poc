@@ -55,3 +55,11 @@ test("import copies into uploads without overwriting; rejects unsupported types 
 test("not connected is a 412 the portal turns into a Connect button", async () => {
 	await assert.rejects(browse("user-m365-0002", "recent"), (e: any) => e.status === 412);
 });
+
+test("the Microsoft authorize URL carries what the v2 endpoint requires", async () => {
+	const { authorizeRedirect } = await import("../src/connectors.ts");
+	const u = new URL(authorizeRedirect("user-m365-0003", "microsoft"));
+	for (const [k, v] of [["response_type", "code"], ["code_challenge_method", "S256"], ["client_id", "app-id"]]) assert.equal(u.searchParams.get(k), v, k);
+	assert.match(u.searchParams.get("scope") ?? "", /offline_access/);
+	assert.equal(u.searchParams.get("allow_signup"), null);
+});
