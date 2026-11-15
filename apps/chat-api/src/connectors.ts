@@ -20,7 +20,9 @@ export interface Connector {
 	scopes: string[];
 	clientId: string;
 	clientSecret: string;
-	mcpUrl: string;
+	/** Remote MCP server the token unlocks; absent for connectors used only by chat-api itself
+	 *  (e.g. Microsoft files: the portal's picker and import call Graph server-side). */
+	mcpUrl?: string;
 	/** Extra MCP headers (e.g. read-only mode). */
 	mcpHeaders?: Record<string, string>;
 	/** Account label for the panel ("@login"); called once after connecting. */
@@ -29,6 +31,9 @@ export interface Connector {
 
 export interface Credential {
 	accessToken: string;
+	/** Short-lived tokens (Microsoft: 1 h) come with a refresh token; GitHub OAuth App tokens do not. */
+	refreshToken?: string;
+	expiresAt?: number;
 	account: string;
 	scopes: string;
 	connectedAt: string;
@@ -57,6 +62,25 @@ export function connectors(): Connector[] {
 				});
 				const u = (await r.json().catch(() => ({}))) as { login?: string };
 				return u.login ? `@${u.login}` : "";
+			},
+		});
+	const ms = config.connectors.microsoft;
+	if (ms.clientId && ms.clientSecret)
+		out.push({
+			id: "microsoft",
+			name: "OneDrive e SharePoint",
+			summary: "Anexe documentos do seu OneDrive ou do SharePoint direto na conversa.",
+			description: "Microsoft OneDrive / SharePoint files of the signed-in user (read-only).",
+			// /common: work accounts (company SharePoint/OneDrive) and personal Microsoft accounts.
+			authorizeUrl: `https://login.microsoftonline.com/${ms.authority}/oauth2/v2.0/authorize`,
+			tokenUrl: `https://login.microsoftonline.com/${ms.authority}/oauth2/v2.0/token`,
+			scopes: ms.scopes,
+			clientId: ms.clientId,
+			clientSecret: ms.clientSecret,
+			async account(token) {
+				const r = await fetch("https://graph.microsoft.com/v1.0/me?$select=userPrincipalName,mail,displayName", { headers: { authorization: `Bearer ${token}` } });
+				const u = (await r.json().catch(() => ({}))) as { mail?: string; userPrincipalName?: string };
+				return u.mail ?? u.userPrincipalName ?? "";
 			},
 		});
 	return out;
@@ -185,11 +209,46 @@ export async function completeAuthorization(user: string, id: string, code: stri
 		body: new URLSearchParams({ client_id: c.clientId, client_secret: c.clientSecret, code, redirect_uri: callbackUrl(id), code_verifier: verifier }),
 		signal: AbortSignal.timeout(15_000),
 	});
-	const t = (await r.json().catch(() => ({}))) as { access_token?: string; scope?: string; error_description?: string };
+	const t = (await r.json().catch(() => ({}))) as TokenResponse;
 	if (!r.ok || !t.access_token) throw Object.assign(new Error(`token exchange failed: ${t.error_description ?? r.status}`), { status: 502 });
-	const cred: Credential = { accessToken: t.access_token, account: await c.account(t.access_token).catch(() => ""), scopes: t.scope ?? "", connectedAt: new Date().toISOString() };
+	const cred: Credential = {
+		accessToken: t.access_token,
+		...(t.refresh_token ? { refreshToken: t.refresh_token } : {}),
+		...(t.expires_in ? { expiresAt: Date.now() + t.expires_in * 1000 } : {}),
+		account: await c.account(t.access_token).catch(() => ""),
+		scopes: t.scope ?? "",
+		connectedAt: new Date().toISOString(),
+	};
 	await saveCredential(user, id, cred);
 	return cred;
+}
+
+interface TokenResponse {
+	access_token?: string;
+	refresh_token?: string;
+	expires_in?: number;
+	scope?: string;
+	error_description?: string;
+}
+
+/** A valid access token for this user and connector, refreshed (and re-sealed) when it expires
+ *  within a minute. Undefined when the user never connected; throws when the grant was revoked. */
+export async function accessToken(user: string, id: string): Promise<string | undefined> {
+	const c = find(id);
+	const cred = await loadCredential(user, id);
+	if (!cred) return undefined;
+	if (!cred.expiresAt || cred.expiresAt - Date.now() > 60_000 || !cred.refreshToken) return cred.accessToken;
+	const r = await fetch(c.tokenUrl, {
+		method: "POST",
+		headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({ client_id: c.clientId, client_secret: c.clientSecret, grant_type: "refresh_token", refresh_token: cred.refreshToken, scope: c.scopes.join(" ") }),
+		signal: AbortSignal.timeout(15_000),
+	});
+	const t = (await r.json().catch(() => ({}))) as TokenResponse;
+	if (!r.ok || !t.access_token) throw Object.assign(new Error(`${c.name}: reconnect needed (${t.error_description?.split("\n")[0] ?? r.status})`), { status: 401 });
+	const next: Credential = { ...cred, accessToken: t.access_token, refreshToken: t.refresh_token ?? cred.refreshToken, expiresAt: Date.now() + (t.expires_in ?? 3600) * 1000 };
+	await saveCredential(user, id, next);
+	return next.accessToken;
 }
 
 /** Removes the stored token and revokes the grant at the provider (best effort). */
@@ -223,6 +282,7 @@ export async function listFor(user: string) {
 export async function connectedServers(user: string): Promise<McpServer[]> {
 	const out: McpServer[] = [];
 	for (const c of connectors()) {
+		if (!c.mcpUrl) continue;
 		const cred = await loadCredential(user, c.id).catch((e) => {
 			console.warn(`[connectors] ${c.id}: ${(e as Error).message}`);
 			return undefined;

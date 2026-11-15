@@ -5,6 +5,7 @@ import { AssistantMessage, UserMessage } from "./Message";
 import { Composer, type Attachment } from "./Composer";
 import { Sidebar, type DrawerTab } from "./Sidebar";
 import { Drawer } from "./Drawer";
+import { DrivePicker } from "./DrivePicker";
 
 const STARTERS = [
 	{ title: "Montar uma apresentação", hint: "Deck no padrão da empresa, com gráficos e fontes", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
@@ -32,6 +33,7 @@ export function App() {
 	const [attachments, setAttachments] = useState<Attachment[]>([]);
 	const [dragging, setDragging] = useState(false);
 	const [preview, setPreview] = useState<FileInfo>();
+	const [picker, setPicker] = useState(false);
 	const abort = useRef<AbortController>(undefined);
 	const scroller = useRef<HTMLDivElement>(null);
 	const pinned = useRef(true);
@@ -53,8 +55,21 @@ export function App() {
 			setDrawer("connectors");
 			history.replaceState(null, "", location.pathname);
 		}
-		const c = location.hash.slice(1);
-		if (c) void open(c);
+		// Back from "Conectar Microsoft": reopen the conversation and the picker the user was in.
+		let after: { conv?: string; picker?: boolean } | undefined;
+		try {
+			after = JSON.parse(sessionStorage.getItem("assistente.afterConnect") ?? "null") ?? undefined;
+			sessionStorage.removeItem("assistente.afterConnect");
+		} catch {
+			after = undefined;
+		}
+		const c = location.hash.slice(1) || after?.conv;
+		// A new conversation that only had attachments does not exist on the server yet: keep its id.
+		if (c) void open(c, () => (pendingConv.current = c));
+		if (after?.picker && p.get("status") === "ok") {
+			setDrawer(undefined);
+			setPicker(true);
+		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
@@ -70,7 +85,7 @@ export function App() {
 		return pendingConv.current;
 	}, [conv]);
 
-	async function open(id: string) {
+	async function open(id: string, onMissing?: () => void) {
 		if (busy) abort.current?.abort();
 		try {
 			const d = await api.conversation(id);
@@ -85,6 +100,7 @@ export function App() {
 			pinned.current = true;
 			if (isMobile()) setSideOpen(false);
 		} catch (e) {
+			if (e instanceof HttpError && e.status === 404 && onMissing) return onMissing();
 			notify(e instanceof HttpError && e.status === 404 ? "Conversa não encontrada." : "Não consegui abrir a conversa.");
 			history.replaceState(null, "", location.pathname);
 		}
@@ -232,6 +248,7 @@ export function App() {
 			setAttachments={setAttachments}
 			notify={notify}
 			registerDrop={(f) => (dropTarget.current = f)}
+			onDrive={() => setPicker(true)}
 		/>
 	);
 	return (
@@ -381,6 +398,22 @@ export function App() {
 					</>
 				)}
 			</dialog>
+			<DrivePicker
+				open={picker}
+				conv={conv ?? pendingConv.current}
+				onClose={() => setPicker(false)}
+				onImport={async (items) => {
+					const id = ensureConv();
+					try {
+						const r = await api.importDrive(id, items.map(({ driveId, id: itemId, name }) => ({ driveId, id: itemId, name })));
+						setAttachments((a) => [...a, ...r.paths.map((p) => ({ path: p, name: p.replace(/^uploads\//, ""), state: "ready" as const }))]);
+						notify(r.paths.length === 1 ? "Arquivo anexado." : `${r.paths.length} arquivos anexados.`);
+					} catch (e) {
+						notify(`Não consegui anexar: ${(e as Error).message}`);
+						throw e;
+					}
+				}}
+			/>
 			{toast && (
 				<div className="toast" role="status">
 					{toast}

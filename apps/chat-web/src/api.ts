@@ -55,6 +55,17 @@ export interface LibraryFile {
 	modified?: string;
 	expiresAt?: string;
 }
+export interface DriveEntry {
+	id: string;
+	driveId: string;
+	name: string;
+	folder: boolean;
+	size: number;
+	modified?: string;
+	by?: string;
+	supported: boolean;
+}
+
 export interface Skill {
 	name: string;
 	label?: string;
@@ -122,6 +133,9 @@ export const api = {
 	mySkills: () => req<{ name: string; description: string; updatedAt: string }[]>("api/memory/skills"),
 	removeMySkill: (name: string) => req(`api/memory/skills/${name}`, send("DELETE")),
 	connectors: () => req<Connector[]>("api/connectors"),
+	drive: (view: string, p: { driveId?: string; id?: string; q?: string } = {}) =>
+		req<DriveEntry[]>(`api/m365/browse?${new URLSearchParams({ view, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v)) })}`),
+	importDrive: (conv: string, items: { driveId: string; id: string; name: string }[]) => req<{ paths: string[] }>(`api/conversations/${conv}/import`, send("POST", { items })),
 	disconnect: (id: string) => req(`api/connectors/${id}`, send("DELETE")),
 };
 

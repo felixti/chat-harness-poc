@@ -57,6 +57,14 @@ export const config = {
 		masterKey: secret("CONNECTORS_MASTER_KEY", "connectors-master-key"),
 		/** Separate from the workspaces: the agent never sees this container. */
 		container: env.CONNECTORS_CONTAINER ?? "chat-credentials",
+		microsoft: {
+			clientId: env.MICROSOFT_CLIENT_ID ?? "",
+			clientSecret: secret("MICROSOFT_CLIENT_SECRET", "microsoft-client-secret"),
+			/** "common" = work and personal accounts; a tenant id restricts to the company. */
+			authority: env.MICROSOFT_AUTHORITY ?? "common",
+			/** Read-only. Add Sites.Read.All for SharePoint site browsing on work accounts. */
+			scopes: (env.MICROSOFT_SCOPES ?? "openid profile offline_access User.Read Files.Read.All").split(/\s+/),
+		},
 		github: {
 			clientId: env.GITHUB_CLIENT_ID ?? "",
 			clientSecret: secret("GITHUB_CLIENT_SECRET", "github-client-secret"),

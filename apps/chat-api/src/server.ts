@@ -13,6 +13,7 @@ import { beforeLastUserMessage, entriesToView } from "./conversation-view.ts";
 import { companySkills } from "./skills-catalog.ts";
 import { deletePrefix } from "./workspace.ts";
 import { curate } from "./curator.ts";
+import { browse, importFiles, type View } from "./m365.ts";
 import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } from "./library.ts";
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
@@ -218,6 +219,16 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	const k = url.pathname.match(/^\/api\/connectors(?:\/([a-z0-9-]+)\/(connect|callback))?(?:\/([a-z0-9-]+))?$/);
 	if (k) return connectorRoute(req, res, user, url, k);
 
+	if (url.pathname === "/api/m365/browse" && req.method === "GET") {
+		const view = (url.searchParams.get("view") ?? "recent") as View;
+		if (!["recent", "mine", "shared", "folder", "search"].includes(view)) return json(res, 400, { error: "view" });
+		return json(res, 200, await browse(user, view, { driveId: url.searchParams.get("driveId") ?? undefined, id: url.searchParams.get("id") ?? undefined, q: url.searchParams.get("q") ?? undefined }));
+	}
+	const imp = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})\/import$/);
+	if (imp && req.method === "POST") {
+		const { items } = JSON.parse((await body(req, 20_000)).toString()) as { items?: { driveId: string; id: string; name: string }[] };
+		return json(res, 201, { paths: await importFiles(user, imp[1], items ?? []) });
+	}
 	const at = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})\/attach$/);
 	if (at && req.method === "POST") {
 		const { file_id } = JSON.parse((await body(req, 10_000)).toString()) as { file_id?: string };

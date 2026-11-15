@@ -15,6 +15,8 @@ spec:
     remoteRef: {key: connectors-master-key}
   - secretKey: github-client-secret
     remoteRef: {key: github-oauth-client-secret}
+  - secretKey: microsoft-client-secret
+    remoteRef: {key: microsoft-oauth-client-secret}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -72,6 +74,7 @@ spec:
         - {name: CONNECTORS_CONTAINER, value: chat-credentials}
         - {name: MEMORY_CONTAINER, value: chat-memory}
         - {name: GITHUB_CLIENT_ID, value: "Ov23lipiqkWBqCka0Sgk"}   # GitHub OAuth App client ID (public)
+        - {name: MICROSOFT_CLIENT_ID, value: "0ea6ada6-2ef2-43fe-b6f2-ba6433182343"}   # Entra app chat-harness-microsoft-files (work + personal accounts)
         ports: [{name: http, containerPort: 8080}]
         readinessProbe:
           httpGet: {path: /healthz, port: 8080}
@@ -98,6 +101,6 @@ spec:
           - secret:
               name: chat-connectors
               optional: true
-              items: [{key: master-key, path: connectors-master-key}, {key: github-client-secret, path: github-client-secret}]
+              items: [{key: master-key, path: connectors-master-key}, {key: github-client-secret, path: github-client-secret}, {key: microsoft-client-secret, path: microsoft-client-secret}]
       # Scratch for one turn at a time; Blob is the truth, losing the pod loses nothing.
       - {name: tmp, emptyDir: {sizeLimit: 4Gi}}

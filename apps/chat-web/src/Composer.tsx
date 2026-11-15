@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowUp, FileText, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, Cloud, FileText, Laptop, Paperclip, Square, X } from "lucide-react";
 import { api, type LibraryFile, type Skill } from "./api";
 
 export interface Attachment {
@@ -21,6 +21,7 @@ export function Composer({
 	setAttachments,
 	notify,
 	registerDrop,
+	onDrive,
 }: {
 	busy: boolean;
 	ensureConv: () => string;
@@ -32,6 +33,7 @@ export function Composer({
 	setAttachments: (f: (a: Attachment[]) => Attachment[]) => void;
 	notify: (t: string) => void;
 	registerDrop: (f: (files: FileList) => void) => void;
+	onDrive?: () => void;
 }) {
 	const [text, setText] = useState("");
 	const [skills, setSkills] = useState<string[]>([]);
@@ -41,6 +43,16 @@ export function Composer({
 	const [sel, setSel] = useState(0);
 	const ta = useRef<HTMLTextAreaElement>(null);
 	const fileInput = useRef<HTMLInputElement>(null);
+	const [attachOpen, setAttachOpen] = useState(false);
+	const attachRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (!attachOpen) return;
+		const close = (e: MouseEvent) => !attachRef.current?.contains(e.target as Node) && setAttachOpen(false);
+		const esc = (e: globalThis.KeyboardEvent) => e.key === "Escape" && setAttachOpen(false);
+		addEventListener("mousedown", close);
+		addEventListener("keydown", esc);
+		return () => (removeEventListener("mousedown", close), removeEventListener("keydown", esc));
+	}, [attachOpen]);
 
 	useEffect(() => {
 		api.skills().then(setCatalog).catch(() => {});
@@ -203,9 +215,44 @@ export function Composer({
 					</div>
 				)}
 				<div className="composer-row">
-					<button type="button" className="icon-btn" aria-label="Anexar arquivos" title="Anexar arquivos" onClick={() => fileInput.current?.click()}>
-						<Paperclip size={18} />
-					</button>
+					<div ref={attachRef} style={{ position: "static" }}>
+						<button
+							type="button"
+							className="icon-btn"
+							aria-label="Anexar arquivos"
+							title="Anexar arquivos"
+							aria-haspopup="menu"
+							aria-expanded={attachOpen}
+							onClick={() => (onDrive ? setAttachOpen((v) => !v) : fileInput.current?.click())}
+						>
+							<Paperclip size={18} />
+						</button>
+						{attachOpen && (
+							<div className="attach-menu" role="menu">
+								<button
+									type="button"
+									role="menuitem"
+									autoFocus
+									onClick={() => {
+										setAttachOpen(false);
+										fileInput.current?.click();
+									}}
+								>
+									<Laptop size={17} /> Do computador
+								</button>
+								<button
+									type="button"
+									role="menuitem"
+									onClick={() => {
+										setAttachOpen(false);
+										onDrive?.();
+									}}
+								>
+									<Cloud size={17} /> Do OneDrive ou SharePoint
+								</button>
+							</div>
+						)}
+					</div>
 					<input
 						ref={fileInput}
 						type="file"
