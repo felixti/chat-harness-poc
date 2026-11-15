@@ -60,7 +60,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
       - name: chat-api
-        image: ghcr.io/felixti/chat-harness-chat-api:bf8c820f04e2294f8d3119ced9dc2aeedd7444a9
+        image: ghcr.io/felixti/chat-harness-chat-api:d7564d8eaef8c97109a641446aa4ce940a5dc59a
         env:
         - {name: MONGO_URL, value: "mongodb://ferret@ferretdb:27017/chat"}   # password from /var/run/secrets/chat/db-password
         - {name: BLOB_ACCOUNT_URL, value: "https://stagentpocjt75.blob.core.windows.net"}
