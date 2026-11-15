@@ -79,6 +79,8 @@ export class Gate {
 	private readonly allowed = new Set<string>();
 	private readonly calls = new Map<string, number>();
 	private errorsInARow = 0;
+	/** Set when the breaker stopped the turn: the server then makes sure the user gets a message. */
+	tripped?: string;
 	/** Circuit breaker: a model stuck repeating a tool or failing in a row ends the turn. */
 	noteResult(_toolName: string, isError: boolean) {
 		this.errorsInARow = isError ? this.errorsInARow + 1 : 0;
@@ -96,6 +98,7 @@ export class Gate {
 	}
 	check(call: { toolCallId: string; toolName: string; input: unknown }): { block: true; reason: string; terminate: true } | undefined {
 		const stuck = this.loop(call.toolName);
+		if (stuck) this.tripped = stuck;
 		if (stuck)
 			return {
 				block: true,

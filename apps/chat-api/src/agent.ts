@@ -158,6 +158,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		retry: { enabled: true, maxRetries: 2 },
 		defaultTools: ["+tool_search"],
 	});
+	const usedServers = new Set([...previouslyLoadedTools(input.entries)].map((t) => t.split("__")[1]));
 	const resourceLoader = new DefaultResourceLoader({
 		cwd,
 		agentDir,
@@ -173,7 +174,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 			),
 			diagnostics: base.diagnostics,
 		}),
-		appendSystemPrompt: [SYSTEM_APPEND, ...(input.systemAppend ? [input.systemAppend] : []), ...reloadNote(input.entries, input.mcpServers.filter((m) => m.exposure === "direct").map((m) => m.name))],
+		appendSystemPrompt: [SYSTEM_APPEND, ...(input.systemAppend ? [input.systemAppend] : [])],
 		extensionFactories: [
 			// The gate runs before any tool (MCP ones included, and calls made from codemode).
 			(pi) => {
@@ -190,7 +191,9 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 						name: s.name,
 						source: "extension",
 						scope: "extension" as const,
-						config: { type: "http" as const, url: s.url, headers: s.headers, description: s.description, exposure: s.exposure ?? ("deferred" as const) },
+						// A server this conversation already used stays declared: a deferred tool loaded in an
+						// earlier message is gone in this one, and the model then calls an unrelated tool (H48).
+						config: { type: "http" as const, url: s.url, headers: s.headers, description: s.description, exposure: s.exposure ?? (usedServers.has(s.name) ? ("direct" as const) : ("deferred" as const)) },
 					})),
 				}),
 			}),

@@ -177,6 +177,10 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				onEvent,
 				signal: abort.signal,
 			});
+			if (gate.tripped && !result.text.trim()) {
+				// The breaker stopped a looping model before it wrote anything: tell the user plainly.
+				run.text("Não consegui concluir: entrei em repetição ao usar as ferramentas e parei para não fazer nada errado. Tente de novo; se repetir, descreva o pedido em outras palavras.");
+			}
 			const files = await turn.finish();
 			finished = true;
 			let summary = existing?.summary;
