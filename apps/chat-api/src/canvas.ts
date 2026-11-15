@@ -111,7 +111,11 @@ export function canvasTool(cwd: string, emit: (e: CanvasEvent) => void): ToolDef
 			if (p.action === "edit") {
 				const cur = await latest(cwd, p.name);
 				if (!cur) fail(`no canvas named ${p.name}: use create`);
-				if (!p.edits?.length) fail("edit needs edits: [{old, new}]");
+				if (!p.edits?.length)
+					fail(
+						"edit: the `edits` argument is missing. Call canvas edit again with edits: [{old: <exact text from the code>, new: <replacement>}]. " +
+							"For a bigger change, send several small edits (e.g. one per block you add), each anchored on a short line that occurs once.",
+					);
 				html = cur!.html;
 				for (const [i, e] of p.edits!.entries()) {
 					const n = html.split(e.old).length - 1;
@@ -119,7 +123,13 @@ export function canvasTool(cwd: string, emit: (e: CanvasEvent) => void): ToolDef
 					html = html.replace(e.old, () => e.new);
 				}
 			} else {
-				if (!p.html?.trim()) fail(`${p.action} needs html`);
+				if (!p.html?.trim())
+					fail(
+						p.action === "update"
+							? "update: the `html` argument is missing, so nothing was saved. Do not repeat this call. Either send the whole new page in `html` " +
+									"(the code itself, not a description), or use edit with small exact replacements, which is better for adding a section to an existing page."
+							: "create: the `html` argument is missing, so nothing was saved. Call canvas create again with the whole page (the code itself) in `html`.",
+					);
 				if (p.action === "create" && (await readMeta(cwd, p.name))) fail(`${p.name} already exists: use edit or update`);
 				html = toFragment(p.html!);
 			}

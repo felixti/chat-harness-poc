@@ -16,8 +16,11 @@ to download.
    their language.
 2. **Create** with `canvas {action: "create", name, title, html}`. One self-contained fragment:
    markup, one `<style>`, one `<script>`. No `<html>`/`<head>`.
-3. **Change** with `canvas {action: "edit", name, edits: [{old, new}], note}` for small fixes (each
-   `old` must appear exactly once), or `update` to replace the page. Each one is a new version.
+3. **Change** with `canvas {action: "edit", name, edits: [{old, new}], note}`: each `old` is a
+   short exact line from the current code that appears once, and `new` is that line plus what you
+   add or change. Use edit also for adding a feature: one edit per place (markup, style, script).
+   Use `update` only to rebuild the page, and then put the **whole page code in `html`** in that
+   same call. Each change is a new version.
 4. **When the user says they changed or ticked something** ("atualize o checklist", "use os
    valores que coloquei"), first `canvas {action: "read", name}`: it returns the code and the state
    the page saved.

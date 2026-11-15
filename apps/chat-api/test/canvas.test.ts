@@ -37,6 +37,8 @@ test("bad edits, duplicate create and bad names fail without a new version", asy
 	await assert.rejects(run(t, { action: "create", name: "lista", html: "<p>x</p>" }), /already exists/);
 	await assert.rejects(run(t, { action: "create", name: "../etc", html: "<p>x</p>" }), /name/);
 	await assert.rejects(run(t, { action: "edit", name: "nao-existe", edits: [{ old: "a", new: "b" }] }), /no canvas/);
+	await assert.rejects(run(t, { action: "update", name: "lista", note: "sem html" }), /`html` argument is missing[\s\S]*use edit/);
+	await assert.rejects(run(t, { action: "edit", name: "lista", note: "sem edits" }), /`edits` argument is missing/);
 	assert.equal(events.length, 1);
 });
 
