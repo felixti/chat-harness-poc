@@ -1,14 +1,107 @@
 # Chat harness: feature architecture
 
 Status: 2026-11-16. This document maps each feature to the parts that implement it.
-- Section 2 covers the functional side: what the user gets and how it works.
-- Section 3 covers the non-functional side: security, reliability, scale, cost and operations.
+- Section 1 is the end-to-end system design blueprint.
+- Section 2 maps the features onto it.
+- Section 3 covers the functional side: what the user gets and how it works.
+- Section 4 covers the non-functional side: security, reliability, scale, cost and operations.
 
 Related documents:
 - Infrastructure blueprint: [architecture.md](architecture.md).
 - Decisions and the reasons behind them: [design.md](design.md). Every `H` number below refers to an entry there.
 
-## 1. Feature map
+## 1. System design blueprint (end to end)
+
+```
+                                   ┌──────────────────────┐
+                                   │  User (browser)      │  portal: React SPA served by chat-api
+                                   └──────────┬───────────┘
+                                              │ HTTPS  chat.20-121-208-105.sslip.io
+                                              ▼
+ ┌───────────────┐   OIDC login /    ┌────────────────────────────────────────────────────────────────────────┐
+ │  Entra ID     │◄──token refresh───│ Azure Load Balancer (public IP)                                        │
+ │  tenant       │   (offline_access)│   ▼                                                                    │
+ │  · chat app   │                   │ ┌───────────────────────────── Envoy Gateway "public" ───────────────┐ │
+ │    (assigned  │   JWKS            │ │ SecurityPolicy chat-auth: OIDC (cookies) → JWT check (iss, aud)    │ │
+ │    users and  │◄──────────────────│ │ oid → x-user-oid · name → x-user-name · fetch w/o session → 401    │ │
+ │    guests)    │                   │ └──────────────────────────────┬─────────────────────────────────────┘ │
+ │  · connector  │                   │                                │ only ingress allowed (NetworkPolicy)  │
+ │    apps (ADO, │                   │  AKS aks-lab (eastus)          ▼                                       │
+ │    Microsoft) │                   │ ┌──────────────────────────── namespace chat ────────────────────────┐ │
+ └───────▲───────┘                 │ │                                                                   │ │
+         │ workload identity         │ │  ┌─────────────── chat-api ×2 (Node 24 distroless) ────────────┐   │ │
+         │ (federated token)         │ │  │ HTTP server · AG-UI SSE · REST · static portal              │   │ │
+         └───────────────────────────┼─┼──│ turn runner: lease → hydrate /tmp → Pi agent → upload → wipe│   │ │
+                                     │ │  │ tools (confined FS, emulated bash, office writers, canvas)  │   │ │
+                                     │ │  │ Gate (approvals, loop breaker) · usage ledger · MCP client  │   │ │
+                                     │ │  │ connectors vault (AES-GCM) · memory (core/graph/curator)    │   │ │
+                                     │ │  │ /tmp emptyDir 4Gi · secrets as files /var/run/secrets/chat  │   │ │
+                                     │ │  └───┬──────────┬──────────────┬──────────────┬────────────────┘   │ │
+                                     │ │      │HTTP      │HTTP          │Mongo wire    │                    │ │
+                                     │ │      ▼          ▼              ▼              │                    │ │
+                                     │ │  ┌────────┐ ┌───────────┐ ┌────────────────┐  │  ┌──────────────┐  │ │
+                                     │ │  │ parser │ │ brave-mcp │ │ ferretdb       │  │  │ CronJob      │  │ │
+                                     │ │  │ md conv│ │ Brave key │ │  └► postgres-  │◄─┼──│ memory-      │  │ │
+                                     │ │  │ no net │ │ 443 out   │ │   documentdb   │  │  │ curator 03:00│  │ │
+                                     │ │  └────────┘ └─────┬─────┘ │   (PVC 4 GiB)  │  │  └──────┬───────┘  │ │
+                                     │ │                   │       │ conversations, │  │         │          │ │
+                                     │ │                   │       │ usage, feedback│  │         │          │ │
+                                     │ │                   │       └────────────────┘  │         │          │ │
+                                     │ └───────────────────┼───────────────────────────┼─────────┼──────────┘ │
+                                     │                     │                           ▼         ▼            │
+                                     │                     │        ┌────────────── Envoy "llm-gateway" ────┐ │
+                                     │                     │        │ injects OpenRouter key (from KV)      │ │
+                                     │ ┌─ ESO ───────────┐ │        └──────────────────┬────────────────────┘ │
+                                     │ │External Secrets │ │                           │                      │
+                                     │ │KV → k8s Secrets │ │  ┌─ Argo CD ───────────┐  │                      │
+                                     │ └───────▲─────────┘ │  │ syncs deploy/*.yaml │  │                      │
+                                     └─────────┼───────────┼──┴──────────▲──────────┴──┼──────────────────────┘
+                                               │           │             │             │ HTTPS
+          ┌────────────────────────────────────┘           │             │             ▼
+          │                                                ▼             │    ┌──────────────────┐
+ ┌────────┴────────┐  ┌─────────────────────────┐  ┌───────────────┐     │    │ OpenRouter       │
+ │ Key Vault       │  │ Blob stagentpocjt75      │  │ Brave Search  │     │    │ DeepSeek · Haiku │
+ │ kv-agentpoc-jt75│  │ (Entra auth, no keys)   │  │ API           │     │    │ Gemini · MiniMax │
+ │ · openrouter    │  │ · chat-workspaces       │  └───────────────┘     │    │ H3 (images)      │
+ │ · connectors-   │  │   <oid>/<conv>/uploads, │                        │    └──────────────────┘
+ │   master-key    │  │   outputs, work, _locks │  ┌──────────────────────────────────────────────┐
+ │ · oauth secrets │  │ · chat-credentials      │  │ Remote MCP / APIs (HTTPS 443 from chat-api)  │
+ │ · brave, crawl- │  │   sealed tokens         │  │ · Context7 · CrawlForge (x-api-key)          │
+ │   forge keys    │  │ · chat-memory (sealed)  │  │ · GitHub MCP · Azure DevOps MCP (user token) │
+ └─────────────────┘  │ · skills/ (from CI)     │  │ · Microsoft Graph (OneDrive / SharePoint)    │
+                      └─────────────────────────┘  └──────────────────────────────────────────────┘
+
+ Delivery:  git push ─► GitHub Actions ─► build ─► Trivy (block HIGH/CRITICAL) ─► GHCR
+            ─► commit image sha in deploy/*.yaml ─► Argo CD sync ─► rolling update (2 replicas)
+            skills/ ─► CI ─► Blob skills/ (read-only for the agent)
+```
+
+### 1.1 Request path, step by step
+
+| # | Hop | What happens |
+|---|---|---|
+| 1 | Browser → Envoy `public` | First visit: OIDC login with Entra. Only users assigned to the chat app, guests included, can sign in |
+| 2 | Envoy | Validates the ID token (issuer, audience, JWKS) and sets `x-user-oid`. A portal call without a session gets 401 |
+| 3 | chat-api | Takes the Blob lease for the conversation, downloads its files to `/tmp`, and loads history and memory |
+| 4 | chat-api → `llm-gateway` → OpenRouter | The model runs. Envoy adds the OpenRouter key, so chat-api never holds it |
+| 5 | chat-api → tools | Tools run in process (files, office writers, canvas), on `parser` (documents), on `brave-mcp`, or on remote MCP servers with the user's sealed token |
+| 6 | chat-api → browser | AG-UI events stream over SSE: text, tool steps, canvas versions, cost |
+| 7 | chat-api → stores | Uploads changed files to Blob, saves the versioned history and the usage row, wipes `/tmp` and releases the lease |
+| 8 | Background | The curator updates memory right after the answer; the CronJob catches up at 03:00 UTC |
+
+### 1.2 Trust boundaries
+
+```
+ [Internet] ──► (1) Envoy public: authentication ──► (2) chat-api: authorization by oid prefix
+                                                         │
+             (3) agent sandbox-in-process: confined FS, no subprocess, tokens out of reach
+                                                         │
+             (4) network: default-deny NetworkPolicies; parser offline; 443 out only
+                                                         │
+             (5) data: per-user AES-GCM sealing; Key Vault holds every key
+```
+
+## 2. Feature map
 
 ```
  ┌──────────────────────────────── Portal (React, served by chat-api) ─────────────────────────────────┐
@@ -39,9 +132,9 @@ Related documents:
                       credentials            usage, feedback
 ```
 
-## 2. Functional architecture
+## 3. Functional architecture
 
-### 2.1 Chat turn and protocol (H35, H45)
+### 3.1 Chat turn and protocol (H35, H45)
 
 Every turn goes through the same path. The wire protocol is AG-UI, so any AG-UI client can drive
 the harness, not only our portal.
@@ -79,7 +172,7 @@ the harness, not only our portal.
 | `CUSTOM model_error` | A provider failure, explained in plain language |
 | `RUN_FINISHED{outcome: interrupt}` | An approval or a question is waiting for the user |
 
-### 2.2 Portal (H41, H49, H50, H53, H55, H59)
+### 3.2 Portal (H41, H49, H50, H53, H55, H59)
 
 ```
  ┌ Sidebar ──────────────┐ ┌ Header: [logo/title]  [Conversa: R$ x]  [DeepSeek · Equilibrado ▾] ┐ ┌ Drawer / Canvas ┐
@@ -104,7 +197,7 @@ the harness, not only our portal.
 | Session expiry | Envoy renews the token silently (`offline_access`). API calls get a 401 instead of a redirect, and the portal keeps the conversation and the draft across the login reload |
 | Feedback | Thumbs up or down, stored in the `feedback` collection |
 
-### 2.3 Models, reasoning effort and cost (H57, H58)
+### 3.3 Models, reasoning effort and cost (H57, H58)
 
 ```
  portal picker ──forwardedProps.model/effort──► chat-api
@@ -132,7 +225,7 @@ The ledger records the amount OpenRouter billed. The price list is used only whe
 no cost. Values are shown in BRL at the `USD_BRL` rate set in the deployment. Rows stay in the
 ledger when a conversation is deleted, because the money was already spent.
 
-### 2.4 Files and documents (H10, H11, H39, H40, H42)
+### 3.4 Files and documents (H10, H11, H39, H40, H42)
 
 ```
  upload (button, drag, paste) ──► chat-api ──► Blob chat-workspaces/<oid>/<conv>/uploads/
@@ -154,7 +247,7 @@ ledger when a conversation is deleted, because the money was already spent.
 | Files across conversations | "Meus arquivos" and `my_files` list them; "Usar" and `attach_file` copy one in. Nothing is mounted automatically |
 | Retention | Files are deleted 30 days after the last access, and the panel shows "expira em N d" |
 
-### 2.5 Deliverables (H14, H24, H26 to H32)
+### 3.5 Deliverables (H14, H24, H26 to H32)
 
 All writers run in process as pure JavaScript, with no subprocess and no sandbox.
 
@@ -173,7 +266,7 @@ All writers run in process as pure JavaScript, with no subprocess and no sandbox
  model ──prompt──► generate_image (MiniMax H3 1K, Gemini fallback) ──► covers, section openers
 ```
 
-### 2.6 Canvas: live interactive pages (H52, H54)
+### 3.6 Canvas: live interactive pages (H52, H54)
 
 ```
  model ── canvas{create|edit|update|read} ──► work/canvas/<name>/v<n>.html + meta.json
@@ -189,7 +282,7 @@ All writers run in process as pure JavaScript, with no subprocess and no sandbox
 Changes go through `edit` with exact replacements. When a call is missing its arguments, the tool
 returns instructions for recovering instead of a bare error.
 
-### 2.7 Skills, clarifying questions and approvals (H3, H46, H47)
+### 3.7 Skills, clarifying questions and approvals (H3, H46, H47)
 
 ```
  skills/ (git) ──CI──► Blob /skills/ ──► Pi progressive disclosure (description in prompt, body on demand)
@@ -208,7 +301,7 @@ returns instructions for recovering instead of a bare error.
                                        canonical-JSON hash, once) ──► model reports the result
 ```
 
-### 2.8 Web research and MCP servers (H25, H48, H60)
+### 3.8 Web research and MCP servers (H25, H48, H60)
 
 | Server | Kind | Credential | Exposure |
 |---|---|---|---|
@@ -222,7 +315,7 @@ Two fixes keep MCP tools working across turns:
 - Any server the conversation already used is declared directly in later turns.
 - A circuit breaker ends loops: more than 15 calls to one tool, more than 5 memory calls, or 4 failures in a row end the turn.
 
-### 2.9 Connectors (H33, H42, H43)
+### 3.9 Connectors (H33, H42, H43)
 
 ```
  "Conectar" ──► GET /api/connectors/<id>/authorize
@@ -241,7 +334,7 @@ Two fixes keep MCP tools working across turns:
 | Azure DevOps | Work items, repos, pipelines, wiki, test plans | Allowed; each write waits for approval |
 | OneDrive / SharePoint | Picker and import; save deliverables to `Assistente/` | Only the user's own drive |
 
-### 2.10 Memory (H36, H37, H44)
+### 3.10 Memory (H36, H37, H44)
 
 ```
  every turn  ──► [1] core USER.md + MEMORY.md (≤ 3.5 KB)  ┐
@@ -259,9 +352,9 @@ The Memória panel lists core entries and facts with a forget action, shows a gr
 personal skills. A forgotten fact is recorded as an event, so the history of what the agent
 believed is kept.
 
-## 3. Non-functional architecture
+## 4. Non-functional architecture
 
-### 3.1 Security
+### 4.1 Security
 
 ```
  Internet ─► Envoy (OIDC + JWT, oid → x-user-oid) ─► chat-api ─► tools confined to the turn workspace
@@ -283,7 +376,7 @@ believed is kept.
 | Secret sprawl | Key Vault → External Secrets → projected files. Nothing in git or env vars |
 | Lateral movement | Default-deny NetworkPolicies. The parser has no network at all |
 
-### 3.2 Compliance with the company runtime (Prisma Cloud)
+### 4.2 Compliance with the company runtime (Prisma Cloud)
 
 | Rule | How the harness complies |
 |---|---|
@@ -293,7 +386,7 @@ believed is kept.
 | No HIGH/CRITICAL CVEs | Distroless and scratch images. Trivy in CI blocks the push, and overrides fix advisories |
 | Licenses | Only MIT, Apache-2.0, BSD, ISC and OFL. No BSL, SSPL or RSAL. The repository itself is MIT |
 
-### 3.3 Reliability and consistency
+### 4.3 Reliability and consistency
 
 | Concern | Design |
 |---|---|
@@ -309,7 +402,7 @@ Not covered yet:
 - A turn that survives a pod restart. This needs a queue and a resumable stream.
 - Long jobs over about 2 min, such as CrawlForge async.
 
-### 3.4 Scalability and performance
+### 4.4 Scalability and performance
 
 | Item | Today | Scales by |
 |---|---|---|
@@ -319,7 +412,7 @@ Not covered yet:
 | Slide preview | ~0.1 s per slide, in process | CPU per replica |
 | Long tool calls | MCP timeout of 60 s by default, 150 s for CrawlForge | Async jobs (planned) |
 
-### 3.5 Cost
+### 4.5 Cost
 
 | Item | Value |
 |---|---|
@@ -331,13 +424,13 @@ Not covered yet:
 
 The ledger does not count the memory curator's calls.
 
-### 3.6 Privacy (LGPD)
+### 4.6 Privacy (LGPD)
 
 - Data minimization: workspace files expire 30 days after the last access, and old blob versions of credentials and memory are purged after 7 days.
 - User control: memory is visible and can be forgotten item by item, connectors can be disconnected (the grant is revoked), and conversations can be deleted with their files.
 - Memory only takes facts from the user's own messages. Documents, web pages and tool output are never a source.
 
-### 3.7 Operability
+### 4.7 Operability
 
 | Area | Today |
 |---|---|
@@ -351,7 +444,7 @@ Gaps:
 - No metrics, traces or alerts yet.
 - The OpenRouter key expiry is not monitored. It expired on 2026-11-15.
 
-### 3.8 Portability to the company implementation
+### 4.8 Portability to the company implementation
 
 | PoC piece | Company equivalent |
 |---|---|
