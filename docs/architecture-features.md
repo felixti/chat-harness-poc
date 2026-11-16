@@ -28,7 +28,7 @@ Related documents:
  │  · connector  │                   │                                │ only ingress allowed (NetworkPolicy)  │
  │    apps (ADO, │                   │  AKS aks-lab (eastus)          ▼                                       │
  │    Microsoft) │                   │ ┌──────────────────────────── namespace chat ────────────────────────┐ │
- └───────▲───────┘                 │ │                                                                   │ │
+ └───────▲───────┘                   │ │                                                                    │ │
          │ workload identity         │ │  ┌─────────────── chat-api ×2 (Node 24 distroless) ────────────┐   │ │
          │ (federated token)         │ │  │ HTTP server · AG-UI SSE · REST · static portal              │   │ │
          └───────────────────────────┼─┼──│ turn runner: lease → hydrate /tmp → Pi agent → upload → wipe│   │ │
