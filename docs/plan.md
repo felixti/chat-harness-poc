@@ -60,3 +60,4 @@ current ~R$1.50/h cluster cost.
 | 2026-11-15 | 2 | Cost (H58): ledger of billed cost per turn; "Conversa: R$" in the header, "Gasto em <mês>" in the sidebar; USD_BRL 5.40. 83 API tests. |
 | 2026-11-15 | 2 | Brand mark (H59): bubble + spark SVG in sidebar, header, welcome and favicon. |
 | 2026-11-15 | 2 | CrawlForge MCP (H60): scrape/search/extract/research tools, key in Key Vault, 150 s timeout; labels in pt-BR. |
+| 2026-11-16 | 2 | Feature architecture doc (`docs/architecture-features.md`): functional map per feature + non-functional section, ASCII diagrams. |

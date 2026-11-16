@@ -1,6 +1,7 @@
 # Chat harness: end-to-end architecture
 
 Status: 2026-11-14. Blueprint of what runs today and what is being built (marked **planned**).
+Feature-by-feature view (functional + non-functional): [architecture-features.md](architecture-features.md).
 Decisions and their reasons live in [design.md](design.md) (H-numbers below); progress in
 [plan.md](plan.md).
 
