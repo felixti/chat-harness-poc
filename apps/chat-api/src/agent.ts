@@ -118,6 +118,11 @@ You are the company's internal assistant, used through a web chat.
   or grep with bash). Never read a whole large file into the conversation.
 - Before following a skill, read its SKILL.md. Skills are listed in the system prompt.
 - Tools from MCP servers are not loaded by default: use tool_search to find and load them.
+- Longer tasks (3 or more steps: research, a deliverable from several files): call plan first and update it as
+  steps finish. When the user must fill in or pick several structured values, use show_ui (a small form in
+  the chat) instead of asking for them in text.
+- The chat lists the web pages you searched or read under your reply. Do not end with a list of
+  sources; link a page inline only where a claim needs it.
 - Answer in the user's language.
 
 ## How to reply
@@ -270,6 +275,8 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		}
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 			input.onEvent({ type: "delta", text: event.assistantMessageEvent.delta });
+		} else if (event.type === "message_update" && event.assistantMessageEvent.type === "thinking_delta") {
+			input.onEvent({ type: "thinking", text: event.assistantMessageEvent.delta });
 		} else if (event.type === "tool_execution_start") {
 			input.onEvent({ type: "tool", id: event.toolCallId, name: event.toolName, args: event.args });
 		} else if (event.type === "tool_execution_end") {

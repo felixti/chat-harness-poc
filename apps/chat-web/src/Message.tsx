@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { AppWindow, Brain, Check, ChevronRight, CloudUpload, Copy, Download, ExternalLink, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Pencil, Presentation, RefreshCw, ThumbsDown, ThumbsUp, LayoutDashboard } from "lucide-react";
 import { fileUrl, type FileInfo, type Message, type ToolStep } from "./api";
 import { Markdown, copyText } from "./Markdown";
 import { toolDone, toolLabel } from "./toolLabels";
 import { InterruptCards, type Respond } from "./InterruptCard";
+import { ActionSummary, PlanCard, Reasoning, Sources, UiSurface, parseAction, planOf, surfacesOf } from "./RichParts";
 
 /** Canvases created or changed in a reply (successful canvas calls, not reads). */
 function canvasesOf(steps: ToolStep[]) {
@@ -164,6 +165,15 @@ export function UserMessage({ m, canEdit, onEdit }: { m: Extract<Message, { role
 				</div>
 			</div>
 		);
+	const action = parseAction(m.text);
+	if (action)
+		return (
+			<div className="msg user">
+				<div className="bubble">
+					<ActionSummary action={action} />
+				</div>
+			</div>
+		);
 	return (
 		<div className="msg user">
 			<div className="bubble">{m.text}</div>
@@ -198,6 +208,8 @@ export function AssistantMessage({
 	canvasTitles,
 	onCloud,
 	onRespond,
+	sentSurface,
+	onUiAction,
 }: {
 	m: Extract<Message, { role: "assistant" }>;
 	conv?: string;
@@ -212,23 +224,39 @@ export function AssistantMessage({
 	canvasTitles?: Map<string, string>;
 	onCloud?: CloudAction;
 	onRespond?: Respond;
+	/** True when a later user message already submitted this A2UI surface. */
+	sentSurface?: (surfaceId: string) => boolean;
+	onUiAction?: (text: string) => void;
 }) {
 	const [memOpen, setMemOpen] = useState(false);
 	const steps = m.parts.filter((p): p is ToolStep => p.type === "tool");
 	const text = m.parts.filter((p) => p.type === "text").map((p) => (p as { text: string }).text).join("\n\n");
 	const running = !!m.streaming && !text;
+	const plan = planOf(steps);
+	const surfaces = surfacesOf(steps);
+	const current = steps[steps.length - 1];
 	const files = (m.newFiles ?? []).filter((f) => !f.path.endsWith(".preview.png"));
 	const thumbs = (m.newFiles ?? []).filter((f) => f.path.endsWith(".preview.png"));
 	const used = m.memory ? m.memory.core + m.memory.facts.length + m.memory.conversations.length : 0;
 	return (
 		<div className={`msg assistant${last ? " last" : ""}`}>
-			{m.streaming && !m.parts.length && (
+			{m.streaming && !m.parts.length && !m.reasoning && (
 				<div className="thinking running-label" role="status">
 					Pensando…
 				</div>
 			)}
-			<Steps steps={steps} running={running} />
+			{m.reasoning && <Reasoning text={m.reasoning} live={!!m.streaming && !m.parts.length} />}
+			<Steps steps={steps.filter((s) => s.name !== "plan")} running={running && current?.name !== "plan"} />
+			{plan && <PlanCard steps={plan} live={!!m.streaming} />}
 			{text ? <Markdown text={text} conv={conv} final={!m.streaming} /> : null}
+			{surfaces.length > 0 && (
+				<Suspense fallback={<div className="ui-surface running-label">Carregando o formulário…</div>}>
+					{surfaces.map((ui) => (
+						<UiSurface key={ui.surface_id + JSON.stringify(ui).length} ui={ui} sent={!!sentSurface?.(ui.surface_id)} disabled={busy || !onUiAction} onAction={(t) => onUiAction?.(t)} />
+					))}
+				</Suspense>
+			)}
+			{!m.streaming && m.sources && <Sources sources={m.sources} />}
 			{m.streaming && text && <span className="caret" aria-hidden="true" />}
 			{m.error && <div className="notice error">{m.error}</div>}
 			{onCanvas && canvasesOf(steps).map((c) => (

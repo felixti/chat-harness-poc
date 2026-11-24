@@ -170,6 +170,9 @@ the harness, not only our portal.
 | `CUSTOM canvas` | A new canvas version, sent live before it is saved to Blob |
 | `CUSTOM usage` | Turn, conversation and month cost |
 | `CUSTOM model_error` | A provider failure, explained in plain language |
+| `REASONING_*` | The model's reasoning, shown collapsed as "Raciocínio" (H62) |
+| `CUSTOM sources` | Web pages the reply searched or read, pages read first (H62) |
+| `ACTIVITY_SNAPSHOT` | `a2ui-surface` (A2UI 1.0 messages of a form) and `plan` (step list), for any AG-UI client (H61, H62) |
 | `RUN_FINISHED{outcome: interrupt}` | An approval or a question is waiting for the user |
 
 ### 3.2 Portal (H41, H49, H50, H53, H55, H59)
@@ -351,6 +354,41 @@ Two fixes keep MCP tools working across turns:
 The Memória panel lists core entries and facts with a forget action, shows a graph view, and lists
 personal skills. A forgotten fact is recorded as an event, so the history of what the agent
 believed is kept.
+
+### 3.11 Interactive surfaces in the chat: A2UI (H61)
+
+```
+ model ── show_ui {surface_id, title, components[], data} ──► chat-api
+                       │ normalize ids (A2UI needs UAX #31: "btn-text" → "btn_text")
+                       │ check: catalog types only, unique ids, "root", child refs, buttons have actions, ≤ 80 comps / 40 KB
+                       │ ACTIVITY_SNAPSHOT a2ui-surface {createSurface, updateComponents, updateDataModel}
+                       ▼
+ portal: tool args → @a2ui/react + @a2ui/web_core MessageProcessor, basic catalog v1.0
+         themed through --a2ui-* variables mapped to the portal tokens; text uses the chat markdown
+         (renderer loaded lazily, ~0.5 MB, only when a reply has a surface)
+                       │ user fills in and presses a button
+                       ▼
+ next user message: <a2ui_action surface="…" name="submit">{context with the bound values}</a2ui_action>
+         shown as an "Enviado" card with the values; the form collapses to "… · enviado"
+```
+
+| Decision | Why |
+|---|---|
+| Basic catalog, no Image/Video/AudioPlayer/Modal | No media from arbitrary URLs; a modal fights the chat layout |
+| `ask_user` stays for 1 to 3 quick questions, canvas for big pages | Each tool keeps one job |
+| `zod` 4.6.7 with the alias `zod` → `zod/v3` in Vite | A2UI is written against zod 3; zod 3.x has a HIGH advisory |
+
+### 3.12 Reasoning, plan and sources (H62)
+
+```
+ Pi thinking_delta ──► REASONING_* ──► "Raciocínio" (collapsed; "Pensando…" while it streams)
+ plan {steps[]}    ──► ACTIVITY plan ──► plan card (done / in progress / pending), latest call wins
+ brave / crawlforge results ──► SourceList (pages read first, then search hits, max 12)
+                         ──► CUSTOM sources ──► "Fontes" list under the reply (4 shown, "Mostrar todas")
+ history: conversation-view rebuilds reasoning (thinking parts) and sources (tool results) on reload
+```
+
+The model no longer ends answers with a source list; the chat shows it.
 
 ## 4. Non-functional architecture
 

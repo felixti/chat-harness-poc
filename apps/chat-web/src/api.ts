@@ -31,6 +31,11 @@ export interface CanvasEvent {
 	version: number;
 	html: string;
 }
+/** A web page a search/crawl tool returned in this reply (CUSTOM "sources"). */
+export interface Source {
+	url: string;
+	title: string;
+}
 export interface TextPart {
 	type: "text";
 	text: string;
@@ -63,6 +68,9 @@ export type Message =
 			role: "assistant";
 			id: string;
 			parts: (TextPart | ToolStep)[];
+			/** The model's reasoning (REASONING_* events), shown collapsed. */
+			reasoning?: string;
+			sources?: Source[];
 			memory?: MemoryUsed;
 			saved?: string[];
 			newFiles?: FileInfo[];
@@ -221,6 +229,8 @@ export type AguiEvent =
 	| { type: "TOOL_CALL_END"; toolCallId: string }
 	| { type: "TOOL_CALL_RESULT"; toolCallId: string; content: string; metadata?: { isError?: boolean } }
 	| { type: "CUSTOM"; name: string; value: unknown }
+	| { type: "REASONING_MESSAGE_CONTENT"; messageId: string; delta: string }
+	| { type: "ACTIVITY_SNAPSHOT"; messageId: string; activityType: string; content: unknown }
 	| { type: "RUN_FINISHED"; threadId: string; runId: string; outcome?: { type: "success" } | { type: "interrupt"; interrupts: Interrupt[] } }
 	| { type: "RUN_ERROR"; message: string; code?: string };
 

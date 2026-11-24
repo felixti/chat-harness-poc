@@ -28,6 +28,7 @@ export class AguiRun {
 	readonly runId: string;
 	private readonly emit: (e: AguiEvent) => void;
 	private textId?: string;
+	private reasoningId?: string;
 	constructor(emit: (e: AguiEvent) => void, threadId: string, runId: string = randomUUID()) {
 		this.emit = (e) => emit({ ...e, timestamp: Date.now() });
 		this.threadId = threadId;
@@ -36,7 +37,30 @@ export class AguiRun {
 	started() {
 		this.emit({ type: "RUN_STARTED", threadId: this.threadId, runId: this.runId });
 	}
+	/** The model's reasoning (REASONING_* frames), shown collapsed in the portal. */
+	reasoning(delta: string) {
+		if (!delta) return;
+		if (!this.reasoningId) {
+			this.closeText();
+			this.reasoningId = randomUUID();
+			this.emit({ type: "REASONING_START", messageId: this.reasoningId });
+			this.emit({ type: "REASONING_MESSAGE_START", messageId: this.reasoningId, role: "reasoning" });
+		}
+		this.emit({ type: "REASONING_MESSAGE_CONTENT", messageId: this.reasoningId, delta });
+	}
+	private closeReasoning() {
+		if (!this.reasoningId) return;
+		this.emit({ type: "REASONING_MESSAGE_END", messageId: this.reasoningId });
+		this.emit({ type: "REASONING_END", messageId: this.reasoningId });
+		this.reasoningId = undefined;
+	}
+	/** AG-UI activity (A2UI surfaces travel as activityType "a2ui-surface", plans as "plan"). */
+	activity(messageId: string, activityType: string, content: Record<string, unknown>) {
+		this.closeReasoning();
+		this.emit({ type: "ACTIVITY_SNAPSHOT", messageId, activityType, content, replace: true });
+	}
 	text(delta: string) {
+		this.closeReasoning();
 		if (!this.textId) {
 			this.textId = randomUUID();
 			this.emit({ type: "TEXT_MESSAGE_START", messageId: this.textId, role: "assistant" });
@@ -48,6 +72,7 @@ export class AguiRun {
 		this.textId = undefined;
 	}
 	toolStart(toolCallId: string, name: string, args: unknown) {
+		this.closeReasoning();
 		this.closeText();
 		this.emit({ type: "TOOL_CALL_START", toolCallId, toolCallName: name });
 		this.emit({ type: "TOOL_CALL_ARGS", toolCallId, delta: JSON.stringify(args ?? {}) });
@@ -60,6 +85,7 @@ export class AguiRun {
 		this.emit({ type: "CUSTOM", name, value });
 	}
 	finished(interrupts: Interrupt[] = []) {
+		this.closeReasoning();
 		this.closeText();
 		this.emit({
 			type: "RUN_FINISHED",
@@ -69,6 +95,7 @@ export class AguiRun {
 		});
 	}
 	error(message: string, code?: string) {
+		this.closeReasoning();
 		this.closeText();
 		this.emit({ type: "RUN_ERROR", message, ...(code ? { code } : {}) });
 	}

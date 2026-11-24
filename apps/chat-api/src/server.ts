@@ -15,6 +15,7 @@ import { beforeLastUserMessage, entriesToView } from "./conversation-view.ts";
 import { companySkills } from "./skills-catalog.ts";
 import { deletePrefix } from "./workspace.ts";
 import { curate } from "./curator.ts";
+import { isSourceTool, planTool, showUiTool, SourceList } from "./ui-tools.ts";
 import { AguiRun, resultText, type ResumeEntry } from "./agui.ts";
 import { askUserTool, Gate, resumeMessage, stripHidden, withHidden } from "./approvals.ts";
 import { callMcpTool } from "./mcp-call.ts";
@@ -142,12 +143,19 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 		res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
 		const run = new AguiRun((e) => res.write(`data: ${JSON.stringify(e)}\n\n`), id, input.runId as string | undefined);
 		const savedByAgent: string[] = [];
+		const sources = new SourceList();
 		const onEvent = (e: { type: string; [k: string]: unknown }) => {
 			if (e.type === "delta") run.text(String(e.text));
+			else if (e.type === "thinking") run.reasoning(String(e.text));
 			else if (e.type === "tool") {
 				if (e.name === "memory" || e.name === "remember") savedByAgent.push(JSON.stringify(e.args));
 				run.toolStart(String(e.id), String(e.name), e.args);
-			} else if (e.type === "tool_end") run.toolResult(String(e.id), resultText(e.result), !!e.isError);
+			} else if (e.type === "tool_end") {
+				const text = resultText(e.result);
+				run.toolResult(String(e.id), text, !!e.isError);
+				// Web pages a search/crawl returned: listed under the reply (H62).
+				if (!e.isError && isSourceTool(String(e.name)) && sources.add(String(e.name), text)) run.custom("sources", sources.list());
+			}
 			else if (e.type === "error") run.custom("model_error", { message: e.message });
 		};
 		const abort = new AbortController();
@@ -177,6 +185,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				message = withHidden(message, hidden);
 			}
 			const canvas = canvasTool(turn.dir, (c) => run.custom("canvas", c));
+			const uiTools = [planTool((steps) => run.activity(`plan-${run.runId}`, "plan", { steps })), showUiTool((s) => run.activity(`a2ui-${s.surfaceId}`, "a2ui-surface", { surfaceId: s.surfaceId, title: s.title, a2ui_operations: s.messages }))];
 			const result = await runTurn({
 				workspace: turn.dir,
 				// edit/regenerate: replay from before the last user message (the old answer is replaced).
@@ -188,8 +197,8 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				mcpServers: await mcpServersFor(user),
 				gate,
 				...(memoryOn && facts
-					? { systemAppend: (await corePrompt(user)) + (await memoryContext(user, message, id, facts, (v) => run.custom("memory_used", v))), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas], userSkillsDir: mySkills?.dir }
-					: { extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas] }),
+					? { systemAppend: (await corePrompt(user)) + (await memoryContext(user, message, id, facts, (v) => run.custom("memory_used", v))), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas, ...uiTools], userSkillsDir: mySkills?.dir }
+					: { extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas, ...uiTools] }),
 				onEvent,
 				signal: abort.signal,
 			});

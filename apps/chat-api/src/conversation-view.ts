@@ -1,5 +1,7 @@
 // Pi session entries -> what the portal renders: user messages and assistant turns made of text
-// parts and tool steps. System prompts, thinking and model bookkeeping are left out.
+// parts and tool steps, plus the reasoning and the web sources of each turn (H62). System prompts
+// and model bookkeeping are left out.
+import { isSourceTool, SourceList, type Source } from "./ui-tools.ts";
 export interface ToolStep {
 	type: "tool";
 	id: string;
@@ -11,9 +13,9 @@ export interface TextPart {
 	type: "text";
 	text: string;
 }
-export type ViewMessage = { role: "user"; id: string; text: string; at?: string } | { role: "assistant"; id: string; parts: (TextPart | ToolStep)[]; at?: string };
+export type ViewMessage = { role: "user"; id: string; text: string; at?: string } | { role: "assistant"; id: string; parts: (TextPart | ToolStep)[]; at?: string; reasoning?: string; sources?: Source[] };
 
-type Entry = { type?: string; id?: string; timestamp?: string; message?: { role?: string; content?: unknown; toolCallId?: string; isError?: boolean } };
+type Entry = { type?: string; id?: string; timestamp?: string; message?: { role?: string; content?: unknown; toolCallId?: string; toolName?: string; isError?: boolean } };
 
 /** The harness wraps pinned skills around the user's words; show only the words. */
 export function cleanUserText(t: string): string {
@@ -26,6 +28,7 @@ export function cleanUserText(t: string): string {
 export function entriesToView(entries: unknown[]): ViewMessage[] {
 	const out: ViewMessage[] = [];
 	const steps = new Map<string, ToolStep>();
+	const lists = new Map<object, SourceList>();
 	let current: Extract<ViewMessage, { role: "assistant" }> | undefined;
 	for (const e of entries as Entry[]) {
 		const m = e?.message;
@@ -39,17 +42,25 @@ export function entriesToView(entries: unknown[]): ViewMessage[] {
 				current = { role: "assistant", id: e.id ?? String(out.length), parts: [], at: e.timestamp };
 				out.push(current);
 			}
-			for (const c of (Array.isArray(m.content) ? m.content : []) as { type?: string; text?: string; id?: string; name?: string; arguments?: unknown }[]) {
+			for (const c of (Array.isArray(m.content) ? m.content : []) as { type?: string; text?: string; thinking?: string; id?: string; name?: string; arguments?: unknown }[]) {
 				if (c.type === "text" && c.text?.trim()) current.parts.push({ type: "text", text: c.text });
+				else if (c.type === "thinking" && c.thinking?.trim()) current.reasoning = (current.reasoning ? `${current.reasoning}\n\n` : "") + c.thinking.trim();
 				else if (c.type === "toolCall" && c.name) {
 					const step: ToolStep = { type: "tool", id: c.id ?? "", name: c.name, args: c.arguments };
 					steps.set(step.id, step);
 					current.parts.push(step);
 				}
 			}
-		} else if (m.role === "toolResult" && m.toolCallId && m.isError) {
+		} else if (m.role === "toolResult" && m.toolCallId) {
 			const s = steps.get(m.toolCallId);
-			if (s) s.isError = true;
+			if (s && m.isError) s.isError = true;
+			else if (s && current && isSourceTool(s.name)) {
+				const text = typeof m.content === "string" ? m.content : ((m.content as { type?: string; text?: string }[]) ?? []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
+				let list = lists.get(current);
+				if (!list) lists.set(current, (list = new SourceList()));
+				list.add(s.name, text);
+				current.sources = list.list();
+			}
 		}
 	}
 	return out;

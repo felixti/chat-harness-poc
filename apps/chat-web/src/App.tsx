@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelLeft, SquarePen, X } from "lucide-react";
-import { api, chat, fileUrl, HttpError, SessionExpired, type CanvasEvent, type ConversationSummary, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type ToolStep } from "./api";
+import { api, chat, fileUrl, HttpError, SessionExpired, type CanvasEvent, type ConversationSummary, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type Source, type ToolStep } from "./api";
 
 /** Steps held by an open interrupt read as "waiting", not as failed. */
 function markWaiting(parts: (ToolStep | { type: "text"; text: string })[], interrupts?: Interrupt[]) {
@@ -8,6 +8,7 @@ function markWaiting(parts: (ToolStep | { type: "text"; text: string })[], inter
 	return parts.map((p) => (p.type === "tool" && waiting.has(p.id) ? { ...p, isError: false, waiting: true } : p));
 }
 import { AssistantMessage, UserMessage } from "./Message";
+import { parseAction } from "./RichParts";
 import { Composer, type Attachment } from "./Composer";
 import { Sidebar, type DrawerTab } from "./Sidebar";
 import { Drawer } from "./Drawer";
@@ -241,6 +242,9 @@ export function App() {
 							return { ...a, parts };
 						});
 						break;
+					case "REASONING_MESSAGE_CONTENT":
+						patch((a) => ({ ...a, reasoning: (a.reasoning ?? "") + ev.delta }));
+						break;
 					case "TOOL_CALL_START":
 						patch((a) => ({ ...a, parts: [...a.parts, { type: "tool", id: ev.toolCallId, name: ev.toolCallName, args: {}, running: true }] }));
 						break;
@@ -260,6 +264,7 @@ export function App() {
 						break;
 					case "CUSTOM":
 						if (ev.name === "memory_used") patch((a) => ({ ...a, memory: ev.value as MemoryUsed }));
+						else if (ev.name === "sources") patch((a) => ({ ...a, sources: ev.value as Source[] }));
 						else if (ev.name === "usage") {
 							const u = ev.value as { conversation: Spend; month: Spend };
 							setConvCost(u.conversation);
@@ -337,6 +342,12 @@ export function App() {
 	const send = (text: string, skills: string[]) => void run(text, skills);
 	const lastUser = [...messages].reverse().find((m) => m.role === "user") as Extract<Message, { role: "user" }> | undefined;
 	const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
+	// Index of the last message that submitted each A2UI surface: earlier copies render as sent.
+	const actions = new Map<string, number>();
+	messages.forEach((m, i) => {
+		const a = m.role === "user" ? parseAction(m.text) : undefined;
+		if (a) actions.set(a.surface, i);
+	});
 
 	function useFromLibrary(f: LibraryFile) {
 		const id = ensureConv();
@@ -563,7 +574,7 @@ export function App() {
 							}}
 						>
 							<div className="column">
-								{messages.map((m) =>
+								{messages.map((m, idx) =>
 									m.role === "user" ? (
 										<UserMessage key={m.id} m={m} canEdit={!busy && m.id === lastUser?.id} onEdit={(t) => void run(t, [], true)} />
 									) : (
@@ -588,6 +599,8 @@ export function App() {
 											onPreview={openPreview}
 											onCloud={cloud}
 											onRespond={respond}
+												sentSurface={(sid) => (actions.get(sid) ?? -1) > idx}
+												onUiAction={(text) => void run(text, [])}
 											canvasTitles={canvasTitles}
 											onCanvas={(name) => {
 												setDrawer(undefined);
