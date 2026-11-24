@@ -45,7 +45,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
       - name: brave-mcp
-        image: ghcr.io/felixti/chat-harness-brave-mcp:4be5e0270a2b9c500c48233b791f8e0ea02afce1
+        image: ghcr.io/felixti/chat-harness-brave-mcp:591e1355f461c306876d310e11d4790f8fa45262
         env:
         # Host header check: only the in-cluster service names.
         - {name: BRAVE_MCP_PORT, value: "8080"}
