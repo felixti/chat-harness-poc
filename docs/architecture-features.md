@@ -421,7 +421,7 @@ The model no longer ends answers with a source list; the chat shows it.
 | Read-only root filesystem, `/tmp` only | Each turn runs in `/tmp` (emptyDir, 4 Gi), and Blob is durable |
 | No subprocess or CLI | Pi's bash is replaced by just-bash (emulated); all writers and the slide preview are pure JS; `no-subprocess.ts` guards it in code |
 | No runtime downloads | Everything is baked into images, including ECharts and fonts; no CDN |
-| No HIGH/CRITICAL CVEs | Distroless and scratch images. Trivy in CI blocks the push, and overrides fix advisories |
+| No HIGH/CRITICAL CVEs | Scratch images built from Wolfi packages (chat-api, parser), no shell or package manager. Trivy in CI blocks the push, and overrides fix advisories (H63) |
 | Licenses | Only MIT, Apache-2.0, BSD, ISC and OFL. No BSL, SSPL or RSAL. The repository itself is MIT |
 
 ### 4.3 Reliability and consistency

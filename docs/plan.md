@@ -62,3 +62,4 @@ current ~R$1.50/h cluster cost.
 | 2026-11-15 | 2 | CrawlForge MCP (H60): scrape/search/extract/research tools, key in Key Vault, 150 s timeout; labels in pt-BR. |
 | 2026-11-16 | 2 | Feature architecture doc (`docs/architecture-features.md`): functional map per feature + non-functional section, ASCII diagrams. |
 | 2026-11-24 | 2 | A2UI surfaces in the chat (H61) and reasoning / plan / sources (H62); OpenRouter key renewed (expires 2026-12-24). 90 API tests. |
+| 2026-11-24 | 2 | chat-api runtime moved to Wolfi packages in scratch (H63): Debian 13 libssl3t64 HIGH CVEs without a fix blocked CI. |
