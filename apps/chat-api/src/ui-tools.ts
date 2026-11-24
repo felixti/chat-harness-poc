@@ -5,6 +5,7 @@
 //   the A2UI basic catalog in our theme. No code runs: only declarative components from the
 //   catalog. A button's action comes back as the next user message (<a2ui_action>).
 // - sources: web pages that search/crawl tools returned, listed under the reply.
+import { registerHooks } from "node:module";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -56,11 +57,16 @@ const SURFACE_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const COMPONENT_ID = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 
 type Ref = string | unknown;
-/** "btn-text" -> "btn_text" in ids and in every child reference. */
+/** Enum props models often write in kebab/snake case ("space-between" -> "spaceBetween"). */
+const ENUM_PROPS = ["justify", "align", "variant", "displayStyle", "direction", "axis", "fit"];
+const camel = (v: unknown) => (typeof v === "string" && /[-_]/.test(v) ? v.replace(/[-_]+([a-z])/g, (_m, c: string) => c.toUpperCase()) : v);
+/** "btn-text" -> "btn_text" in ids and in every child reference; enum spellings fixed. The portal
+ *  applies the same to what history holds (apps/chat-web/src/UiSurface.tsx). */
 export function normalizeIds<T extends Record<string, unknown>>(components: T[]): T[] {
 	const fix = (id: Ref) => (typeof id === "string" ? id.replace(/[^A-Za-z0-9_]/g, "_").replace(/^(?=\d)/, "_") : id);
 	return components.map((c) => {
 		const out: Record<string, unknown> = { ...c, id: fix(c.id) };
+		for (const k of ENUM_PROPS) if (k in c) out[k] = camel(c[k]);
 		if (typeof c.child === "string") out.child = fix(c.child);
 		if (Array.isArray(c.children)) out.children = c.children.map(fix);
 		if (Array.isArray(c.tabs)) out.tabs = (c.tabs as Record<string, unknown>[]).map((t) => ({ ...t, child: fix(t.child) }));
@@ -117,7 +123,7 @@ Use it when the user must enter or choose several structured values (a request f
 
 Format: a flat list of components; each has a unique "id" and "component" (type). One has id "root". Containers point at children by id.
 - Text {text, variant?: "body"|"caption"} (text supports markdown: "## Title", **bold**)
-- Row / Column {children: [ids], justify?, align?} · List {children, direction?} · Card {child} · Divider {} · Tabs {tabs: [{title, child}]} · Icon {name}
+- Row / Column {children: [ids], justify?: "start"|"center"|"end"|"spaceBetween"|"spaceAround"|"spaceEvenly"|"stretch", align?: "start"|"center"|"end"|"stretch"} · List {children, direction?} · Card {child} · Divider {} · Tabs {tabs: [{title, child}]} · Icon {name}
 - TextField {label, value: {"@path": "/form/x"}, placeholder?, variant?: "shortText"|"longText"|"number"|"obscured"}
 - CheckBox {label, value: {"@path": "/form/ok"}} · Slider {label, min, max, value: {"@path": ...}}
 - DateTimeInput {label, value: {"@path": "/form/date"}, enableDate?, enableTime?}
@@ -125,6 +131,26 @@ Format: a flat list of components; each has a unique "id" and "component" (type)
 - Button {child: "<id of a Text>", variant?: "primary"|"default"|"borderless", action: {event: {name: "submit", context: {"field": {"@path": "/form/x"}}}}}
 Start with a Card as root so the surface has a frame. Inputs bind to "data" (the initial values) through {"@path": "/..."}; a button's context sends the bound values back. Required fields: add "@checks": [{"condition": {"call": "required", "args": {"value": {"@path": "/form/x"}}}, "message": "Obrigatório"}].
 When the user presses a button you get their next message as <a2ui_action surface="..." name="...">{context JSON}</a2ui_action>: act on those values. Labels in the user's language. Keep it small: one card, at most about 8 inputs.`;
+
+// The renderer's own check (@a2ui/web_core, same version as the portal): what it rejects, the model
+// hears about and fixes, instead of the user seeing "Não consegui mostrar este formulário".
+// A2UI is written against the zod 3 API; zod is 4.6.7 here (3.x has a HIGH advisory), whose
+// zod/v3 entry is that API. Only imports from @a2ui packages are redirected.
+let hooked = false;
+async function rendererCheck(messages: unknown[]): Promise<string | undefined> {
+	if (!hooked) {
+		hooked = true;
+		registerHooks({ resolve: (spec, ctx, next) => next(spec === "zod" && ctx.parentURL?.includes("/@a2ui/") ? "zod/v3" : spec, ctx) });
+	}
+	const { MessageProcessor } = await import("@a2ui/web_core");
+	const { basicCatalog } = await import("@a2ui/web_core/catalogs/basic/v1");
+	try {
+		new MessageProcessor([basicCatalog]).processMessages(messages as never);
+		return undefined;
+	} catch (e) {
+		return (e as Error).message.slice(0, 600);
+	}
+}
 
 export function showUiTool(onSurface?: (s: { surfaceId: string; title?: string; messages: unknown[] }) => void): ToolDefinition {
 	return defineTool({
@@ -154,7 +180,10 @@ export function showUiTool(onSurface?: (s: { surfaceId: string; title?: string; 
 			const data = p.data as Record<string, unknown> | undefined;
 			const errs = checkSurface(components, data);
 			if (errs.length) throw new Error(`The surface was not shown. Fix and call show_ui again with the whole surface:\n- ${errs.join("\n- ")}`);
-			onSurface?.({ surfaceId, title: typeof p.title === "string" ? p.title.slice(0, 120) : undefined, messages: surfaceMessages(surfaceId, components, data) });
+			const messages = surfaceMessages(surfaceId, components, data);
+			const rejected = await rendererCheck(messages);
+			if (rejected) throw new Error(`The surface was not shown: the A2UI renderer rejected it. Fix and call show_ui again with the whole surface:\n- ${rejected}`);
+			onSurface?.({ surfaceId, title: typeof p.title === "string" ? p.title.slice(0, 120) : undefined, messages });
 			return { content: [{ type: "text" as const, text: `Surface "${surfaceId}" is on screen. Wait for the user: their input arrives as the next message. Do not describe the form again in text.` }], details: undefined };
 		},
 	}) as ToolDefinition;

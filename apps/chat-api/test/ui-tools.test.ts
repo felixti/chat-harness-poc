@@ -98,3 +98,12 @@ test("pages the model read come before search hits; components may arrive as a J
 	await exec(showUiTool((s) => shown.push(s)), { surface_id: "x", components: JSON.stringify([{ id: "root", component: "Text", text: "oi" }]) });
 	assert.equal(shown.length, 1);
 });
+
+test("what the A2UI renderer rejects goes back to the model; common enum spellings are fixed", async () => {
+	const shown: { messages: { updateComponents?: { components: { justify?: string }[] } }[] }[] = [];
+	const t = showUiTool((s) => shown.push(s as never));
+	await exec(t, { surface_id: "x", components: [{ id: "root", component: "Row", justify: "space-between", children: ["a"] }, { id: "a", component: "Text", text: "oi" }] });
+	assert.equal(shown[0].messages[1].updateComponents!.components[0].justify, "spaceBetween");
+	await assert.rejects(exec(t, { surface_id: "y", components: [{ id: "root", component: "Text", text: "oi", foo: 1 }] }), /renderer rejected it[\s\S]*foo/);
+	await assert.rejects(exec(t, { surface_id: "z", components: [{ id: "root", component: "Slider", label: "x", value: { "@path": "/v" } }] }), /renderer rejected it/);
+});

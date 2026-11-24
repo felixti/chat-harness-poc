@@ -21,10 +21,13 @@ const SurfaceMarkdown = ({ markdown }: { markdown: string }) => (
 
 /** A2UI ids are UAX #31 identifiers: "btn-text" -> "btn_text", in ids and child references
  *  (history keeps what the model wrote; the server normalizes the same way). */
+const ENUM_PROPS = ["justify", "align", "variant", "displayStyle", "direction", "axis", "fit"];
+const camel = (v: unknown) => (typeof v === "string" && /[-_]/.test(v) ? v.replace(/[-_]+([a-z])/g, (_m, c: string) => c.toUpperCase()) : v);
 function normalizeIds(components: Record<string, unknown>[]) {
 	const fix = (id: unknown) => (typeof id === "string" ? id.replace(/[^A-Za-z0-9_]/g, "_").replace(/^(?=\d)/, "_") : id);
 	return components.map((c) => ({
 		...c,
+		...Object.fromEntries(ENUM_PROPS.filter((k) => k in c).map((k) => [k, camel(c[k])])),
 		id: fix(c.id),
 		...(typeof c.child === "string" ? { child: fix(c.child) } : {}),
 		...(Array.isArray(c.children) ? { children: c.children.map(fix) } : {}),
@@ -66,7 +69,14 @@ export default function UiSurface({ ui, sent, disabled, onAction }: { ui: UiArgs
 		<section className="ui-surface" aria-label={ui.title ?? "Formulário"}>
 			{ui.title && <div className="ui-title">{ui.title}</div>}
 			{error || !surface ? (
-				<div className="notice error">Não consegui mostrar este formulário.</div>
+				<div className="notice error ui-error">
+					<span>Não consegui mostrar este formulário.</span>
+					{!disabled && (
+						<button type="button" className="btn small" onClick={() => onAction(`O formulário "${ui.title ?? ui.surface_id}" não abriu no chat. Erro do renderizador: ${(error ?? "superfície vazia").slice(0, 400)}. Corrija e mostre de novo.`)}>
+							Pedir correção
+						</button>
+					)}
+				</div>
 			) : (
 				<div className="ui-body" inert={disabled}>
 					<MarkdownComponentContext.Provider value={SurfaceMarkdown}>
