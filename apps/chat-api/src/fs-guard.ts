@@ -31,8 +31,8 @@ async function real(p: string): Promise<string> {
 
 // Pi saves the full text of a truncated MCP result to <tmpdir>/pi-mcp-<hex>.txt and tells the model
 // to read it there, outside the workspace. keepToolOutput moves it into work/tool-output/ when the
-// tool ends (kept with the conversation like any work file), and a read of the /tmp path is served
-// from that copy, in this turn and later ones.
+// tool ends (kept with the conversation like any work file); the model is given the new path (agent.ts),
+// which bash and read both reach. A read of the old /tmp path, as in older turns, is served from the copy.
 const TOOL_OUTPUT = /^pi-mcp-[0-9a-f]{8,64}\.txt$/;
 const moving = new Map<string, Promise<void>>();
 const toolOutputCopy = (workspace: string, p: string) => {
@@ -40,10 +40,12 @@ const toolOutputCopy = (workspace: string, p: string) => {
 	return dirname(abs) === resolve(tmpdir()) && TOOL_OUTPUT.test(basename(abs)) ? { abs, copy: join(workspace, "work", "tool-output", basename(abs)) } : undefined;
 };
 
-/** Moves a truncated tool output Pi saved in the temp folder into the workspace. */
-export function keepToolOutput(workspace: string, path: unknown): void {
+/** Moves a truncated tool output Pi saved in the temp folder into the workspace; returns the new path. */
+export function keepToolOutput(workspace: string, path: unknown): Promise<string | undefined> {
 	const t = typeof path === "string" ? toolOutputCopy(workspace, path) : undefined;
-	if (!t || moving.has(t.abs)) return;
+	if (!t) return Promise.resolve(undefined);
+	const pending = moving.get(t.abs);
+	if (pending) return pending.then(() => t.copy);
 	const done = (async () => {
 		await mkdir(dirname(t.copy), { recursive: true });
 		await copyFile(t.abs, t.copy);
@@ -52,6 +54,7 @@ export function keepToolOutput(workspace: string, path: unknown): void {
 		.catch((e) => console.warn(`[tool-output] ${(e as Error).message}`))
 		.finally(() => setTimeout(() => moving.delete(t.abs), 60_000).unref());
 	moving.set(t.abs, done);
+	return done.then(() => t.copy);
 }
 
 export function fsGuard(workspace: string, readOnlyRoots: string[]) {

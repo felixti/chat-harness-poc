@@ -215,6 +215,17 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 			(pi) => {
 				if (input.gate) pi.on("tool_call", (e) => input.gate!.check({ toolCallId: e.toolCallId, toolName: e.toolName, input: e.input }));
 				pi.on("context", (e) => ({ messages: foreignToolCallsAsText(e.messages, modelId) }));
+				// A truncated MCP result's full text goes to the workspace, and the model gets that path (H66).
+				pi.on("tool_result", async (e) => {
+					const from = (e.details as { fullOutputPath?: unknown } | undefined)?.fullOutputPath;
+					const to = await keepToolOutput(cwd, from);
+					if (!to || typeof from !== "string") return undefined;
+					return {
+						content: e.content.map((c) => (c.type === "text" ? { ...c, text: c.text.split(from).join(to) } : c)),
+						details: { ...(e.details as object), fullOutputPath: to },
+						structuredContent: e.structuredContent,
+					};
+				});
 				// OpenRouter reports what it billed in the last stream chunk (usage.cost, USD): the price
 				// list can differ from the provider it routed to (H58), so this wins when present.
 				pi.on("provider_stream_event", (e) => {
@@ -284,7 +295,6 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		} else if (event.type === "tool_execution_start") {
 			input.onEvent({ type: "tool", id: event.toolCallId, name: event.toolName, args: event.args });
 		} else if (event.type === "tool_execution_end") {
-			keepToolOutput(cwd, (event.result as { details?: { fullOutputPath?: unknown } } | undefined)?.details?.fullOutputPath);
 			input.gate?.noteResult?.(event.toolName, event.isError);
 			input.onEvent({ type: "tool_end", id: event.toolCallId, name: event.toolName, isError: event.isError, result: event.result });
 		}

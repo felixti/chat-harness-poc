@@ -48,11 +48,13 @@ test("ls cannot list another user's workspace", async () => {
 	assert.match(await run("ls", { path: other }), /ERR/);
 });
 
-test("a truncated MCP output Pi saved in /tmp is readable at that path, from the workspace copy", async () => {
+test("a truncated MCP output Pi saved in /tmp moves to work/tool-output; the old path still reads the copy", async () => {
 	const saved = join(tmpdir(), "pi-mcp-0123456789abcdef.txt");
 	await writeFile(saved, "line 1\nline 2\nthe end");
-	keepToolOutput(me, saved);
+	const pending = keepToolOutput(me, saved);
 	assert.match(await run("read", { path: saved, offset: 2 }), /line 2[\s\S]*the end/);
+	assert.equal(await pending, join(me, "work", "tool-output", "pi-mcp-0123456789abcdef.txt"));
+	assert.equal(await keepToolOutput(me, "/etc/passwd"), undefined);
 	assert.match(await run("read", { path: "work/tool-output/pi-mcp-0123456789abcdef.txt" }), /line 1/);
 	await assert.rejects(stat(saved));
 	const otherSaved = join(tmpdir(), "pi-mcp-feedfacefeedface.txt");
