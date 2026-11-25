@@ -12,7 +12,7 @@
       "url": "https://github.com/felixti/chat-harness-poc.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "4601420f75c973059b197a60820464a44864868f"
+      "revision": "754557f3799fee4af5fbe39ef78f3d04ba8ddd90"
     },
     "views": [
       {
@@ -258,16 +258,16 @@
           "label": "containers"
         },
         {
-          "path": "apps/chat-api/src/connectors.ts",
-          "line": 135,
-          "end_line": 140,
-          "label": "AES-256-GCM sealing"
-        },
-        {
           "path": "apps/chat-api/src/projects.ts",
           "line": 100,
           "end_line": 101,
           "label": "<oid>/_projects/<id>/files/"
+        },
+        {
+          "path": "apps/chat-api/src/shares.ts",
+          "line": 110,
+          "end_line": 110,
+          "label": "_shares/<id>/ copies"
         }
       ]
     },
@@ -394,15 +394,16 @@
           "end_line": 147
         },
         {
-          "path": "deploy/networkpolicy.yaml",
-          "line": 69,
-          "end_line": 82
-        },
-        {
           "path": "apps/chat-api/src/projects.ts",
           "line": 63,
           "end_line": 95,
           "label": "projects collection"
+        },
+        {
+          "path": "apps/chat-api/src/shares.ts",
+          "line": 70,
+          "end_line": 105,
+          "label": "shares collection"
         }
       ]
     },
@@ -814,7 +815,7 @@
       "dot": "rose",
       "title": "Trust boundaries",
       "items": [
-        "Envoy is the only ingress; it overwrites x-user-oid from the JWT",
+        "Envoy is the only ingress (tenant sign-in, share links too); it overwrites x-user-oid from the JWT",
         "File tools confined to the turn workspace; bash is emulated (just-bash)",
         "Tokens and memory sealed AES-256-GCM with AAD = oid",
         "llm-gateway injects the OpenRouter key; chat-api never holds it"
@@ -845,7 +846,7 @@
       "title": "Inside chat-api",
       "items": [
         "Tools: files, bash, parse, office/PDF writers, canvas, show_ui, plan",
-        "Projects: instructions in the prompt, files mounted read-only; memory: core, episodic, fact graph, skills",
+        "Projects (shared instructions + read-only files) and share links (frozen copies); memory: core, episodic, graph, skills",
         "Connectors: OAuth + PKCE (GitHub, Azure DevOps, Microsoft Graph)",
         "Gate: approvals + loop breaker; cost ledger in BRL"
       ]
