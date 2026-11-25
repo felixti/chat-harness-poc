@@ -12,7 +12,7 @@
       "url": "https://github.com/felixti/chat-harness-poc.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "754557f3799fee4af5fbe39ef78f3d04ba8ddd90"
+      "revision": "3cbcc189a31da7c7fe95df93216b11e6440fed80"
     },
     "views": [
       {
@@ -206,7 +206,7 @@
       "id": "chat_api",
       "type": "backend",
       "label": "chat-api ×2",
-      "sublabel": "Node 24 · Pi 1.5 · SSE · Gate · ledger",
+      "sublabel": "Node 24 · Pi 1.5 · SSE · DuckDB · ledger",
       "pos": [
         800,
         366
@@ -845,7 +845,7 @@
       "dot": "violet",
       "title": "Inside chat-api",
       "items": [
-        "Tools: files, bash, parse, office/PDF writers, canvas, show_ui, plan",
+        "Tools: files, bash, parse, office/PDF, canvas, show_ui, plan, analyze_data (DuckDB SQL, locked down)",
         "Projects (shared instructions + read-only files) and share links (frozen copies); memory: core, episodic, graph, skills",
         "Connectors: OAuth + PKCE (GitHub, Azure DevOps, Microsoft Graph)",
         "Gate: approvals + loop breaker; cost ledger in BRL"
