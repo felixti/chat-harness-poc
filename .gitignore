@@ -15,3 +15,7 @@ testdata/*
 apps/chat-api/public/
 # impeccable runtime captures
 .impeccable/review/
+
+# Archify review evidence (screenshots, receipts); the diagram and its candidate are committed
+.archify/**/review*/
+.archify/**/visual-check/

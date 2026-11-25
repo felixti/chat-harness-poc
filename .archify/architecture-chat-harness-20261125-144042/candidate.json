@@ -1,0 +1,854 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Chat Harness PoC — End-to-End Architecture",
+    "locale": "en",
+    "output": ".archify/architecture-chat-harness-20261125-144042/chat-harness.html",
+    "visual_preset": "signal-flow",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/felixti/chat-harness-poc.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "4601420f75c973059b197a60820464a44864868f"
+    },
+    "views": [
+      {
+        "id": "request",
+        "label": "One chat turn",
+        "focus": [
+          "user",
+          "lb",
+          "envoy",
+          "chat_api",
+          "llm_gw",
+          "openrouter",
+          "blob"
+        ],
+        "note": "Browser → LB → Envoy (OIDC+JWT) → chat-api → llm-gateway → OpenRouter; turn files leased from Blob"
+      },
+      {
+        "id": "netpol",
+        "label": "Network policy (default-deny)",
+        "focus": [
+          "chat_api",
+          "parser",
+          "brave_mcp",
+          "ferret",
+          "chat_pg",
+          "curator",
+          "envoy",
+          "llm_gw"
+        ],
+        "note": "Only Envoy public reaches chat-api; parser and chat-pg have no egress; 443 out only to public IPs"
+      },
+      {
+        "id": "data",
+        "label": "Data and secrets",
+        "focus": [
+          "blob",
+          "kv",
+          "eso",
+          "chat_api",
+          "ferret",
+          "chat_pg",
+          "curator"
+        ],
+        "note": "Blob is the source of truth; FerretDB holds history and usage; Key Vault → ESO → files"
+      },
+      {
+        "id": "tools",
+        "label": "Tools and MCP",
+        "focus": [
+          "chat_api",
+          "parser",
+          "brave_mcp",
+          "brave_api",
+          "remote_mcp"
+        ],
+        "note": "In-process tools plus parser, brave-mcp and remote MCP with sealed per-user tokens"
+      },
+      {
+        "id": "delivery",
+        "label": "Delivery (GitOps)",
+        "focus": [
+          "gh",
+          "ghcr",
+          "argo",
+          "chat_api"
+        ],
+        "note": "Actions build + Trivy gate → GHCR; image sha committed in deploy/; Argo CD syncs"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "frontend",
+      "label": "User · browser",
+      "sublabel": "React SPA · AG-UI client",
+      "icon": "person",
+      "pos": [
+        30,
+        380
+      ],
+      "size": [
+        140,
+        72
+      ],
+      "sources": [
+        {
+          "path": "apps/chat-web/src/RichParts.tsx",
+          "line": 1,
+          "end_line": 5,
+          "label": "portal"
+        }
+      ]
+    },
+    {
+      "id": "entra",
+      "type": "security",
+      "label": "Entra ID",
+      "sublabel": "OIDC · JWKS · WI tokens",
+      "pos": [
+        30,
+        170
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "deploy/route.yaml",
+          "line": 35,
+          "end_line": 70,
+          "label": "SecurityPolicy chat-auth"
+        }
+      ]
+    },
+    {
+      "id": "lb",
+      "type": "cloud",
+      "label": "Azure Load Balancer",
+      "sublabel": "Standard · static public IP",
+      "pos": [
+        240,
+        380
+      ],
+      "size": [
+        160,
+        72
+      ],
+      "tag": "L4",
+      "sources": [
+        {
+          "path": "docs/architecture-features.md",
+          "line": 20,
+          "end_line": 24,
+          "label": "blueprint"
+        }
+      ]
+    },
+    {
+      "id": "envoy",
+      "type": "security",
+      "label": "Envoy Gateway public",
+      "sublabel": "TLS · OIDC + JWT · oid→x-user-oid",
+      "pos": [
+        470,
+        380
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "tag": "ingress",
+      "sources": [
+        {
+          "path": "deploy/route.yaml",
+          "line": 1,
+          "end_line": 20,
+          "label": "HTTPRoute chat, 900s"
+        },
+        {
+          "path": "deploy/route.yaml",
+          "line": 35,
+          "end_line": 70,
+          "label": "OIDC + JWT claims"
+        }
+      ]
+    },
+    {
+      "id": "certmgr",
+      "type": "security",
+      "label": "cert-manager",
+      "sublabel": "Let's Encrypt HTTP-01",
+      "pos": [
+        480,
+        210
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "docs/architecture-features.md",
+          "line": 14,
+          "end_line": 24
+        }
+      ]
+    },
+    {
+      "id": "chat_api",
+      "type": "backend",
+      "label": "chat-api ×2",
+      "sublabel": "Node 24 · Pi 1.5 · SSE · Gate · ledger",
+      "pos": [
+        800,
+        366
+      ],
+      "size": [
+        210,
+        100
+      ],
+      "tag": "stateless",
+      "sources": [
+        {
+          "path": "deploy/chat-api.yaml",
+          "line": 44,
+          "end_line": 116,
+          "label": "Deployment, ro rootfs"
+        },
+        {
+          "path": "apps/chat-api/src/agent.ts",
+          "line": 261,
+          "end_line": 280,
+          "label": "Pi session + tools"
+        },
+        {
+          "path": "apps/chat-api/src/server.ts",
+          "line": 144,
+          "label": "AG-UI SSE"
+        }
+      ]
+    },
+    {
+      "id": "blob",
+      "type": "database",
+      "label": "Blob stagentpocjt75",
+      "sublabel": "workspaces · projects · credentials · memory",
+      "pos": [
+        765,
+        40
+      ],
+      "size": [
+        230,
+        80
+      ],
+      "tag": "source of truth",
+      "sources": [
+        {
+          "path": "deploy/chat-api.yaml",
+          "line": 70,
+          "end_line": 81,
+          "label": "containers"
+        },
+        {
+          "path": "apps/chat-api/src/connectors.ts",
+          "line": 135,
+          "end_line": 140,
+          "label": "AES-256-GCM sealing"
+        },
+        {
+          "path": "apps/chat-api/src/projects.ts",
+          "line": 100,
+          "end_line": 101,
+          "label": "<oid>/_projects/<id>/files/"
+        }
+      ]
+    },
+    {
+      "id": "kv",
+      "type": "security",
+      "label": "Key Vault",
+      "sublabel": "kv-agentpoc-jt75 · all keys",
+      "pos": [
+        1060,
+        40
+      ],
+      "size": [
+        170,
+        72
+      ],
+      "sources": [
+        {
+          "path": "docs/architecture-features.md",
+          "line": 63,
+          "end_line": 70,
+          "label": "secrets held"
+        }
+      ]
+    },
+    {
+      "id": "eso",
+      "type": "security",
+      "label": "External Secrets",
+      "sublabel": "KV → Secret → files 0440",
+      "pos": [
+        1060,
+        210
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "deploy/route.yaml",
+          "line": 22,
+          "end_line": 33,
+          "label": "ExternalSecret"
+        },
+        {
+          "path": "deploy/chat-api.yaml",
+          "line": 99,
+          "end_line": 112,
+          "label": "projected files"
+        }
+      ]
+    },
+    {
+      "id": "parser",
+      "type": "backend",
+      "label": "parser",
+      "sublabel": "doc → markdown · no egress",
+      "pos": [
+        865,
+        590
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "deploy/parser.yaml",
+          "line": 12,
+          "end_line": 44
+        },
+        {
+          "path": "deploy/networkpolicy.yaml",
+          "line": 56,
+          "end_line": 67,
+          "label": "egress: []"
+        }
+      ]
+    },
+    {
+      "id": "brave_mcp",
+      "type": "backend",
+      "label": "brave-mcp",
+      "sublabel": "MCP · holds Brave key",
+      "pos": [
+        690,
+        590
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "deploy/brave-mcp.yaml",
+          "line": 26,
+          "end_line": 70
+        },
+        {
+          "path": "deploy/networkpolicy.yaml",
+          "line": 97,
+          "end_line": 114
+        }
+      ]
+    },
+    {
+      "id": "ferret",
+      "type": "database",
+      "label": "FerretDB 2.7",
+      "sublabel": "Mongo wire · chats · projects · usage",
+      "pos": [
+        1045,
+        590
+      ],
+      "size": [
+        200,
+        72
+      ],
+      "sources": [
+        {
+          "path": "deploy/db.yaml",
+          "line": 99,
+          "end_line": 147
+        },
+        {
+          "path": "deploy/networkpolicy.yaml",
+          "line": 69,
+          "end_line": 82
+        },
+        {
+          "path": "apps/chat-api/src/projects.ts",
+          "line": 63,
+          "end_line": 95,
+          "label": "projects collection"
+        }
+      ]
+    },
+    {
+      "id": "chat_pg",
+      "type": "database",
+      "label": "chat-pg",
+      "sublabel": "postgres-documentdb · PVC 4Gi",
+      "pos": [
+        865,
+        760
+      ],
+      "size": [
+        170,
+        76
+      ],
+      "sources": [
+        {
+          "path": "deploy/db.yaml",
+          "line": 44,
+          "end_line": 96,
+          "label": "StatefulSet + PVC"
+        },
+        {
+          "path": "deploy/networkpolicy.yaml",
+          "line": 84,
+          "end_line": 95
+        }
+      ]
+    },
+    {
+      "id": "curator",
+      "type": "messagebus",
+      "label": "memory-curator",
+      "sublabel": "CronJob 03:00 UTC",
+      "pos": [
+        1060,
+        760
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "deploy/memory-curator.yaml",
+          "line": 5,
+          "end_line": 78
+        },
+        {
+          "path": "deploy/networkpolicy.yaml",
+          "line": 116,
+          "end_line": 134
+        }
+      ]
+    },
+    {
+      "id": "llm_gw",
+      "type": "security",
+      "label": "Envoy llm-gateway",
+      "sublabel": "ClusterIP · key inject · 120 rpm",
+      "pos": [
+        1270,
+        380
+      ],
+      "size": [
+        180,
+        72
+      ],
+      "tag": "egress",
+      "sources": [
+        {
+          "path": "deploy/chat-api.yaml",
+          "line": 73,
+          "label": "LLM_BASE_URL"
+        },
+        {
+          "path": "deploy/networkpolicy.yaml",
+          "line": 44,
+          "end_line": 47,
+          "label": "port 10080"
+        }
+      ]
+    },
+    {
+      "id": "openrouter",
+      "type": "external",
+      "label": "OpenRouter",
+      "sublabel": "DeepSeek · MiniMax H3 · more",
+      "pos": [
+        1550,
+        380
+      ],
+      "size": [
+        170,
+        72
+      ],
+      "sources": [
+        {
+          "path": "deploy/chat-api.yaml",
+          "line": 74,
+          "end_line": 76,
+          "label": "models"
+        }
+      ]
+    },
+    {
+      "id": "remote_mcp",
+      "type": "external",
+      "label": "Remote MCP + Graph",
+      "sublabel": "Context7 · CrawlForge · GitHub · ADO",
+      "pos": [
+        1515,
+        200
+      ],
+      "size": [
+        205,
+        80
+      ],
+      "sources": [
+        {
+          "path": "apps/chat-api/src/connectors.ts",
+          "line": 53,
+          "end_line": 119,
+          "label": "OAuth connectors"
+        },
+        {
+          "path": "apps/chat-api/src/server.ts",
+          "line": 44,
+          "label": "Context7"
+        }
+      ]
+    },
+    {
+      "id": "brave_api",
+      "type": "external",
+      "label": "Brave Search API",
+      "sublabel": "web + news",
+      "pos": [
+        685,
+        940
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "deploy/brave-mcp.yaml",
+          "line": 47,
+          "end_line": 66
+        }
+      ]
+    },
+    {
+      "id": "argo",
+      "type": "cloud",
+      "label": "Argo CD",
+      "sublabel": "app chat-harness · selfHeal",
+      "pos": [
+        240,
+        760
+      ],
+      "size": [
+        160,
+        72
+      ],
+      "tag": "GitOps",
+      "sources": [
+        {
+          "path": "deploy/kustomization.yaml",
+          "line": 1,
+          "end_line": 11
+        }
+      ]
+    },
+    {
+      "id": "gh",
+      "type": "external",
+      "label": "GitHub repo + Actions",
+      "sublabel": "build · Trivy HIGH/CRIT gate",
+      "pos": [
+        30,
+        940
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": ".github/workflows/images.yml",
+          "line": 1,
+          "end_line": 53
+        }
+      ]
+    },
+    {
+      "id": "ghcr",
+      "type": "database",
+      "label": "GHCR",
+      "sublabel": "images tagged by git sha",
+      "pos": [
+        280,
+        940
+      ],
+      "size": [
+        170,
+        72
+      ],
+      "sources": [
+        {
+          "path": ".github/workflows/images.yml",
+          "line": 23,
+          "label": "image tag"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Azure · eastus · rg aks-lab",
+      "wraps": [
+        "lb",
+        "envoy",
+        "certmgr",
+        "argo",
+        "chat_api",
+        "blob",
+        "kv",
+        "eso",
+        "parser",
+        "brave_mcp",
+        "ferret",
+        "chat_pg",
+        "curator",
+        "llm_gw"
+      ],
+      "pad": 26
+    },
+    {
+      "kind": "region",
+      "label": "AKS aks-lab · Azure CNI overlay + Cilium · pods 10.244/16 · svc 10.0/16",
+      "wraps": [
+        "lb",
+        "envoy",
+        "certmgr",
+        "argo",
+        "chat_api",
+        "eso",
+        "parser",
+        "brave_mcp",
+        "ferret",
+        "chat_pg",
+        "curator",
+        "llm_gw"
+      ],
+      "pad": 18
+    },
+    {
+      "kind": "security-group",
+      "label": "namespace chat · default-deny NetworkPolicy · ro rootfs, no subprocess",
+      "wraps": [
+        "chat_api",
+        "parser",
+        "brave_mcp",
+        "ferret",
+        "chat_pg",
+        "curator"
+      ],
+      "pad": 14
+    }
+  ],
+  "connections": [
+    {
+      "from": "user",
+      "to": "lb",
+      "label": "HTTPS :443",
+      "variant": "emphasis"
+    },
+    {
+      "from": "lb",
+      "to": "envoy",
+      "label": "L4 :443",
+      "variant": "emphasis"
+    },
+    {
+      "from": "envoy",
+      "to": "chat_api",
+      "label": "x-user-oid → :8080",
+      "variant": "emphasis"
+    },
+    {
+      "from": "envoy",
+      "to": "entra",
+      "label": "OIDC + JWKS",
+      "variant": "security"
+    },
+    {
+      "from": "certmgr",
+      "to": "envoy",
+      "label": "public-tls",
+      "variant": "dashed"
+    },
+    {
+      "from": "chat_api",
+      "to": "llm_gw",
+      "label": "HTTP :10080 /api/v1",
+      "variant": "emphasis"
+    },
+    {
+      "from": "llm_gw",
+      "to": "openrouter",
+      "label": "HTTPS + key",
+      "variant": "emphasis"
+    },
+    {
+      "from": "chat_api",
+      "to": "blob",
+      "label": "443 · WI · lease",
+      "variant": "security"
+    },
+    {
+      "from": "kv",
+      "to": "eso",
+      "label": "Secrets User",
+      "variant": "security"
+    },
+    {
+      "from": "eso",
+      "to": "chat_api",
+      "label": "secret files",
+      "variant": "dashed"
+    },
+    {
+      "from": "chat_api",
+      "to": "parser",
+      "label": ":8080"
+    },
+    {
+      "from": "chat_api",
+      "to": "brave_mcp",
+      "label": "MCP :8080"
+    },
+    {
+      "from": "chat_api",
+      "to": "ferret",
+      "label": ":27017"
+    },
+    {
+      "from": "ferret",
+      "to": "chat_pg",
+      "label": ":5432"
+    },
+    {
+      "from": "curator",
+      "to": "ferret",
+      "label": ":27017",
+      "variant": "dashed"
+    },
+    {
+      "from": "curator",
+      "to": "llm_gw",
+      "label": ":10080",
+      "variant": "dashed"
+    },
+    {
+      "from": "brave_mcp",
+      "to": "brave_api",
+      "label": "HTTPS 443"
+    },
+    {
+      "from": "chat_api",
+      "to": "remote_mcp",
+      "label": "443 · sealed user token",
+      "variant": "security"
+    },
+    {
+      "from": "gh",
+      "to": "ghcr",
+      "label": "push sha"
+    },
+    {
+      "from": "gh",
+      "to": "argo",
+      "label": "deploy/ on main",
+      "variant": "dashed"
+    },
+    {
+      "from": "argo",
+      "to": "chat_api",
+      "label": "sync",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One turn (AG-UI over SSE)",
+      "items": [
+        "Lease _locks/<oid>/<conv> in Blob (60 s, renewed 20 s); 409 if busy",
+        "Hydrate /tmp (emptyDir 4Gi) → Pi loop: model ⇄ tools ⇄ MCP",
+        "Upload diff, save versioned history, usage row, wipe /tmp",
+        "Curator saves memory after the answer; CronJob catches up nightly"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust boundaries",
+      "items": [
+        "Envoy is the only ingress; it overwrites x-user-oid from the JWT",
+        "File tools confined to the turn workspace; bash is emulated (just-bash)",
+        "Tokens and memory sealed AES-256-GCM with AAD = oid",
+        "llm-gateway injects the OpenRouter key; chat-api never holds it"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Network primitives",
+      "items": [
+        "Egress: AKS LB outbound IP; Blob via Microsoft.Storage service endpoint",
+        "Blob firewall: default Deny, shared keys disabled, TLS 1.2",
+        "NetworkPolicy: 443 out only to public IPs (RFC1918 excluded); DNS to kube-dns",
+        "Host chat.<ip>.sslip.io; route timeout 900 s for long SSE turns"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Prisma runtime rules",
+      "items": [
+        "Read-only rootfs, non-root, seccomp RuntimeDefault, /tmp only",
+        "No subprocess (guarded in code), no runtime downloads",
+        "Scratch/Wolfi images; Trivy blocks HIGH/CRITICAL before GHCR",
+        "Only MIT / Apache-2.0 / BSD dependencies"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Inside chat-api",
+      "items": [
+        "Tools: files, bash, parse, office/PDF writers, canvas, show_ui, plan",
+        "Projects: instructions in the prompt, files mounted read-only; memory: core, episodic, fact graph, skills",
+        "Connectors: OAuth + PKCE (GitHub, Azure DevOps, Microsoft Graph)",
+        "Gate: approvals + loop breaker; cost ledger in BRL"
+      ]
+    }
+  ]
+}
