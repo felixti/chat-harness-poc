@@ -13,7 +13,7 @@ import { retrieve, clearCore, coreEntries, corePrompt, editCore, memoryTools, se
 import { FactGraph, graphTools } from "./graph-memory.ts";
 import { beforeLastUserMessage, entriesToView } from "./conversation-view.ts";
 import { companySkills } from "./skills-catalog.ts";
-import { deletePrefix } from "./workspace.ts";
+import { deletePrefix, objectStore } from "./workspace.ts";
 import { curate } from "./curator.ts";
 import { isSourceTool, planTool, showUiTool, SourceList } from "./ui-tools.ts";
 import { AguiRun, resultText, type ResumeEntry } from "./agui.ts";
@@ -24,11 +24,18 @@ import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } fr
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
 import { addProjectFile, deleteProjectFile, deleteProjectFiles, LIMITS as PROJECT_LIMITS, listProjectFiles, openProjects, PROJECT_ID, projectPrefix, projectPrompt } from "./projects.ts";
+import { copyOutputs, deleteShareFiles, expired, newShareId, openShares, SHARE_DAYS, SHARE_ID, sharePrefix, summaryOf, viewOf, type Share } from "./shares.ts";
 import { listFiles, openTurn, readFileFromStore, userVisible, workspacePath, writeFileToStore } from "./workspace.ts";
 
 const store = await openStore(config.mongoUrl);
 const ledger = await openLedger(config.mongoUrl);
 const projects = await openProjects(config.mongoUrl);
+const shares = await openShares(config.mongoUrl);
+
+/** Deleting a conversation also deletes its share links and their file copies. */
+async function removeShares(user: string, conversation: string) {
+	for (const sid of await shares.removeOfConversation(user, conversation)) await deleteShareFiles(sid);
+}
 const ID = /^[a-zA-Z0-9-]{8,64}$/;
 
 /** Identity: in the cluster the gateway authenticates (Entra OIDC) and forwards the user. */
@@ -314,6 +321,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 		for (const id of new Set(ids as string[])) {
 			await store.remove(user, id);
 			await deletePrefix(user, id);
+			await removeShares(user, id);
 			deleted.push(id);
 		}
 		return json(res, 200, { deleted });
@@ -340,6 +348,10 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 		}
 		return json(res, 405, { error: "method not allowed" });
 	}
+	const sh = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})\/shares$/);
+	if (sh) return conversationSharesRoute(req, res, user, sh[1]);
+	const sv = url.pathname.match(/^\/api\/shares\/([A-Za-z0-9_-]{22})(?:\/files\/(.+))?$/);
+	if (sv) return shareRoute(req, res, user, sv[1], sv[2] && decodeURIComponent(sv[2]));
 	const cv = url.pathname.match(/^\/api\/conversations\/([a-zA-Z0-9-]{8,64})(\/feedback)?$/);
 	if (cv) {
 		const id = cv[1];
@@ -377,6 +389,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 		if (req.method === "DELETE") {
 			await store.remove(user, id);
 			await deletePrefix(user, id);
+			await removeShares(user, id);
 			return json(res, 200, { ok: true });
 		}
 	}
@@ -446,6 +459,59 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	}
 	json(res, 404, { error: "not found" });
 }
+
+/** Share links of one conversation (H72): the owner lists them and creates one. */
+async function conversationSharesRoute(req: IncomingMessage, res: ServerResponse, user: string, id: string) {
+	if (req.method === "GET") return json(res, 200, (await shares.ofConversation(user, id)).map(summaryOf));
+	if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
+	const { canvas: canvasName, days } = JSON.parse((await body(req, 10_000)).toString() || "{}") as { canvas?: string; days?: number };
+	const c = await store.get(user, id);
+	if (!c) return json(res, 404, { error: "conversation not found" });
+	const life = SHARE_DAYS.includes(days as never) ? (days as number) : 30;
+	const sid = newShareId();
+	const now = new Date();
+	const base = { id: sid, user, conversation: id, createdAt: now, expiresAt: new Date(+now + life * 86_400_000) };
+	let share: Share;
+	if (canvasName) {
+		if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(canvasName)) return json(res, 400, { error: "canvas" });
+		const doc = await getCanvas(user, id, canvasName);
+		if (!doc) return json(res, 404, { error: "canvas not found" });
+		share = { ...base, kind: "canvas", title: doc.title, canvas: { name: doc.name, title: doc.title, version: doc.version, html: doc.html, state: doc.state } };
+	} else {
+		const { files, skipped } = await copyOutputs(user, id, sid);
+		share = { ...base, kind: "conversation", title: c.title, messages: entriesToView(c.entries), files, ...(skipped ? { skipped } : {}) };
+	}
+	await shares.put(share);
+	console.log(`[share] created ${share.kind} ${sid} (${life} days)`);
+	return json(res, 201, summaryOf(share));
+}
+
+/** A share link: any signed-in user of the tenant reads it; only the owner revokes it. */
+async function shareRoute(req: IncomingMessage, res: ServerResponse, user: string, sid: string, file?: string) {
+	const s = await shares.get(sid);
+	if (req.method === "DELETE" && !file) {
+		if (!s || s.user !== user) return json(res, 404, { error: "share not found" });
+		await shares.remove(user, sid);
+		await deleteShareFiles(sid);
+		console.log(`[share] revoked ${sid}`);
+		return json(res, 200, { ok: true });
+	}
+	if (req.method !== "GET") return json(res, 405, { error: "method not allowed" });
+	if (!s || expired(s)) return json(res, 404, { error: "link not found, expired or revoked" });
+	if (file) {
+		if (!s.files?.some((f) => f.path === file)) return json(res, 404, { error: "file not in this share" });
+		const data = await objectStore().get(sharePrefix(sid) + file);
+		if (!data) return json(res, 410, { error: "file no longer available" });
+		const name = file.split("/").pop()!.replace(/["\r\n]/g, "_");
+		if (inlineRequested(req)) return res.writeHead(200, { "content-type": TYPES[extname(name).toLowerCase()] ?? "application/octet-stream", "content-disposition": "inline", "x-content-type-options": "nosniff" }).end(data);
+		return res.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": `attachment; filename="${name}"` }).end(data);
+	}
+	// Who opened what, for the audit trail (the viewer is the signed-in user).
+	console.log(`[share] ${sid} viewed by ${s.user === user ? "owner" : user}`);
+	return json(res, 200, { ...viewOf(s), mine: s.user === user });
+}
+
+const inlineRequested = (req: IncomingMessage) => new URL(req.url ?? "/", "http://x").searchParams.get("inline") === "1";
 
 /** Projects (H71): list, create, edit, delete, and their reference files. */
 async function projectRoute(req: IncomingMessage, res: ServerResponse, user: string, id?: string, file?: string) {

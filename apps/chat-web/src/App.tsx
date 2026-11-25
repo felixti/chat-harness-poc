@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChevronRight, Folder, PanelLeft, SquarePen, X } from "lucide-react";
+import { ChevronRight, Folder, PanelLeft, Share2, SquarePen, X } from "lucide-react";
 import { api, chat, fileUrl, HttpError, SessionExpired, type CanvasEvent, type ConversationSummary, type Project, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type Source, type ToolStep } from "./api";
 
 /** Steps held by an open interrupt read as "waiting", not as failed. */
@@ -19,6 +19,7 @@ import { loadModelPref, ModelPicker, type ModelPref } from "./ModelPicker";
 import { fmtBrl, fmtUsd, type Spend } from "./cost";
 import { Logo, LogoMark } from "./Logo";
 import { ProjectView } from "./ProjectView";
+import { ShareDialog, SharedPage } from "./Share";
 
 const STARTERS = [
 	{ title: "Montar uma apresentação", hint: "Deck no padrão da empresa, com gráficos e fontes", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
@@ -34,6 +35,9 @@ export function App() {
 	// Projects (H71): the open project page, or the project of the open conversation.
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [project, setProject] = useState<string>();
+	// Share links (H72): the link being viewed (#s/<id>) and the open "Compartilhar" dialog.
+	const [shared, setShared] = useState<string>();
+	const [sharing, setSharing] = useState<{ canvas?: string; title?: string }>();
 	const [conv, setConv] = useState<string>();
 	const convRef = useRef<string | undefined>(undefined);
 	convRef.current = conv;
@@ -135,6 +139,7 @@ export function App() {
 		const c = location.hash.slice(1) || after?.conv || relogin?.conv;
 		// A new conversation that only had attachments does not exist on the server yet: keep its id.
 		if (c?.startsWith("p/")) openProject(c.slice(2));
+		else if (c?.startsWith("s/")) setShared(c.slice(2));
 		else if (c) void open(c, () => (pendingConv.current = c));
 		if (after?.picker && p.get("status") === "ok") {
 			setDrawer(undefined);
@@ -162,6 +167,7 @@ export function App() {
 			setConv(id);
 			setTitle(d.title);
 			setProject(d.projectId);
+			setShared(undefined);
 			const msgs = d.messages;
 			const lastA = msgs.map((m) => m.role).lastIndexOf("assistant");
 			if (d.interrupts?.length && lastA >= 0 && msgs[lastA].role === "assistant") {
@@ -218,6 +224,7 @@ export function App() {
 	function startNew() {
 		abort.current?.abort();
 		setProject(undefined);
+		setShared(undefined);
 		setCanvas(undefined);
 		setConv(undefined);
 		setTitle("");
@@ -576,6 +583,11 @@ export function App() {
 					)}
 					{title ? <span className="conv-title">{title}</span> : !sideOpen && <Logo />}
 					<span className="spacer" />
+					{conv && !busy && !shared && messages.length > 0 && (
+						<button type="button" className="icon-btn" aria-label="Compartilhar conversa" title="Compartilhar" onClick={() => setSharing({})}>
+							<Share2 size={17} />
+						</button>
+					)}
 					{convCost && convCost.turns > 0 && (
 						<span className="cost-chip" title={`Custo desta conversa: ${fmtBrl(convCost.brl)} (${fmtUsd(convCost.usd)}) em ${convCost.turns} ${convCost.turns === 1 ? "resposta" : "respostas"}. Estimativa pelos preços do provedor.`}>
 							Conversa: {fmtBrl(convCost.brl)}
@@ -598,7 +610,9 @@ export function App() {
 						</div>
 					</div>
 				)}
-				{empty && project && !busy ? (
+				{shared ? (
+					<SharedPage id={shared} onClose={startNew} />
+				) : empty && project && !busy ? (
 					<ProjectView
 						id={project}
 						conversations={list.filter((c) => c.projectId === project)}
@@ -686,8 +700,10 @@ export function App() {
 					onClose={() => setCanvas(undefined)}
 					onSend={sendFromCanvas}
 					notify={notify}
+					onShare={conv ? (name, t) => setSharing({ canvas: name, title: t }) : undefined}
 				/>
 			)}
+			{sharing && conv && <ShareDialog conv={conv} canvas={sharing.canvas} canvasTitle={sharing.title} onClose={() => setSharing(undefined)} notify={notify} />}
 			{!canvas && drawer && <Drawer tab={drawer} setTab={setDrawer} onClose={() => setDrawer(undefined)} conv={conv} files={files} onUse={useFromLibrary} onPreview={openPreview} onCloud={cloud} refreshKey={refreshKey} />}
 			<dialog className="keys" ref={keysDlg} aria-label="Atalhos de teclado">
 				<header>

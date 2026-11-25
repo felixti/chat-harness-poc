@@ -12,6 +12,29 @@ export interface Project {
 	instructions: string;
 	updatedAt: string;
 }
+/** Share link (H72) as the owner sees it. */
+export interface ShareSummary {
+	id: string;
+	kind: "conversation" | "canvas";
+	title: string;
+	canvas?: string;
+	createdAt: string;
+	expiresAt: string;
+	expired: boolean;
+}
+/** What a share link opens: a frozen, read-only copy. */
+export interface ShareView {
+	id: string;
+	kind: "conversation" | "canvas";
+	title: string;
+	createdAt: string;
+	expiresAt: string;
+	messages?: Message[];
+	files?: FileInfo[];
+	canvas?: { name: string; title: string; html: string; state: unknown };
+	skipped?: number;
+	mine: boolean;
+}
 export interface ProjectFile {
 	name: string;
 	size: number;
@@ -206,6 +229,10 @@ export const api = {
 	models: () => req<{ models: ModelChoice[]; default: string; efforts: Effort[]; defaultEffort: Effort }>("api/models"),
 	conversation: (id: string) => req<ConversationDetail>(`api/conversations/${id}`),
 	rename: (id: string, title: string) => req(`api/conversations/${id}`, send("PATCH", { title })),
+	sharesOf: (id: string) => req<ShareSummary[]>(`api/conversations/${id}/shares`),
+	createShare: (id: string, p: { canvas?: string; days: number }) => req<ShareSummary>(`api/conversations/${id}/shares`, send("POST", p)),
+	revokeShare: (sid: string) => req(`api/shares/${sid}`, send("DELETE")),
+	share: (sid: string) => req<ShareView>(`api/shares/${sid}`),
 	move: (id: string, projectId: string | null) => req(`api/conversations/${id}`, send("PATCH", { projectId })),
 	projects: () => req<Project[]>("api/projects"),
 	project: (id: string) => req<ProjectDetail>(`api/projects/${id}`),
@@ -240,6 +267,10 @@ export const api = {
 	importDrive: (conv: string, items: { driveId: string; id: string; name: string }[]) => req<{ paths: string[] }>(`api/conversations/${conv}/import`, send("POST", { items })),
 	disconnect: (id: string) => req(`api/connectors/${id}`, send("DELETE")),
 };
+
+export const shareFileUrl = (sid: string, path: string) => `api/shares/${sid}/files/${encodeURIComponent(path)}`;
+/** Full link to send to a colleague. */
+export const shareLink = (sid: string) => `${location.origin}${location.pathname}#s/${sid}`;
 
 export const fileUrl = (conv: string, path: string, inline = false) =>
 	`api/conversations/${conv}/files/${encodeURIComponent(path)}${inline ? "?inline=1" : ""}`;

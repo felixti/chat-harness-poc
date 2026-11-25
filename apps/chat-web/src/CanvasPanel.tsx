@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Code2, Download, Eye, Maximize2, Minimize2, RotateCw, X } from "lucide-react";
+import { Code2, Download, Eye, Maximize2, Minimize2, RotateCw, Share2, X } from "lucide-react";
 import { api, type CanvasDoc, type CanvasEvent } from "./api";
 import { buildCanvasPage } from "./canvasPage";
 import { copyText } from "./Markdown";
@@ -14,7 +14,7 @@ export interface CanvasTarget {
 
 
 /** Side panel that runs a canvas (H52): preview / code, versions, download, persistent state. */
-export function CanvasPanel({ conv, target, onClose, onSend, notify }: { conv?: string; target: CanvasTarget; onClose: () => void; onSend: (text: string) => void; notify: (t: string) => void }) {
+export function CanvasPanel({ conv, target, onClose, onSend, notify, onShare }: { conv?: string; target: CanvasTarget; onClose: () => void; onSend: (text: string) => void; notify: (t: string) => void; onShare?: (name: string, title: string) => void }) {
 	const [doc, setDoc] = useState<CanvasDoc>();
 	const [tab, setTab] = useState<"preview" | "code">("preview");
 	const [page, setPage] = useState<{ token: string; html: string }>();
@@ -121,6 +121,11 @@ export function CanvasPanel({ conv, target, onClose, onSend, notify }: { conv?: 
 				<button type="button" className="icon-btn small" aria-label="Recarregar" title="Recarregar" onClick={() => setReload((n) => n + 1)}>
 					<RotateCw size={15} />
 				</button>
+				{onShare && doc && !target.live && (
+					<button type="button" className="icon-btn small" aria-label="Compartilhar canvas" title="Compartilhar" onClick={() => onShare(doc.name, doc.title)}>
+						<Share2 size={15} />
+					</button>
+				)}
 				<button type="button" className="icon-btn small" aria-label="Baixar HTML" title="Baixar HTML (funciona offline)" onClick={() => void download()}>
 					<Download size={15} />
 				</button>
