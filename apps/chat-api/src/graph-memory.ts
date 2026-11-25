@@ -229,6 +229,7 @@ async function materialize(user: string, dir: string): Promise<{ g: Engine; end:
 		return undefined;
 	});
 	let base = ptr?.p;
+	let g: Engine | undefined;
 	if (base) {
 		try {
 			for (const f of base.files) {
@@ -238,6 +239,10 @@ async function materialize(user: string, dir: string): Promise<{ g: Engine; end:
 				await mkdir(dirname(target), { recursive: true });
 				await writeFile(target, Buffer.from(unseal<{ b64: string }>(sealed.toString(), `${user}/graph/${f}`, graphKey()).b64, "base64"));
 			}
+			// Opening is part of the snapshot: files that unseal but that Relate cannot open (a stale
+			// manifest, a format from another Relate version) are as broken as missing ones. The
+			// .cypherlite.lock files are format markers Relate needs to open, not runtime locks.
+			g = new Engine(dir);
 		} catch (e) {
 			console.warn(`[graph] snapshot ${base.version}: ${(e as Error).message}; rebuilding from events`);
 			base = undefined;
@@ -245,7 +250,7 @@ async function materialize(user: string, dir: string): Promise<{ g: Engine; end:
 			await mkdir(dir, { recursive: true });
 		}
 	}
-	const g = new Engine(dir);
+	g ??= new Engine(dir);
 	const { events, end } = await eventsAfter(user, base?.pos ?? {});
 	for (const ev of events) apply(g, ev);
 	return { g, end, pending: events.length, base };

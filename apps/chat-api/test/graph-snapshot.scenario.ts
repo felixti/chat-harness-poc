@@ -11,6 +11,7 @@ export interface Store {
 	keys(prefix: string): Promise<string[]>;
 	read(key: string): Promise<Buffer>;
 	corrupt(key: string): Promise<void>;
+	write(key: string, data: Buffer): Promise<void>;
 }
 
 export async function snapshotPlan(s: Store) {
@@ -40,6 +41,8 @@ export async function snapshotPlan(s: Store) {
 	assert.ok(await ptr(), "pointer written at 50");
 	const [v1] = await versions();
 	assert.ok(v1, "snapshot version stored");
+	// The seal binds the file path, not the version: keep v1's manifest to replay it later.
+	const oldManifest = await s.read(`${V}/graph/${v1}/manifest.json`);
 	// 3. Sealed at rest: no snapshot file holds readable fact text.
 	for (const k of await snapKeys()) assert.doesNotMatch((await s.read(k)).toString(), /Plano Anual|Tema \d/);
 	// 4. Next turn opens from the snapshot: one new fact is not enough to compact again.
@@ -60,6 +63,13 @@ export async function snapshotPlan(s: Store) {
 	assert.equal((await versions()).length, 1);
 	assert.notEqual((await versions())[0], v2, "old version deleted");
 	assert.equal(await count("s8"), 52);
-	// 8. Nothing is left in the pod's /tmp after the turns.
+	// 8. A snapshot that unseals but that Relate cannot open (stale manifest, or a format from
+	//    another Relate version) also falls back to the events, and that turn heals it.
+	const [v3] = await versions();
+	await s.write(`${V}/graph/${v3}/manifest.json`, oldManifest);
+	assert.equal(await count("s9"), 52);
+	assert.notEqual((await versions())[0], v3, "unopenable version replaced");
+	assert.equal(await count("s10"), 52);
+	// 9. Nothing is left in the pod's /tmp after the turns.
 	assert.deepEqual(await readdir(join(process.env.TMP_ROOT!, "graph")).catch(() => []), []);
 }

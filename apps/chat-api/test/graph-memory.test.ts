@@ -111,5 +111,6 @@ test("snapshot plan (in-memory store)", async () => {
 		keys: async (prefix) => [...logStore.files.keys()].filter((k) => k.startsWith(prefix)),
 		read: async (k) => logStore.files.get(k)!,
 		corrupt: async (k) => void logStore.files.set(k, Buffer.from("garbage")),
+		write: async (k, d) => void logStore.files.set(k, d),
 	});
 });

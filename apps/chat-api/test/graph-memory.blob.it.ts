@@ -36,5 +36,6 @@ test("snapshot plan on the real Blob container", { skip: !c && "set MEMORY_IT_BL
 		keys,
 		read: async (k) => c!.getBlockBlobClient(k).downloadToBuffer(),
 		corrupt: async (k) => void (await c!.getBlockBlobClient(k).uploadData(Buffer.from("garbage"))),
+		write: async (k, d) => void (await c!.getBlockBlobClient(k).uploadData(d)),
 	});
 });
