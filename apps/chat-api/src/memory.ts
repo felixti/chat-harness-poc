@@ -27,7 +27,7 @@ export interface DocStore {
 	delete(name: string): Promise<void>;
 }
 
-class BlobDocStore implements DocStore {
+export class BlobDocStore implements DocStore {
 	private readonly c: ContainerClient;
 	constructor(c: ContainerClient) {
 		this.c = c;

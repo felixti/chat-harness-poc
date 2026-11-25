@@ -98,7 +98,7 @@ interface LogStore {
 	lease(name: string): Promise<{ release(): Promise<void> } | undefined>;
 }
 
-class BlobLog implements LogStore {
+export class BlobLog implements LogStore {
 	private readonly c: ContainerClient;
 	constructor(c: ContainerClient) {
 		this.c = c;
