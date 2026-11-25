@@ -2,10 +2,10 @@
 import "../src/no-subprocess.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, symlink, stat, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { guardedFileTools } from "../src/fs-guard.ts";
+import { guardedFileTools, keepToolOutput } from "../src/fs-guard.ts";
 
 const root = await mkdtemp(join(tmpdir(), "guard-"));
 const me = join(root, "ws", "user-a", "conv-1");
@@ -46,4 +46,18 @@ test("ls cannot list another user's workspace", async () => {
 	assert.match(await run("ls", { path: "." }), /mine\.txt/);
 	assert.match(await run("ls", { path: join(root, "ws") }), /ERR/);
 	assert.match(await run("ls", { path: other }), /ERR/);
+});
+
+test("a truncated MCP output Pi saved in /tmp is readable at that path, from the workspace copy", async () => {
+	const saved = join(tmpdir(), "pi-mcp-0123456789abcdef.txt");
+	await writeFile(saved, "line 1\nline 2\nthe end");
+	keepToolOutput(me, saved);
+	assert.match(await run("read", { path: saved, offset: 2 }), /line 2[\s\S]*the end/);
+	assert.match(await run("read", { path: "work/tool-output/pi-mcp-0123456789abcdef.txt" }), /line 1/);
+	await assert.rejects(stat(saved));
+	const otherSaved = join(tmpdir(), "pi-mcp-feedfacefeedface.txt");
+	await writeFile(otherSaved, "not moved");
+	assert.match(await run("read", { path: otherSaved }), /ERR/);
+	assert.match(await run("read", { path: join(tmpdir(), "other.txt") }), /ERR access denied/);
+	await rm(otherSaved);
 });

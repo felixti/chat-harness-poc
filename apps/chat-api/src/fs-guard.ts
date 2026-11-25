@@ -2,8 +2,9 @@
 // "../", so in a shared multi-user pod they could reach another user's workspace, /proc/self/environ
 // (secrets) or the agent dir. We rebuild them with operations that resolve the real path (symlinks
 // included) and allow only: the turn's workspace (read-write) and the skills folder (read-only).
-import { access, constants, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
-import { dirname, basename, join, relative, isAbsolute } from "node:path";
+import { access, constants, copyFile, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, basename, join, relative, isAbsolute, resolve } from "node:path";
 import {
 	createEditToolDefinition,
 	createLsToolDefinition,
@@ -28,10 +29,40 @@ async function real(p: string): Promise<string> {
 	}
 }
 
+// Pi saves the full text of a truncated MCP result to <tmpdir>/pi-mcp-<hex>.txt and tells the model
+// to read it there, outside the workspace. keepToolOutput moves it into work/tool-output/ when the
+// tool ends (kept with the conversation like any work file), and a read of the /tmp path is served
+// from that copy, in this turn and later ones.
+const TOOL_OUTPUT = /^pi-mcp-[0-9a-f]{8,64}\.txt$/;
+const moving = new Map<string, Promise<void>>();
+const toolOutputCopy = (workspace: string, p: string) => {
+	const abs = resolve(p);
+	return dirname(abs) === resolve(tmpdir()) && TOOL_OUTPUT.test(basename(abs)) ? { abs, copy: join(workspace, "work", "tool-output", basename(abs)) } : undefined;
+};
+
+/** Moves a truncated tool output Pi saved in the temp folder into the workspace. */
+export function keepToolOutput(workspace: string, path: unknown): void {
+	const t = typeof path === "string" ? toolOutputCopy(workspace, path) : undefined;
+	if (!t || moving.has(t.abs)) return;
+	const done = (async () => {
+		await mkdir(dirname(t.copy), { recursive: true });
+		await copyFile(t.abs, t.copy);
+		await rm(t.abs, { force: true });
+	})()
+		.catch((e) => console.warn(`[tool-output] ${(e as Error).message}`))
+		.finally(() => setTimeout(() => moving.delete(t.abs), 60_000).unref());
+	moving.set(t.abs, done);
+}
+
 export function fsGuard(workspace: string, readOnlyRoots: string[]) {
 	const roots = Promise.all([real(workspace), ...readOnlyRoots.map(real)]);
 	const check = async (p: string, write: boolean): Promise<string> => {
 		const [ws, ...ro] = await roots;
+		const out = write ? undefined : toolOutputCopy(workspace, p);
+		if (out) {
+			await moving.get(out.abs);
+			p = out.copy;
+		}
 		const r = await real(p);
 		if (within(ws, r)) return r;
 		if (!write && ro.some((root) => within(root, r))) return r;

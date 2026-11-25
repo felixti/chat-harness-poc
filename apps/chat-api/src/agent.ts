@@ -15,7 +15,7 @@ import {
 import { config } from "./config.ts";
 import { bashTool, generatePdfTool, parseDocumentTool } from "./tools.ts";
 import { officeTools } from "./office/tools.ts";
-import { guardedFileTools } from "./fs-guard.ts";
+import { guardedFileTools, keepToolOutput } from "./fs-guard.ts";
 import { foreignToolCallsAsText, withUnquotedArgs } from "./crossmodel.ts";
 import { emptyUsage, gatewayPrices, type TurnUsage } from "./usage.ts";
 
@@ -284,6 +284,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		} else if (event.type === "tool_execution_start") {
 			input.onEvent({ type: "tool", id: event.toolCallId, name: event.toolName, args: event.args });
 		} else if (event.type === "tool_execution_end") {
+			keepToolOutput(cwd, (event.result as { details?: { fullOutputPath?: unknown } } | undefined)?.details?.fullOutputPath);
 			input.gate?.noteResult?.(event.toolName, event.isError);
 			input.onEvent({ type: "tool_end", id: event.toolCallId, name: event.toolName, isError: event.isError, result: event.result });
 		}
