@@ -97,6 +97,9 @@ test("pages the model read come before search hits; components may arrive as a J
 	const shown: unknown[] = [];
 	await exec(showUiTool((s) => shown.push(s)), { surface_id: "x", components: JSON.stringify([{ id: "root", component: "Text", text: "oi" }]) });
 	assert.equal(shown.length, 1);
+	await exec(showUiTool((s) => shown.push(s)), { surface_id: "y", components: JSON.stringify(form), data: JSON.stringify({ form: { name: "" } }) });
+	const dm = (shown[1] as { messages: { updateDataModel?: { value?: unknown } }[] }).messages[2].updateDataModel;
+	assert.deepEqual(dm?.value, { form: { name: "" } });
 });
 
 test("what the A2UI renderer rejects goes back to the model; common enum spellings are fixed", async () => {

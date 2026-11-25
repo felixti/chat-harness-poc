@@ -167,17 +167,18 @@ export function showUiTool(onSurface?: (s: { surfaceId: string; title?: string; 
 		async execute(_id, p) {
 			const surfaceId = String(p.surface_id ?? "");
 			if (!SURFACE_ID.test(surfaceId)) throw new Error("surface_id must be a lowercase slug (a-z, 0-9, -)");
-			// Some models send the list as a JSON string.
-			let raw = p.components as unknown;
-			if (typeof raw === "string") {
+			// Some models send the list and the data model as JSON strings.
+			const parsed = (v: unknown) => {
+				if (typeof v !== "string") return v;
 				try {
-					raw = JSON.parse(raw);
+					return JSON.parse(v) as unknown;
 				} catch {
-					/* reported below */
+					return v; // reported below
 				}
-			}
+			};
+			const raw = parsed(p.components);
 			const components = Array.isArray(raw) ? normalizeIds(raw as Component[]) : (raw as Component[]);
-			const data = p.data as Record<string, unknown> | undefined;
+			const data = parsed(p.data) as Record<string, unknown> | undefined;
 			const errs = checkSurface(components, data);
 			if (errs.length) throw new Error(`The surface was not shown. Fix and call show_ui again with the whole surface:\n- ${errs.join("\n- ")}`);
 			const messages = surfaceMessages(surfaceId, components, data);
