@@ -41,7 +41,18 @@ export function EChart({ source, final }: { source: string; final: boolean }) {
 			if (gone || !el.current) return;
 			const cs = getComputedStyle(document.documentElement);
 			const v = (n: string) => cs.getPropertyValue(n).trim();
-			const axis = { axisLine: { lineStyle: { color: v("--line") } }, axisLabel: { color: v("--fg-3") }, splitLine: { lineStyle: { color: v("--line") } } };
+			// Numbers in pt-BR: compact on value axes ("7 mi"), full in tooltips. Functions come from here, not from the block.
+			const compact = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
+			const full = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
+			const axisOf = (o: unknown) => {
+				const list = Array.isArray(o) ? o : [o];
+				const out = list.map((a) => {
+					const ax = (a ?? {}) as { type?: string; axisLabel?: object };
+					const value = !ax.type || ax.type === "value" || ax.type === "log";
+					return { axisLine: { lineStyle: { color: v("--line") } }, splitLine: { lineStyle: { color: v("--line") } }, ...ax, axisLabel: { ...(ax.axisLabel ?? {}), color: v("--fg-3"), ...(value ? { formatter: (n: number) => compact.format(n) } : {}) } };
+				});
+				return Array.isArray(o) ? out : out[0];
+			};
 			const c = echarts.init(el.current, undefined, { renderer: "canvas" });
 			c.setOption({
 				color: PALETTE[theme === "dark" ? "dark" : "light"],
@@ -51,9 +62,9 @@ export function EChart({ source, final }: { source: string; final: boolean }) {
 				...option,
 				title: option.title ? { ...(option.title as object), textStyle: { color: v("--fg"), fontSize: 14, fontWeight: 600 } } : undefined,
 				legend: option.legend ? { ...(option.legend as object), textStyle: { color: v("--fg-2") } } : undefined,
-				tooltip: { ...((option.tooltip as object) ?? {}), renderMode: "richText", backgroundColor: v("--bg-raised"), borderColor: v("--line"), textStyle: { color: v("--fg") } },
-				xAxis: option.xAxis ? { ...axis, ...(option.xAxis as object) } : undefined,
-				yAxis: option.yAxis ? { ...axis, ...(option.yAxis as object) } : undefined,
+				tooltip: { ...((option.tooltip as object) ?? {}), renderMode: "richText", valueFormatter: (n: unknown) => (typeof n === "number" ? full.format(n) : String(n ?? "")), backgroundColor: v("--bg-raised"), borderColor: v("--line"), textStyle: { color: v("--fg") } },
+				xAxis: option.xAxis ? axisOf(option.xAxis) : undefined,
+				yAxis: option.yAxis ? axisOf(option.yAxis) : undefined,
 			});
 			chart.current = c as never;
 			ro = new ResizeObserver(() => c.resize());

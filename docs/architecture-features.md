@@ -437,6 +437,22 @@ Claude Projects or Gemini Gems.
  audit: "[share] <id> viewed by <oid>" in the chat-api log
 ```
 
+### 3.15 Data analysis with SQL (H70)
+
+```
+ model ──analyze_data {sql?, save_as?, chart?}──► data.ts
+   1. fresh DuckDB :memory: (threads 2, memory 512 MB, temp in /tmp/chat/duckdb/<uuid>)
+   2. views: uploads/ outputs/ project/ work/  csv tsv parquet json jsonl → read_*()
+             xlsx/xlsm sheets (≤ 5) → exceljs → CSV in the scratch folder → view
+   3. lock: allowed_directories = [workspace, scratch] · enable_external_access = false
+            autoinstall/autoload off · lock_configuration = true
+   4. run the statement (interrupt at 60 s), read ≤ 1000 rows, show 50 as a markdown table
+   5. save_as → COPY (sql) TO outputs/|work/ (csv | parquet | json)
+   6. chart  → ECharts option in an ```echarts block the model pastes into its reply
+   7. close, delete the scratch folder
+ portal: ```echarts → EChart.tsx (sanitized option, theme colors, pt-BR numbers, PNG download)
+```
+
 ## 4. Non-functional architecture
 
 ### 4.1 Security
