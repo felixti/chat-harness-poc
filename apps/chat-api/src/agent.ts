@@ -16,7 +16,7 @@ import { config } from "./config.ts";
 import { bashTool, generatePdfTool, parseDocumentTool } from "./tools.ts";
 import { officeTools } from "./office/tools.ts";
 import { guardedFileTools } from "./fs-guard.ts";
-import { foreignToolCallsAsText } from "./crossmodel.ts";
+import { foreignToolCallsAsText, withUnquotedArgs } from "./crossmodel.ts";
 import { emptyUsage, gatewayPrices, type TurnUsage } from "./usage.ts";
 
 const agentDir = join(config.tmpRoot, "agent");
@@ -256,7 +256,7 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		// The built-in bash is replaced by our just-bash tool of the same name (custom tools win), and
 		// read/write/edit/ls by confined copies (workspace read-write, skills read-only; see fs-guard.ts).
 		excludeTools: ["grep", "find", "powershell"],
-		customTools: [...guardedFileTools(cwd, [config.skillsDir, ...(input.userSkillsDir ? [input.userSkillsDir] : [])]), bashTool(cwd), generatePdfTool(cwd), parseDocumentTool(cwd), ...officeTools(cwd), ...(input.extraTools ?? [])],
+		customTools: [...guardedFileTools(cwd, [config.skillsDir, ...(input.userSkillsDir ? [input.userSkillsDir] : [])]), bashTool(cwd), generatePdfTool(cwd), parseDocumentTool(cwd), ...officeTools(cwd), ...(input.extraTools ?? [])].map(withUnquotedArgs),
 	});
 
 	const unsubscribe = session.subscribe((event) => {

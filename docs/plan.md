@@ -64,3 +64,4 @@ current ~R$1.50/h cluster cost.
 | 2026-11-24 | 2 | A2UI surfaces in the chat (H61) and reasoning / plan / sources (H62); OpenRouter key renewed (expires 2026-12-24). 90 API tests. |
 | 2026-11-24 | 2 | chat-api runtime moved to Wolfi packages in scratch (H63): Debian 13 libssl3t64 HIGH CVEs without a fix blocked CI. |
 | 2026-11-24 | 2 | A2UI fix (H61): first real form failed ("space-between"); server now validates with the A2UI renderer and normalizes enum spellings; "Pedir correção" on render errors. |
+| 2026-11-25 | 2 | Tool arguments quoted twice by the model are unwrapped for all tools (H64); canvas "Cadastro de compras" failed 5 times. 92 API tests. |

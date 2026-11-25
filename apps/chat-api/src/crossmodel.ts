@@ -46,3 +46,30 @@ export function foreignToolCallsAsText<T>(messages: T[], model: string): T[] {
 	});
 	return changed ? (out as unknown as T[]) : messages;
 }
+
+// Some models (seen with DeepSeek V4.1 Flash) send string arguments JSON-encoded a second time:
+// name "\"cadastro-compras\"" instead of "cadastro-compras". Slug checks then fail and the model
+// retries the same mistake. A string that is itself a complete JSON string literal is unwrapped
+// before any tool runs; nested objects and arrays are walked.
+export function unquoteArgs<T>(v: T, depth = 0): T {
+	if (typeof v === "string") {
+		if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) {
+			try {
+				const inner = JSON.parse(v);
+				if (typeof inner === "string") return inner as T;
+			} catch {
+				/* not a JSON literal: keep it */
+			}
+		}
+		return v;
+	}
+	if (depth > 4 || !v || typeof v !== "object") return v;
+	if (Array.isArray(v)) return v.map((x) => unquoteArgs(x, depth + 1)) as T;
+	return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, unquoteArgs(x, depth + 1)])) as T;
+}
+
+/** Wraps a tool so its arguments pass through unquoteArgs. */
+export function withUnquotedArgs<T extends { execute: (...a: never[]) => unknown }>(tool: T): T {
+	const run = tool.execute as (id: string, p: unknown, ...rest: unknown[]) => unknown;
+	return { ...tool, execute: ((id: string, p: unknown, ...rest: unknown[]) => run.call(tool, id, unquoteArgs(p), ...rest)) as T["execute"] };
+}

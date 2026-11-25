@@ -24,3 +24,14 @@ test("same model throughout: messages untouched", () => {
 	const same = history.map((m) => ("model" in m ? { ...m, model: "deepseek/x" } : m));
 	assert.equal(foreignToolCallsAsText(same, "deepseek/x"), same);
 });
+
+test("double-encoded string arguments are unwrapped before a tool runs", async () => {
+	const { unquoteArgs, withUnquotedArgs } = await import("../src/crossmodel.ts");
+	assert.deepEqual(unquoteArgs({ name: '"cadastro-compras"', html: '"<div class=\\"card\\">x</div>"', edits: [{ old: '"a"', new: "b" }], n: 3 }), { name: "cadastro-compras", html: '<div class="card">x</div>', edits: [{ old: "a", new: "b" }], n: 3 });
+	assert.equal(unquoteArgs('"a" and "b"'), '"a" and "b"');
+	assert.equal(unquoteArgs('echo "hi"'), 'echo "hi"');
+	let got: unknown;
+	const t = withUnquotedArgs({ name: "x", execute: async (_id: string, p: unknown) => (got = p) });
+	await t.execute("1", { name: '"x"' });
+	assert.deepEqual(got, { name: "x" });
+});
