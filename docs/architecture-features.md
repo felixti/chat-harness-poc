@@ -357,6 +357,8 @@ believed is kept.
 
 ### 3.11 Interactive surfaces in the chat: A2UI (H61)
 
+**show_ui or canvas (H65).** Decided by where the result goes. A form filled in once and sent back to the model (a request, a booking, filters, a confirmation) is `show_ui`. A tool the user keeps using, with state on screen (to-do list, calculator, simulator), is `canvas`.
+
 ```
  model ── show_ui {surface_id, title, components[], data} ──► chat-api
                        │ normalize ids (A2UI needs UAX #31: "btn-text" → "btn_text")

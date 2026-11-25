@@ -1,12 +1,17 @@
 ---
 name: canvas
-description: Build live interactive pages in the chat's side panel with the canvas tool - calculators, simulators, what-if models, interactive charts, checklists the user ticks, timelines, step-by-step guides, decision trees, multi-step forms, small tools. Use when the user asks for something to play with, fill in, tick or explore on screen, or says canvas, widget, simulador, calculadora, checklist interativo, linha do tempo.
+description: Build live interactive pages in the chat's side panel with the canvas tool - small tools the user keeps using, with their state saved in the page - calculators, simulators, what-if models, interactive charts, to-do and shopping lists, checklists the user ticks over time, timelines, step-by-step guides, decision trees. Use when the user asks for something to play with, keep, tick or explore on screen, or says canvas, widget, simulador, calculadora, lista de tarefas, checklist interativo, linha do tempo. Not for a form filled in once and sent back to the assistant (request, booking, filters, confirmation) - that is the show_ui tool.
 ---
 
 # Canvas
 
 A canvas is one HTML fragment the portal runs in a sandboxed panel next to the chat. The user sees
-it update live and can switch between versions. Use it for things people **interact with**. Use
+it update live and can switch between versions. Use it for things people **interact with**.
+
+**Canvas or show_ui?** Ask where the result goes. It stays on screen for the user to keep using
+(a list that grows, a calculator, a checklist ticked over days): canvas. It goes back to you once so
+you can act on it (a vacation request, a booking, search filters, an order to confirm): `show_ui`, a
+form inside the chat. A request with the word "formulário" is not enough to decide. Use
 the `dashboard` skill for dashboards built from Excel/CSV files, and the document skills for files
 to download.
 

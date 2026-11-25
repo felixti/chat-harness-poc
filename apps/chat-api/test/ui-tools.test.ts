@@ -107,3 +107,14 @@ test("what the A2UI renderer rejects goes back to the model; common enum spellin
 	await assert.rejects(exec(t, { surface_id: "y", components: [{ id: "root", component: "Text", text: "oi", foo: 1 }] }), /renderer rejected it[\s\S]*foo/);
 	await assert.rejects(exec(t, { surface_id: "z", components: [{ id: "root", component: "Slider", label: "x", value: { "@path": "/v" } }] }), /renderer rejected it/);
 });
+
+test("show_ui and canvas point at each other with the same rule: sent back once vs kept on screen", async () => {
+	const { canvasTool } = await import("../src/canvas.ts");
+	const ui = showUiTool(() => {}).description;
+	const cv = canvasTool("/tmp", () => {}).description;
+	assert.match(ui, /filled in once/);
+	assert.match(ui, /canvas instead[\s\S]*shopping lists/);
+	assert.match(cv, /keeps\s+using/);
+	assert.match(cv, /use show_ui for that/);
+	assert.doesNotMatch(cv, /\bforms\b/);
+});

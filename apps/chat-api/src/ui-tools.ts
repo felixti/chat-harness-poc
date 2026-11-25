@@ -119,7 +119,7 @@ export function surfaceMessages(surfaceId: string, components: Component[], data
 }
 
 const SHOW_UI_DESCRIPTION = `Show a small interactive surface inside the chat, built from A2UI 1.0 basic-catalog components: a form the user fills in, option cards to compare, a checklist, a confirmation with the values to review. The portal renders it in its own style; you only send data, never code or HTML.
-Use it when the user must enter or choose several structured values (a request form, a booking, filters, an order to confirm). Use ask_user for 1-3 quick questions, and canvas for big pages, simulators and charts.
+Use it for a form filled in once whose values come back to you so you can act on them: the user asks for a form, or you need several structured values (a request form, a booking, filters, an order to confirm). Use ask_user for 1-3 quick questions. Use canvas instead when the user wants a tool they keep using, with state that stays on screen: to-do and shopping lists, checklists ticked over time, calculators, simulators, charts.
 
 Format: a flat list of components; each has a unique "id" and "component" (type). One has id "root". Containers point at children by id.
 - Text {text, variant?: "body"|"caption"} (text supports markdown: "## Title", **bold**)

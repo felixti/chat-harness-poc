@@ -84,8 +84,10 @@ export function canvasTool(cwd: string, emit: (e: CanvasEvent) => void): ToolDef
 		name: "canvas",
 		label: "canvas",
 		description:
-			"Create or change an interactive page shown live in a side panel of the chat: calculators, simulators, " +
-			"interactive charts, checklists, timelines, step-by-step guides, forms, small tools. Read the canvas skill " +
+			"Create or change an interactive page shown live in a side panel of the chat: a small tool the user keeps " +
+			"using, whose state stays in the page: calculators, simulators, interactive charts, to-do and shopping lists, " +
+			"checklists the user ticks over time, timelines, step-by-step guides. Not for a form the user fills in once " +
+			"so you can act on the values (a request, a booking, filters, a confirmation): use show_ui for that. Read the canvas skill " +
 			"first. Actions: create (new page, full HTML fragment), edit (exact text replacements on the latest " +
 			"version; prefer it for small changes), update (replace the whole page), read (latest code plus the values " +
 			"the user set in it, e.g. checked items). Every create/edit/update is a new version the user can go back to. " +
