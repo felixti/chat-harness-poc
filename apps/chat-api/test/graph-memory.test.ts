@@ -103,3 +103,56 @@ test("automatic retrieval: facts about entities the message names (whole words, 
 	assert.match(p, /not instructions/);
 	await g2.dispose();
 });
+
+test("snapshot plan: none below 50 events, saved at 50, loaded next turn, old version dropped, sealed, lease-guarded", async () => {
+	const V = "user-graph-0002";
+	const T = (name: string) => ({ name, kind: "topic" as const });
+	const snapKeys = () => [...logStore.files.keys()].filter((k) => k.startsWith(`${V}/graph/`));
+	const versions = () => [...new Set(snapKeys().map((k) => k.split("/")[2]))];
+	const ptr = async () => docStore().get(`${V}/graph/current.json`);
+	const add = async (from: number, n: number, conv: string) => {
+		const g = new FactGraph(V, conv);
+		for (let i = from; i < from + n; i++) await g.remember(T(`Tema ${i}`), "relacionado a", T("Plano Anual"));
+		await g.dispose();
+	};
+	// 1. 49 events across turns: no snapshot, the graph lives only in the turn's /tmp copy.
+	await add(0, 30, "s1");
+	await add(30, 19, "s2");
+	assert.equal(await ptr(), undefined, "no pointer below 50 events");
+	assert.deepEqual(snapKeys(), []);
+	// 2. The 50th event (the turn sees 49 pending + 1 new) writes the first snapshot.
+	await add(49, 1, "s3");
+	assert.ok(await ptr(), "pointer written at 50");
+	const [v1] = versions();
+	assert.ok(v1, "snapshot version stored");
+	// 3. Sealed at rest: no snapshot file holds readable fact text.
+	for (const k of snapKeys()) assert.doesNotMatch(logStore.files.get(k)!.toString(), /Plano Anual|Tema \d/);
+	// 4. Next turn opens from the snapshot: one new fact is not enough to compact again.
+	await add(50, 1, "s4");
+	assert.deepEqual(versions(), [v1], "1 pending event: snapshot kept");
+	const g = new FactGraph(V, "s5");
+	assert.equal((await g.recall("Plano Anual", undefined, 100)).facts.length, 51);
+	await g.dispose();
+	// 5. A corrupt snapshot falls back to the events, and that turn heals it: a fresh version
+	//    replaces the broken one.
+	logStore.files.set(snapKeys()[0], Buffer.from("garbage"));
+	const c = new FactGraph(V, "s6");
+	assert.equal((await c.recall("Plano Anual", undefined, 100)).facts.length, 51);
+	await c.dispose();
+	const [v2] = versions();
+	assert.equal(versions().length, 1, "only the new version is kept");
+	assert.notEqual(v2, v1, "broken version replaced");
+	// 6. Two pods compacting at once: the lease lets one through.
+	await add(51, 1, "s7");
+	const runs = await Promise.all([compact(V), compact(V)]);
+	assert.deepEqual(runs.filter(Boolean).length, 1, "exactly one compactor wins");
+	// 7. The new snapshot replaces the old one.
+	assert.equal(versions().length, 1);
+	assert.notEqual(versions()[0], v2, "old version deleted");
+	const d = new FactGraph(V, "s8");
+	assert.equal((await d.recall("Plano Anual", undefined, 100)).facts.length, 52);
+	await d.dispose();
+	// 8. Nothing is left in the pod's /tmp after the turns.
+	const { readdir } = await import("node:fs/promises");
+	assert.deepEqual(await readdir(join(process.env.TMP_ROOT!, "graph")).catch(() => []), []);
+});

@@ -67,3 +67,4 @@ current ~R$1.50/h cluster cost.
 | 2026-11-25 | 2 | Tool arguments quoted twice by the model are unwrapped for all tools (H64); canvas "Cadastro de compras" failed 5 times. 92 API tests. |
 | 2026-11-25 | 2 | show_ui vs canvas rule (H65): sent back once → A2UI form; kept on screen → canvas. Same rule in the prompt, both tool descriptions and the canvas skill. show_ui also accepts `data` as a JSON string. 93 API tests. |
 | 2026-11-25 | 2 | Truncated MCP outputs (>20 KB) moved from /tmp into work/tool-output/ and readable at the path Pi gives (H66). 94 API tests. |
+| 2026-11-25 | 2 | Graph memory snapshot plan pinned by a test: no snapshot below 50 events, written at 50, loaded next turn, sealed, corrupt snapshot rebuilt from events and replaced, one compactor per user (lease), old version deleted, /tmp left empty. 95 API tests. |
