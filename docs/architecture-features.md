@@ -417,6 +417,26 @@ Claude Projects or Gemini Gems.
 - Memory stays per user (core, episodic, graph); a project-only memory scope is not built yet.
 - Ownership: every query filters by the user's oid, as for conversations.
 
+### 3.14 Share links (H72)
+
+```
+ owner: topbar "Compartilhar" (conversation) or canvas panel "Compartilhar" (one canvas)
+   │ POST /api/conversations/<id>/shares {days: 7|30|90, canvas?}
+   ▼
+ chat-api: id = 128 random bits (base64url)
+   ├ conversation → entriesToView(entries) frozen in FerretDB `shares`
+   │                outputs/* copied to Blob _shares/<id>/ (≤ 20 files, 50 MB); uploads/ never
+   └ canvas       → latest version html + state frozen in `shares`
+ viewer (any tenant user, signed in at Envoy): portal #s/<id>
+   │ GET /api/shares/<id>          → copy without owner oid or conversation id; 404 when expired/revoked
+   │ GET /api/shares/<id>/files/…  → only files listed in the share
+   ▼
+ read-only page: messages without composer or feedback; canvas in the CSP sandbox, state not saved
+ owner: GET /api/conversations/<id>/shares (list) · DELETE /api/shares/<id> (revoke)
+ conversation deleted → its shares and _shares/<id>/ copies deleted
+ audit: "[share] <id> viewed by <oid>" in the chat-api log
+```
+
 ## 4. Non-functional architecture
 
 ### 4.1 Security

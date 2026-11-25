@@ -622,7 +622,7 @@ dialog.keys kbd { font-size: 12px; padding: 1px 6px; border: 1px solid var(--lin
 .convs .group-label.with-action .icon-btn { width: 24px; height: 24px; }
 
 /* Share links (H72) */
-dialog.share-dlg { width: min(560px, calc(100vw - 32px)); height: auto; max-height: 80vh; }
+dialog.share-dlg { width: min(560px, calc(100vw - 32px)); height: fit-content; max-height: 80vh; }
 .share-body { padding: 14px 18px 18px; display: grid; gap: 14px; overflow: auto; }
 .share-note { margin: 0; font-size: 13px; color: var(--fg-2); line-height: 1.45; }
 .share-note svg { vertical-align: -2px; color: var(--fg-3); }
