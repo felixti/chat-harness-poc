@@ -8,6 +8,7 @@ import rehypeHighlight from "rehype-highlight";
 import { Check, Copy, Code2, Download, Image as ImageIcon, Maximize2, X } from "lucide-react";
 import { fileUrl } from "./api";
 import { useTheme } from "./theme";
+import { EChart } from "./EChart";
 
 export async function copyText(text: string) {
 	await navigator.clipboard.writeText(text);
@@ -223,6 +224,7 @@ function textOf(node: ReactNode): string {
 
 function CodeBlock({ lang, source, children, final }: { lang: string; source: string; children: ReactNode; final: boolean }) {
 	if (lang === "mermaid") return <Mermaid source={source} final={final} />;
+	if (lang === "echarts") return <EChart source={source} final={final} />;
 	if (lang === "svg" || (lang === "xml" && source.trimStart().startsWith("<svg"))) return final ? <Figure svg={sized(source)} source={source} lang="svg" /> : <Plain lang="svg" source={source} />;
 	const ascii = ["text", "ascii", "txt", "plaintext", ""].includes(lang) && ASCII.test(source);
 	return (
