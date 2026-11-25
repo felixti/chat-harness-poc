@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PanelLeft, SquarePen, X } from "lucide-react";
-import { api, chat, fileUrl, HttpError, SessionExpired, type CanvasEvent, type ConversationSummary, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type Source, type ToolStep } from "./api";
+import { ChevronRight, Folder, PanelLeft, SquarePen, X } from "lucide-react";
+import { api, chat, fileUrl, HttpError, SessionExpired, type CanvasEvent, type ConversationSummary, type Project, type FileInfo, type Interrupt, type LibraryFile, type MemoryUsed, type Message, type ResumeEntry, type Source, type ToolStep } from "./api";
 
 /** Steps held by an open interrupt read as "waiting", not as failed. */
 function markWaiting(parts: (ToolStep | { type: "text"; text: string })[], interrupts?: Interrupt[]) {
@@ -18,6 +18,7 @@ import { SELECT_SHORTCUTS, SHORTCUTS, useVimKeys, useVimSetting } from "./vim";
 import { loadModelPref, ModelPicker, type ModelPref } from "./ModelPicker";
 import { fmtBrl, fmtUsd, type Spend } from "./cost";
 import { Logo, LogoMark } from "./Logo";
+import { ProjectView } from "./ProjectView";
 
 const STARTERS = [
 	{ title: "Montar uma apresentação", hint: "Deck no padrão da empresa, com gráficos e fontes", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
@@ -30,6 +31,9 @@ const newId = () => crypto.randomUUID();
 
 export function App() {
 	const [list, setList] = useState<ConversationSummary[]>([]);
+	// Projects (H71): the open project page, or the project of the open conversation.
+	const [projects, setProjects] = useState<Project[]>([]);
+	const [project, setProject] = useState<string>();
 	const [conv, setConv] = useState<string>();
 	const convRef = useRef<string | undefined>(undefined);
 	convRef.current = conv;
@@ -100,9 +104,11 @@ export function App() {
 	}, []);
 
 	const refreshList = useCallback(() => void api.conversations().then(setList).catch(() => {}), []);
+	const refreshProjects = useCallback(() => void api.projects().then(setProjects).catch(() => {}), []);
 
 	useEffect(() => {
 		refreshList();
+		refreshProjects();
 		const p = new URLSearchParams(location.search);
 		if (p.get("connector")) {
 			setNotice(p.get("status") === "ok" ? { text: `${p.get("connector")} conectado. As ferramentas ficam disponíveis a partir da próxima mensagem.` } : { text: `Não foi possível conectar ${p.get("connector")}: ${p.get("status")}`, error: true });
@@ -128,7 +134,8 @@ export function App() {
 		if (relogin?.draft) setSeed({ text: relogin.draft, n: Date.now() });
 		const c = location.hash.slice(1) || after?.conv || relogin?.conv;
 		// A new conversation that only had attachments does not exist on the server yet: keep its id.
-		if (c) void open(c, () => (pendingConv.current = c));
+		if (c?.startsWith("p/")) openProject(c.slice(2));
+		else if (c) void open(c, () => (pendingConv.current = c));
 		if (after?.picker && p.get("status") === "ok") {
 			setDrawer(undefined);
 			setPicker(true);
@@ -154,6 +161,7 @@ export function App() {
 			const d = await api.conversation(id);
 			setConv(id);
 			setTitle(d.title);
+			setProject(d.projectId);
 			const msgs = d.messages;
 			const lastA = msgs.map((m) => m.role).lastIndexOf("assistant");
 			if (d.interrupts?.length && lastA >= 0 && msgs[lastA].role === "assistant") {
@@ -177,8 +185,39 @@ export function App() {
 		}
 	}
 
+	/** The project page: a new conversation started there belongs to the project. */
+	function openProject(id: string) {
+		startNew();
+		setProject(id);
+		history.replaceState(null, "", `#p/${id}`);
+	}
+
+	async function newProject() {
+		const name = prompt("Nome do projeto")?.trim();
+		if (!name) return;
+		try {
+			const p = await api.createProject(name);
+			setProjects((ps) => [p, ...ps]);
+			openProject(p.id);
+		} catch (e) {
+			notify(`Não consegui criar o projeto: ${(e as Error).message}`);
+		}
+	}
+
+	async function moveConv(id: string, projectId: string | null) {
+		try {
+			await api.move(id, projectId);
+			refreshList();
+			if (id === conv) setProject(projectId ?? undefined);
+			notify(projectId ? `Movida para ${projects.find((p) => p.id === projectId)?.name ?? "o projeto"}.` : "Conversa fora do projeto.");
+		} catch (e) {
+			notify(`Não consegui mover: ${(e as Error).message}`);
+		}
+	}
+
 	function startNew() {
 		abort.current?.abort();
+		setProject(undefined);
 		setCanvas(undefined);
 		setConv(undefined);
 		setTitle("");
@@ -223,7 +262,7 @@ export function App() {
 		const argText = new Map<string, string>();
 		let convId = id;
 		try {
-			for await (const ev of chat({ threadId: id, message: resume ? undefined : text, skills, edit, resume, ...modelPref }, ctrl.signal)) {
+			for await (const ev of chat({ threadId: id, message: resume ? undefined : text, skills, edit, resume, ...modelPref, ...(!conv && project ? { projectId: project } : {}) }, ctrl.signal)) {
 				switch (ev.type) {
 					case "RUN_STARTED":
 						convId = ev.threadId;
@@ -507,6 +546,11 @@ export function App() {
 				onShortcuts={() => keysDlg.current?.showModal()}
 				monthCost={monthCost}
 				searchRef={searchRef}
+				projects={projects}
+				currentProject={project}
+				onOpenProject={openProject}
+				onNewProject={() => void newProject()}
+				onMove={(id, pid) => void moveConv(id, pid)}
 				onDrawer={(t) => {
 					setCanvas(undefined);
 					setDrawer((d) => (d === t ? undefined : t));
@@ -524,6 +568,11 @@ export function App() {
 								<SquarePen size={18} />
 							</button>
 						</>
+					)}
+					{project && conv && projects.some((p) => p.id === project) && (
+						<button type="button" className="crumb" title="Abrir o projeto" onClick={() => openProject(project)}>
+							<Folder size={15} /> {projects.find((p) => p.id === project)?.name} <ChevronRight size={14} />
+						</button>
 					)}
 					{title ? <span className="conv-title">{title}</span> : !sideOpen && <Logo />}
 					<span className="spacer" />
@@ -549,7 +598,21 @@ export function App() {
 						</div>
 					</div>
 				)}
-				{empty ? (
+				{empty && project && !busy ? (
+					<ProjectView
+						id={project}
+						conversations={list.filter((c) => c.projectId === project)}
+						composer={composer}
+						onOpen={(id) => void open(id)}
+						onChanged={refreshProjects}
+						onDeleted={() => {
+							refreshProjects();
+							refreshList();
+							startNew();
+						}}
+						notify={notify}
+					/>
+				) : empty ? (
 					<div className="welcome">
 						<LogoMark size={44} className="welcome-mark" />
 						<h1>Como posso ajudar?</h1>

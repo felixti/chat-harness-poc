@@ -584,3 +584,39 @@ dialog.keys kbd { font-size: 12px; padding: 1px 6px; border: 1px solid var(--lin
 .action-summary dt { color: var(--fg-3); text-transform: capitalize; }
 .action-summary dd { margin: 0; overflow-wrap: anywhere; }
 .ui-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* Projects (H71) */
+.side-section { padding: 4px 8px 0; }
+.side-section .group-label { display: flex; align-items: center; justify-content: space-between; padding-right: 2px; }
+.side-section .group-label .icon-btn { width: 24px; height: 24px; }
+.conv .proj-icon { color: var(--fg-3); flex-shrink: 0; margin-left: 8px; }
+.project-page { flex: 1; overflow: auto; }
+.project-inner { max-width: 768px; margin: 0 auto; padding: 28px 24px 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
+.project-inner .composer-wrap { padding: 0; }
+.project-page .hint { margin: 0; text-align: left; max-width: none; font-size: 12.5px; color: var(--fg-3); }
+.project-head { display: flex; align-items: center; gap: 10px; color: var(--fg-2); }
+.project-name { flex: 1; min-width: 0; font-size: 22px; font-weight: 600; color: var(--fg); border: 1px solid transparent; border-radius: 8px; padding: 4px 8px; background: transparent; }
+.project-name:hover { border-color: var(--line); }
+.project-name:focus { border-color: var(--accent); outline: none; background: var(--bg-raised); }
+.project-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.project-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: grid; gap: 8px; align-content: start; background: var(--bg-raised); }
+.project-card h2 { font-size: 14px; font-weight: 600; margin: 0; }
+.project-card textarea { width: 100%; resize: vertical; min-height: 120px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; background: var(--bg); color: var(--fg); font: inherit; font-size: 14px; line-height: 1.45; }
+.project-card textarea:focus { outline: none; border-color: var(--accent); }
+.project-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.project-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 220px; overflow: auto; }
+.project-files li { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 2px 0 4px; border-radius: 6px; color: var(--fg-2); }
+.project-files li:hover { background: var(--bg-hover); }
+.project-files .t, .project-convs .t { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-convs { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--line); }
+.project-convs button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--line); color: var(--fg); }
+.project-convs button:hover { background: var(--bg-hover); }
+.topbar .crumb { color: var(--fg-3); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 2px 6px; }
+.topbar .crumb:hover { background: var(--bg-hover); color: var(--fg); }
+.popover .sub { font-size: 12px; color: var(--fg-3); padding: 6px 10px 2px; }
+@media (max-width: 860px) {
+	.project-cards { grid-template-columns: 1fr; }
+	.project-inner { padding: 16px 16px 32px; }
+}
+.convs .group-label.with-action { display: flex; align-items: center; justify-content: space-between; padding-right: 0; }
+.convs .group-label.with-action .icon-btn { width: 24px; height: 24px; }

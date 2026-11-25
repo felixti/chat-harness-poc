@@ -18,6 +18,8 @@ export interface Conversation {
 	/** Optimistic concurrency: save() succeeds only if the stored version is still this one
 	 *  (undefined = new conversation). Backs up the per-conversation lease. */
 	version?: number;
+	/** Project the conversation belongs to (H71); unset when it has none. */
+	projectId?: string;
 }
 
 export class ConflictError extends Error {
@@ -27,7 +29,7 @@ export class ConflictError extends Error {
 	}
 }
 
-export type ConversationSummary = Pick<Conversation, "id" | "title" | "updatedAt">;
+export type ConversationSummary = Pick<Conversation, "id" | "title" | "updatedAt" | "projectId">;
 
 export interface SearchHit extends ConversationSummary {
 	snippets: string[];
@@ -87,6 +89,10 @@ export interface ConversationStore {
 	save(c: Conversation): Promise<void>;
 	list(user: string): Promise<ConversationSummary[]>;
 	rename(user: string, id: string, title: string): Promise<boolean>;
+	/** Moves a conversation into a project, or out of it (null). */
+	move(user: string, id: string, projectId: string | null): Promise<boolean>;
+	/** A deleted project's conversations stay, without a project. */
+	detachProject(user: string, projectId: string): Promise<void>;
 	remove(user: string, id: string): Promise<boolean>;
 	/** Thumbs up/down on an assistant turn (null clears it). Kept apart from the history document. */
 	feedback(user: string, id: string, turn: string, value: "up" | "down" | null): Promise<void>;
@@ -108,6 +114,16 @@ export class MemoryStore implements ConversationStore {
 		if (!c || c.user !== user) return false;
 		c.title = title;
 		return true;
+	}
+	async move(user: string, id: string, projectId: string | null) {
+		const c = this.items.get(id);
+		if (!c || c.user !== user) return false;
+		if (projectId) c.projectId = projectId;
+		else delete c.projectId;
+		return true;
+	}
+	async detachProject(user: string, projectId: string) {
+		for (const c of this.items.values()) if (c.user === user && c.projectId === projectId) delete c.projectId;
 	}
 	async pendingCuration(since: Date, limit: number) {
 		return [...this.items.values()].filter((c) => c.updatedAt >= since && (!c.curatedAt || c.curatedAt < c.updatedAt)).slice(0, limit);
@@ -157,7 +173,7 @@ export class MemoryStore implements ConversationStore {
 		return [...this.items.values()]
 			.filter((c) => c.user === user)
 			.sort((a, b) => +b.updatedAt - +a.updatedAt)
-			.map(({ id, title, updatedAt }) => ({ id, title, updatedAt }));
+			.map(({ id, title, updatedAt, projectId }) => ({ id, title, updatedAt, ...(projectId ? { projectId } : {}) }));
 	}
 }
 
@@ -175,6 +191,15 @@ export class MongoStore implements ConversationStore {
 
 	async rename(user: string, id: string, title: string) {
 		return (await this.col.updateOne({ _id: id, user }, { $set: { title } })).matchedCount === 1;
+	}
+
+	async move(user: string, id: string, projectId: string | null) {
+		const r = await this.col.updateOne({ _id: id, user }, projectId ? { $set: { projectId } } : { $unset: { projectId: "" } });
+		return r.matchedCount === 1;
+	}
+
+	async detachProject(user: string, projectId: string) {
+		await this.col.updateMany({ user, projectId }, { $unset: { projectId: "" } });
 	}
 
 	async pendingCuration(since: Date, limit: number) {
@@ -219,7 +244,7 @@ export class MongoStore implements ConversationStore {
 	async get(user: string, id: string) {
 		// Filter by user too: a conversation id alone never grants access.
 		const d = await this.col.findOne({ _id: id, user });
-		return d ? { id: d._id, user: d.user, title: d.title, entries: d.entries, updatedAt: d.updatedAt, summary: d.summary, curatedAt: d.curatedAt, pending: d.pending, version: d.version ?? 0 } : undefined;
+		return d ? { id: d._id, user: d.user, title: d.title, entries: d.entries, updatedAt: d.updatedAt, summary: d.summary, curatedAt: d.curatedAt, pending: d.pending, version: d.version ?? 0, projectId: d.projectId } : undefined;
 	}
 
 	async save(c: Conversation) {
@@ -259,8 +284,8 @@ export class MongoStore implements ConversationStore {
 	}
 
 	async list(user: string) {
-		const docs = await this.col.find({ user }, { projection: { title: 1, updatedAt: 1 } }).sort({ updatedAt: -1 }).limit(50).toArray();
-		return docs.map((d) => ({ id: d._id, title: d.title, updatedAt: d.updatedAt }));
+		const docs = await this.col.find({ user }, { projection: { title: 1, updatedAt: 1, projectId: 1 } }).sort({ updatedAt: -1 }).limit(200).toArray();
+		return docs.map((d) => ({ id: d._id, title: d.title, updatedAt: d.updatedAt, ...(d.projectId ? { projectId: d.projectId } : {}) }));
 	}
 }
 

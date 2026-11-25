@@ -3,6 +3,23 @@ export interface ConversationSummary {
 	id: string;
 	title: string;
 	updatedAt: string;
+	projectId?: string;
+}
+/** A project (H71): instructions and reference files shared by its conversations. */
+export interface Project {
+	id: string;
+	name: string;
+	instructions: string;
+	updatedAt: string;
+}
+export interface ProjectFile {
+	name: string;
+	size: number;
+	modified?: string;
+}
+export interface ProjectDetail extends Project {
+	files: ProjectFile[];
+	limits: { name: number; instructions: number; files: number; fileBytes: number; totalBytes: number };
 }
 export interface ToolStep {
 	type: "tool";
@@ -81,6 +98,7 @@ export type Message =
 export interface ConversationDetail {
 	id: string;
 	title: string;
+	projectId?: string;
 	messages: Message[];
 	files: FileInfo[];
 	feedback: Record<string, "up" | "down">;
@@ -188,6 +206,14 @@ export const api = {
 	models: () => req<{ models: ModelChoice[]; default: string; efforts: Effort[]; defaultEffort: Effort }>("api/models"),
 	conversation: (id: string) => req<ConversationDetail>(`api/conversations/${id}`),
 	rename: (id: string, title: string) => req(`api/conversations/${id}`, send("PATCH", { title })),
+	move: (id: string, projectId: string | null) => req(`api/conversations/${id}`, send("PATCH", { projectId })),
+	projects: () => req<Project[]>("api/projects"),
+	project: (id: string) => req<ProjectDetail>(`api/projects/${id}`),
+	createProject: (name: string, instructions = "") => req<Project>("api/projects", send("POST", { name, instructions })),
+	updateProject: (id: string, p: { name?: string; instructions?: string }) => req<Project>(`api/projects/${id}`, send("PATCH", p)),
+	deleteProject: (id: string) => req(`api/projects/${id}`, send("DELETE")),
+	addProjectFile: (id: string, file: File) => req<{ name: string }>(`api/projects/${id}/files/${encodeURIComponent(file.name)}`, { method: "POST", body: file }),
+	removeProjectFile: (id: string, name: string) => req(`api/projects/${id}/files/${encodeURIComponent(name)}`, send("DELETE")),
 	remove: (id: string) => req(`api/conversations/${id}`, send("DELETE")),
 	canvases: (conv: string) => req<CanvasMeta[]>(`api/conversations/${conv}/canvas`),
 	canvas: (conv: string, name: string, v?: number) => req<CanvasDoc>(`api/conversations/${conv}/canvas/${name}${v ? `?v=${v}` : ""}`),
@@ -242,7 +268,7 @@ export interface ResumeEntry {
 
 /** POST an AG-UI RunAgentInput to /api/chat and yield events. Aborting stops the run on the server. */
 export async function* chat(
-	input: { threadId: string; message?: string; skills?: string[]; edit?: boolean; resume?: ResumeEntry[]; model?: string; effort?: Effort },
+	input: { threadId: string; message?: string; skills?: string[]; edit?: boolean; resume?: ResumeEntry[]; model?: string; effort?: Effort; projectId?: string },
 	signal: AbortSignal,
 ): AsyncGenerator<AguiEvent> {
 	const body = {
@@ -252,7 +278,7 @@ export async function* chat(
 		messages: input.message ? [{ id: crypto.randomUUID(), role: "user", content: input.message }] : [],
 		tools: [],
 		context: [],
-		forwardedProps: { skills: input.skills ?? [], edit: !!input.edit, ...(input.model ? { model: input.model } : {}), ...(input.effort ? { effort: input.effort } : {}) },
+		forwardedProps: { skills: input.skills ?? [], edit: !!input.edit, ...(input.model ? { model: input.model } : {}), ...(input.effort ? { effort: input.effort } : {}), ...(input.projectId ? { projectId: input.projectId } : {}) },
 		...(input.resume ? { resume: input.resume } : {}),
 	};
 	const r = await apiFetch("api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });

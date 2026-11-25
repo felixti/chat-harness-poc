@@ -392,6 +392,31 @@ believed is kept.
 
 The model no longer ends answers with a source list; the chat shows it.
 
+### 3.13 Projects (H71)
+
+A project groups conversations that share instructions and reference files, like ChatGPT Projects,
+Claude Projects or Gemini Gems.
+
+```
+ portal: sidebar "Projetos" ─► project page (#p/<id>)
+          │ name, instructions (≤ 8000 chars), files (≤ 20 files, 25 MB each, 60 MB total)
+          │ composer: a new conversation here carries forwardedProps.projectId
+          ▼
+ chat-api ── REST /api/projects[/<id>[/files/<name>]] ──► FerretDB `projects` {user, name, instructions}
+          │                                               Blob <oid>/_projects/<id>/files/*
+          │ turn in a project:
+          │   1. conversation.projectId (kept from creation or a later "Mover para projeto")
+          │   2. project files downloaded into the turn workspace under project/ (read-only mount:
+          │      never uploaded back, so writes there are dropped)
+          │   3. system prompt + "## Project: <name>": instructions, then the file list as data
+          ▼
+ Pi session (same tools; parse_document / read / bash reach project/)
+```
+
+- Deleting a project deletes its files and keeps its conversations, without a project.
+- Memory stays per user (core, episodic, graph); a project-only memory scope is not built yet.
+- Ownership: every query filters by the user's oid, as for conversations.
+
 ## 4. Non-functional architecture
 
 ### 4.1 Security

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Check, FolderOpen, Keyboard, ListChecks, Monitor, Moon, MoreHorizontal, PanelLeft, Pencil, Plug, Search, SquarePen, Sun, Trash2 } from "lucide-react";
+import { Brain, Check, Folder, FolderInput, FolderMinus, FolderOpen, FolderPlus, Keyboard, ListChecks, Monitor, Moon, MoreHorizontal, PanelLeft, Pencil, Plug, Search, SquarePen, Sun, Trash2 } from "lucide-react";
 import { isTyping } from "./vim";
 import { Logo } from "./Logo";
 import { setThemePref, themePref, type ThemePref } from "./theme";
 import { fmtBrl, fmtUsd, monthName, type Spend } from "./cost";
-import type { ConversationSummary } from "./api";
+import type { ConversationSummary, Project } from "./api";
 
 export type DrawerTab = "memory" | "files" | "connectors";
 
@@ -38,6 +38,11 @@ export function Sidebar({
 	onShortcuts,
 	searchRef,
 	monthCost,
+	projects,
+	currentProject,
+	onOpenProject,
+	onNewProject,
+	onMove,
 }: {
 	open: boolean;
 	list: ConversationSummary[];
@@ -54,6 +59,12 @@ export function Sidebar({
 	onShortcuts: () => void;
 	/** The user's spend this month (H58). */
 	monthCost?: Spend;
+	/** Projects (H71): listed above the history; their conversations live on the project page. */
+	projects: Project[];
+	currentProject?: string;
+	onOpenProject: (id: string) => void;
+	onNewProject: () => void;
+	onMove: (id: string, projectId: string | null) => void;
 	searchRef: React.RefObject<HTMLInputElement | null>;
 	onDrawer: (t: DrawerTab) => void;
 	drawer?: DrawerTab;
@@ -79,12 +90,13 @@ export function Sidebar({
 		const f = q.trim().toLowerCase();
 		const out = new Map<string, ConversationSummary[]>();
 		for (const c of list) {
-			if (f && !c.title.toLowerCase().includes(f)) continue;
+			// Project conversations are listed on their project page; a search still finds them.
+			if (f ? !c.title.toLowerCase().includes(f) : c.projectId && projects.some((p) => p.id === c.projectId)) continue;
 			const g = groupOf(c.updatedAt);
 			out.set(g, [...(out.get(g) ?? []), c]);
 		}
 		return [...out];
-	}, [list, q]);
+	}, [list, q, projects]);
 	const visible = useMemo(() => groups.flatMap(([, items]) => items.map((c) => c.id)), [groups]);
 
 	// Leaving selection mode clears it; entering puts the cursor on the open conversation.
@@ -215,6 +227,30 @@ export function Sidebar({
 				</div>
 			)}
 			<div className="convs">
+				{!selecting && !q.trim() && (
+					<div>
+						<div className="group-label with-action">
+							Projetos
+							<button type="button" className="icon-btn small" aria-label="Novo projeto" title="Novo projeto" onClick={onNewProject}>
+								<FolderPlus size={15} />
+							</button>
+						</div>
+						{projects.map((p) => (
+							<div key={p.id} className={`conv${p.id === currentProject && !current ? " active" : ""}`}>
+								<Folder size={15} className="proj-icon" aria-hidden="true" />
+								<button type="button" className="title" title={p.name} onClick={() => onOpenProject(p.id)} aria-current={p.id === currentProject && !current ? "page" : undefined}>
+									{p.name}
+								</button>
+							</div>
+						))}
+						{!projects.length && (
+							<button type="button" className="conv" style={{ width: "100%", color: "var(--fg-3)" }} onClick={onNewProject}>
+								<FolderPlus size={15} className="proj-icon" aria-hidden="true" />
+								<span className="title">Novo projeto</span>
+							</button>
+						)}
+					</div>
+				)}
 				{!list.length && <div className="empty-side">Suas conversas aparecem aqui.</div>}
 				{list.length > 0 && !groups.length && <div className="empty-side">Nenhuma conversa com “{q}”.</div>}
 				{groups.map(([label, items]) => (
@@ -333,6 +369,37 @@ export function Sidebar({
 					>
 						<ListChecks size={15} /> Selecionar várias
 					</button>
+					{projects.some((p) => p.id !== list.find((c) => c.id === menu.id)?.projectId) && <div className="sub">Mover para projeto</div>}
+					{projects
+						.filter((p) => p.id !== list.find((c) => c.id === menu.id)?.projectId)
+						.slice(0, 8)
+						.map((p) => (
+							<button
+								key={p.id}
+								type="button"
+								role="menuitem"
+								onClick={() => {
+									const id = menu.id;
+									setMenu(undefined);
+									onMove(id, p.id);
+								}}
+							>
+								<FolderInput size={15} /> {p.name}
+							</button>
+						))}
+					{list.find((c) => c.id === menu.id)?.projectId && (
+						<button
+							type="button"
+							role="menuitem"
+							onClick={() => {
+								const id = menu.id;
+								setMenu(undefined);
+								onMove(id, null);
+							}}
+						>
+							<FolderMinus size={15} /> Tirar do projeto
+						</button>
+					)}
 					<button
 						type="button"
 						role="menuitem"

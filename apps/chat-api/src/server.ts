@@ -23,10 +23,12 @@ import { browse, exportedOf, importFiles, saveToOneDrive, type View } from "./m3
 import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } from "./library.ts";
 import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
 import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
+import { addProjectFile, deleteProjectFile, deleteProjectFiles, LIMITS as PROJECT_LIMITS, listProjectFiles, openProjects, PROJECT_ID, projectPrefix, projectPrompt } from "./projects.ts";
 import { listFiles, openTurn, readFileFromStore, userVisible, workspacePath, writeFileToStore } from "./workspace.ts";
 
 const store = await openStore(config.mongoUrl);
 const ledger = await openLedger(config.mongoUrl);
+const projects = await openProjects(config.mongoUrl);
 const ID = /^[a-zA-Z0-9-]{8,64}$/;
 
 /** Identity: in the cluster the gateway authenticates (Entra OIDC) and forwards the user. */
@@ -103,7 +105,7 @@ type ChatInput = {
 	threadId?: string;
 	runId?: string;
 	messages?: { id?: string; role: string; content: unknown }[];
-	forwardedProps?: { skills?: string[]; edit?: boolean; model?: string; effort?: Effort };
+	forwardedProps?: { skills?: string[]; edit?: boolean; model?: string; effort?: Effort; projectId?: string };
 	resume?: ResumeEntry[];
 	conversationId?: string;
 	message?: string;
@@ -123,8 +125,14 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 	const skills = input.forwardedProps?.skills ?? input.skills;
 	const edit = input.forwardedProps?.edit ?? input.edit ?? false;
 	if (!ID.test(id)) return json(res, 400, { error: "bad request" });
+	// Project (H71): a conversation keeps the project it was created in or moved to; a new one takes
+	// the project the portal was showing. Its files are mounted read-only under project/.
+	const before = await store.get(user, id);
+	const wanted = before ? before.projectId : input.forwardedProps?.projectId;
+	const project = wanted && PROJECT_ID.test(wanted) ? await projects.get(user, wanted) : undefined;
+	const projectFiles = project ? await listProjectFiles(user, project.id) : [];
 	// Lease + fresh workspace from Blob; 409 before streaming when another turn holds it.
-	const turn = await openTurn(user, id);
+	const turn = await openTurn(user, id, project ? [{ prefix: projectPrefix(user, project.id), as: "project" }] : []);
 	const memoryOn = config.memory.enabled && !!config.connectors.masterKey;
 	const facts = memoryOn ? new FactGraph(user, id) : undefined;
 	const mySkills = memoryOn ? await materializeSkills(user) : undefined;
@@ -185,6 +193,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				message = withHidden(message, hidden);
 			}
 			const canvas = canvasTool(turn.dir, (c) => run.custom("canvas", c));
+			const projectAppend = project ? projectPrompt(project, projectFiles) : "";
 			const uiTools = [planTool((steps) => run.activity(`plan-${run.runId}`, "plan", { steps })), showUiTool((s) => run.activity(`a2ui-${s.surfaceId}`, "a2ui-surface", { surfaceId: s.surfaceId, title: s.title, a2ui_operations: s.messages }))];
 			const result = await runTurn({
 				workspace: turn.dir,
@@ -197,8 +206,8 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				mcpServers: await mcpServersFor(user),
 				gate,
 				...(memoryOn && facts
-					? { systemAppend: (await corePrompt(user)) + (await memoryContext(user, message, id, facts, (v) => run.custom("memory_used", v))), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas, ...uiTools], userSkillsDir: mySkills?.dir }
-					: { extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas, ...uiTools] }),
+					? { systemAppend: projectAppend + (await corePrompt(user)) + (await memoryContext(user, message, id, facts, (v) => run.custom("memory_used", v))), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas, ...uiTools], userSkillsDir: mySkills?.dir }
+					: { systemAppend: projectAppend || undefined, extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas, ...uiTools] }),
 				onEvent,
 				signal: abort.signal,
 			});
@@ -233,6 +242,7 @@ async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 				curatedAt: existing?.curatedAt,
 				pending: gate.interrupts.length ? gate.interrupts : undefined,
 				version: existing?.version,
+				projectId: existing ? existing.projectId : project?.id,
 			});
 			if (memoryOn && config.memory.curator && config.memory.curatorMode === "async" && !input.resume?.length) {
 				// After the answer, off the request path; the nightly job catches anything this misses.
@@ -288,6 +298,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	if (url.pathname === "/api/usage" && req.method === "GET") return json(res, 200, { month: await ledger.month(user), usdBrl: config.usdBrl });
 	if (url.pathname === "/api/models" && req.method === "GET") return json(res, 200, { models: modelChoices(), default: config.llm.model, efforts: EFFORTS, defaultEffort: "medium" });
 	if (url.pathname === "/api/conversations" && req.method === "GET") return json(res, 200, await store.list(user));
+	const pj = url.pathname.match(/^\/api\/projects(?:\/([a-f0-9-]{36})(?:\/files\/([^/]+))?)?$/);
+	if (pj) return projectRoute(req, res, user, pj[1], pj[2] && decodeURIComponent(pj[2]));
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
 	if (url.pathname === "/api/skills" && req.method === "GET") {
 		const mine = config.connectors.masterKey ? await listSkills(user).catch(() => []) : [];
@@ -343,6 +355,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 			return json(res, 200, {
 				id,
 				title: c.title,
+				projectId: c.projectId,
 				summary: c.summary,
 				updatedAt: c.updatedAt,
 				messages: entriesToView(c.entries),
@@ -353,7 +366,11 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 			});
 		}
 		if (req.method === "PATCH") {
-			const { title } = JSON.parse((await body(req, 10_000)).toString()) as { title?: string };
+			const { title, projectId } = JSON.parse((await body(req, 10_000)).toString()) as { title?: string; projectId?: string | null };
+			if (projectId !== undefined) {
+				if (projectId !== null && !(PROJECT_ID.test(projectId) && (await projects.get(user, projectId)))) return json(res, 404, { error: "project not found" });
+				return json(res, (await store.move(user, id, projectId)) ? 200 : 404, { ok: true });
+			}
 			if (!title?.trim()) return json(res, 400, { error: "title" });
 			return json(res, (await store.rename(user, id, title.trim().slice(0, 120))) ? 200 : 404, { ok: true });
 		}
@@ -428,6 +445,43 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 		}
 	}
 	json(res, 404, { error: "not found" });
+}
+
+/** Projects (H71): list, create, edit, delete, and their reference files. */
+async function projectRoute(req: IncomingMessage, res: ServerResponse, user: string, id?: string, file?: string) {
+	if (!id) {
+		if (req.method === "GET") return json(res, 200, await projects.list(user));
+		if (req.method === "POST") {
+			const { name, instructions } = JSON.parse((await body(req, 20_000)).toString()) as { name?: string; instructions?: string };
+			if (!name?.trim()) return json(res, 400, { error: "name" });
+			return json(res, 201, await projects.create(user, { name, instructions: typeof instructions === "string" ? instructions : "" }));
+		}
+		return json(res, 405, { error: "method not allowed" });
+	}
+	const p = await projects.get(user, id);
+	if (!p) return json(res, 404, { error: "project not found" });
+	if (file) {
+		if (req.method === "POST") return json(res, 201, { name: await addProjectFile(user, id, file, await body(req, PROJECT_LIMITS.fileBytes + 1)) });
+		if (req.method === "DELETE") {
+			await deleteProjectFile(user, id, file);
+			return json(res, 200, { ok: true });
+		}
+		return json(res, 405, { error: "method not allowed" });
+	}
+	if (req.method === "GET") return json(res, 200, { ...p, files: await listProjectFiles(user, id), limits: PROJECT_LIMITS });
+	if (req.method === "PATCH") {
+		const { name, instructions } = JSON.parse((await body(req, 20_000)).toString()) as { name?: string; instructions?: string };
+		if (name !== undefined && !String(name).trim()) return json(res, 400, { error: "name" });
+		return json(res, 200, await projects.update(user, id, { name: name === undefined ? undefined : String(name), instructions: instructions === undefined ? undefined : String(instructions) }));
+	}
+	if (req.method === "DELETE") {
+		// Conversations stay (without a project); the project's own files go.
+		await store.detachProject(user, id);
+		await deleteProjectFiles(user, id);
+		await projects.remove(user, id);
+		return json(res, 200, { ok: true });
+	}
+	json(res, 405, { error: "method not allowed" });
 }
 
 /** The user sees and edits what the agent remembers (Memória panel). */

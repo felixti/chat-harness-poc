@@ -160,8 +160,16 @@ export interface Turn {
 	abandon(): Promise<void>;
 }
 
+/** Read-only copy of another Blob prefix inside the workspace (project files, H71): downloaded with
+ *  the workspace, never uploaded back, so writes there are dropped at the end of the turn. */
+export interface Mount {
+	prefix: string;
+	/** Folder in the workspace, e.g. "project". */
+	as: string;
+}
+
 /** Leases the conversation and materializes its workspace in a clean local directory. */
-export async function openTurn(user: string, conversation: string): Promise<Turn> {
+export async function openTurn(user: string, conversation: string, mounts: Mount[] = []): Promise<Turn> {
 	const s = objectStore();
 	const lease = await s.lease(`_locks/${user}/${conversation}`, LEASE_SECONDS);
 	if (!lease) throw new ConversationBusyError();
@@ -181,13 +189,20 @@ export async function openTurn(user: string, conversation: string): Promise<Turn
 			await mkdir(dirname(target), { recursive: true });
 			await writeFile(target, (await s.get(prefix + f.path)) ?? Buffer.alloc(0));
 		}
-		const snapshot = new Map((await listLocal(dir)).map((f) => [f.path, `${f.size}:${f.mtimeMs}`]));
+		for (const m of mounts)
+			for (const f of await s.list(m.prefix)) {
+				const target = join(dir, m.as, f.path);
+				await mkdir(dirname(target), { recursive: true });
+				await writeFile(target, (await s.get(m.prefix + f.path)) ?? Buffer.alloc(0));
+			}
+		const mounted = (p: string) => mounts.some((m) => p === m.as || p.startsWith(`${m.as}/`));
+		const snapshot = new Map((await listLocal(dir)).filter((f) => !mounted(f.path)).map((f) => [f.path, `${f.size}:${f.mtimeMs}`]));
 		return {
 			dir,
 			snapshot,
 			async finish() {
 				try {
-					const now = await listLocal(dir);
+					const now = (await listLocal(dir)).filter((f) => !mounted(f.path));
 					const changed = now.filter((f) => snapshot.get(f.path) !== `${f.size}:${f.mtimeMs}`);
 					const present = new Set(now.map((f) => f.path));
 					const removed = [...snapshot.keys()].filter((p) => !present.has(p));
