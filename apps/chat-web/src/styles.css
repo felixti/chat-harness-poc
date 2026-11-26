@@ -655,7 +655,7 @@ dialog.share-dlg { width: min(560px, calc(100vw - 32px)); height: fit-content; m
 .run-card > svg { flex-shrink: 0; color: var(--accent); }
 .run-card .t { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .run-card .t strong { color: var(--fg); font-weight: 600; font-size: 13.5px; }
-.run-card .hint { font-size: 12.5px; color: var(--fg-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.run-card .hint { margin: 0; max-width: none; text-align: left; font-size: 12.5px; color: var(--fg-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .run-card.live .hint::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; animation: run-pulse 1.4s ease-in-out infinite; }
 @keyframes run-pulse { 50% { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) { .run-card.live .hint::before { animation: none; } }

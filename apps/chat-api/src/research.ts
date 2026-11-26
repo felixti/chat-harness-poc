@@ -104,7 +104,7 @@ Study: ${spec.topic}${spec.audience ? `\nAudience: ${spec.audience}` : ""}
 Language: the language of the study text above.
 
 Structure: a title (# heading); "Resumo" with the answer in 3 to 5 bullets; one section per theme (not necessarily one per sub-question), comparisons in tables when they help; "Limitações" (gaps, conflicting sources, old data); "Fontes".
-Citations: numbered [1], [2] in order of first use, placed after the claim; the "Fontes" list gives each number with the page title and URL, once per URL. Never cite a URL that is not in the notes. Keep numbers and dates exactly as in the notes.
+Citations: numbered [1], [2] in order of first use, placed after the claim; the "Fontes" section is a markdown numbered list, one source per line ("1. Page title — URL"), once per URL. Never cite a URL that is not in the notes. Keep numbers and dates exactly as in the notes.
 Plain, specific prose for a busy reader. Reply with the report only, in markdown.
 
 NOTES
@@ -122,7 +122,7 @@ ${notes}`;
 const deliverNote = (spec: ResearchSpec, report: string, issues: Checkpoint["issues"]) =>
 	`This is the finished deep research run the user started earlier in this conversation. Post the report below as your answer, as written, with two changes: ` +
 	(issues?.length ? `fix or remove these claims the checker found unsupported (${issues.map((i) => `"${i.claim}": ${i.issue}`).join("; ")}), keeping the numbering of the sources consistent; ` : "") +
-	`and nothing else. Do not search the web again.` +
+	`and nothing else; keep the "Fontes" section as a numbered list, one source per line. Do not search the web again.` +
 	(spec.format === "docx" ? " Then also save it as a Word document in outputs/ (docx skill), and mention the file in one line." : spec.format === "pdf" ? " Then also save it as a PDF in outputs/ with generate_pdf, and mention the file in one line." : "") +
 	`\n\nREPORT\n${report}`;
 
