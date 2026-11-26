@@ -281,7 +281,8 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 	});
 
 	// Billed amounts when the provider reported them, else the price-list estimate; images on top.
-	const soFar = () => ({ usd: Math.max(billed.usd, usage.usd) + imagesUsd, calls: usage.calls });
+	// Same rule as the final figure: the billed amount once every call so far reported one.
+	const soFar = () => ({ usd: (billed.seen >= usage.calls && billed.seen > 0 ? billed.usd : usage.usd) + imagesUsd, calls: usage.calls });
 	const unsubscribe = session.subscribe((event) => {
 		if (event.type === "message_end" && event.message.role === "assistant") {
 			const u = (event.message as { usage?: { input?: number; output?: number; cacheRead?: number; cost?: { total?: number } } }).usage;

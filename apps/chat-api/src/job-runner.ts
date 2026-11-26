@@ -63,6 +63,16 @@ export async function runJob(d: RunnerDeps, job: Job, owner: string): Promise<Jo
 		} else if (r.cancel) stop("user");
 	};
 	const timer = setInterval(() => void beat(), d.heartbeatMs ?? HEARTBEAT_MS);
+	// A new step reaches the portal at once (at most every 3 s), not only at the next heartbeat.
+	let lastStepSent = 0;
+	const setStep = (step: string) => {
+		if (step === progress) return;
+		progress = step;
+		if (Date.now() - lastStepSent > 3000) {
+			lastStepSent = Date.now();
+			void beat();
+		}
+	};
 	const ctx: RunContext = {
 		signal: abort.signal,
 		onUsage: (u) => {
@@ -73,9 +83,7 @@ export async function runJob(d: RunnerDeps, job: Job, owner: string): Promise<Jo
 			committed = total();
 			live = { usd: 0, calls: 0 };
 		},
-		progress: (step) => {
-			progress = step;
-		},
+		progress: setStep,
 		checkpoint: async (c) => {
 			checkpoint = c;
 			await beat();
@@ -90,8 +98,8 @@ export async function runJob(d: RunnerDeps, job: Job, owner: string): Promise<Jo
 		} else {
 			// The worker's AG-UI stream goes nowhere; it only tracks the step for the portal.
 			const emit = (e: { type: string; toolCallName?: unknown }) => {
-				if (e.type === "TOOL_CALL_START") progress = String(e.toolCallName);
-				else if (e.type === "TEXT_MESSAGE_START") progress = "writing";
+				if (e.type === "TOOL_CALL_START") setStep(String(e.toolCallName));
+				else if (e.type === "TEXT_MESSAGE_START") setStep("writing");
 			};
 			outcome = await d.turn(
 				{ user: job.user, id: job.conversation, message: job.prompt, model: job.model, projectId: job.projectId, runId: job.id, kind: "job", background: { title: job.title }, onUsage: ctx.onUsage, signal: abort.signal },
@@ -115,7 +123,7 @@ export async function runJob(d: RunnerDeps, job: Job, owner: string): Promise<Jo
 	}
 	// The ledger has every call of the run; the live figure is the fallback.
 	const spent = await d.ledger.run(job.user, job.id).catch(() => undefined);
-	const cost = spent && spent.usd >= total().usd ? { usd: spent.usd, calls: total().calls } : total();
+	const cost = spent && spent.turns > 0 ? { usd: spent.usd, calls: total().calls } : total();
 	const status = stopReason ? "stopped" : outcome.ok ? "done" : "failed";
 	await d.jobs.finish(job.id, owner, status, { cost, progress: status === "done" ? "done" : progress, stopReason, error: outcome.ok ? undefined : outcome.error?.slice(0, 500), waiting: outcome.waiting });
 	console.log(`[job] ${job.id} ${status}${stopReason ? ` (${stopReason})` : ""} US$${cost.usd.toFixed(4)}`);

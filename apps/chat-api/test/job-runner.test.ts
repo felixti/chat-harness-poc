@@ -150,3 +150,18 @@ test("notes keep each sub-question's sources distinct", () => {
 	assert.match(s, /### Q1\. a\nx \[Q1-S1\]/);
 	assert.match(s, /### Q2\. b\ny \[Q2-S1\] \[Q2-S2\]/);
 });
+
+test("the ledger's billed total is the run's final cost even when the live estimate was higher", async () => {
+	const jobs = new MemoryJobs();
+	const ledger = await openLedger("");
+	const j = await prompt(jobs);
+	const turn: RunnerDeps["turn"] = async (req, begin) => {
+		begin();
+		req.onUsage?.({ usd: 0.02, calls: 2 }); // price-list estimate during the run
+		const u = { ...emptyUsage("m"), usd: 0.009, calls: 2 }; // what OpenRouter billed
+		await ledger.add(req.user, req.id, u, { runId: req.runId, kind: "job" });
+		return { ok: true, text: "", usage: u, waiting: false, runId: req.runId! };
+	};
+	await runJob({ jobs, ledger, turn }, (await jobs.claim("w1", 60_000))!, "w1");
+	assert.ok(Math.abs((await jobs.get("ana", j.id))!.cost.usd - 0.009) < 1e-9);
+});
