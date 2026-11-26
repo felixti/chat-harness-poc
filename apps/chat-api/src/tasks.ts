@@ -38,7 +38,8 @@ export function scheduleInput(b: Record<string, unknown>, partial = false): Part
 	if (!partial) out.kind = kind;
 	if (!partial || b.capBrl !== undefined) {
 		const cap = b.capBrl === undefined ? CAP_BRL[kind].default : Number(b.capBrl);
-		if (!Number.isFinite(cap) || cap <= 0 || cap > CAP_BRL[kind].max) throw bad(`capBrl: more than 0, at most ${CAP_BRL[kind].max}`);
+		// The cap is checked after each model call, so a run can pass it by one call (a few centavos).
+		if (!Number.isFinite(cap) || cap < 0.1 || cap > CAP_BRL[kind].max) throw bad(`capBrl: 0.10 to ${CAP_BRL[kind].max}`);
 		out.capUsd = cap / config.usdBrl;
 	}
 	if (typeof b.model === "string" && b.model) out.model = b.model;
