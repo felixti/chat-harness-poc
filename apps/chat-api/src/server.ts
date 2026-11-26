@@ -6,31 +6,33 @@ import { randomUUID } from "node:crypto";
 import { extname, join, relative } from "node:path";
 import { config } from "./config.ts";
 import { openLedger } from "./usage.ts";
-import { EFFORTS, modelChoices, runTurn, type Effort, type McpServer } from "./agent.ts";
+import { EFFORTS, modelChoices, type Effort } from "./agent.ts";
 import { insideWorkspace } from "./tools.ts";
 import { openStore } from "./store.ts";
-import { retrieve, clearCore, coreEntries, corePrompt, editCore, memoryTools, sessionSearchTool, TARGETS, type Target } from "./memory.ts";
-import { FactGraph, graphTools } from "./graph-memory.ts";
-import { beforeLastUserMessage, entriesToView } from "./conversation-view.ts";
+import { clearCore, coreEntries, editCore, TARGETS, type Target } from "./memory.ts";
+import { FactGraph } from "./graph-memory.ts";
+import { entriesToView } from "./conversation-view.ts";
 import { companySkills } from "./skills-catalog.ts";
 import { deletePrefix, objectStore } from "./workspace.ts";
-import { curate } from "./curator.ts";
-import { isSourceTool, planTool, showUiTool, SourceList } from "./ui-tools.ts";
-import { AguiRun, resultText, type ResumeEntry } from "./agui.ts";
-import { askUserTool, Gate, resumeMessage, stripHidden, withHidden } from "./approvals.ts";
-import { callMcpTool } from "./mcp-call.ts";
+import { AguiRun, type ResumeEntry } from "./agui.ts";
 import { browse, exportedOf, importFiles, saveToOneDrive, type View } from "./m365.ts";
-import { attachToConversation, deleteLibraryFile, libraryTools, listLibrary } from "./library.ts";
-import { deleteSkill, listSkills, materializeSkills, skillTools } from "./skills-memory.ts";
-import { authorizeRedirect, completeAuthorization, connectedServers, disconnect, listFor } from "./connectors.ts";
-import { addProjectFile, deleteProjectFile, deleteProjectFiles, LIMITS as PROJECT_LIMITS, listProjectFiles, openProjects, PROJECT_ID, projectPrefix, projectPrompt } from "./projects.ts";
+import { attachToConversation, deleteLibraryFile, listLibrary } from "./library.ts";
+import { deleteSkill, listSkills } from "./skills-memory.ts";
+import { authorizeRedirect, completeAuthorization, disconnect, listFor } from "./connectors.ts";
+import { addProjectFile, deleteProjectFile, deleteProjectFiles, LIMITS as PROJECT_LIMITS, listProjectFiles, openProjects, PROJECT_ID } from "./projects.ts";
 import { copyOutputs, deleteShareFiles, expired, newShareId, openShares, SHARE_DAYS, SHARE_ID, sharePrefix, summaryOf, viewOf, type Share } from "./shares.ts";
-import { listFiles, openTurn, readFileFromStore, userVisible, workspacePath, writeFileToStore } from "./workspace.ts";
+import { listFiles, readFileFromStore, userVisible, workspacePath, writeFileToStore } from "./workspace.ts";
+import { executeTurn, type TurnDeps } from "./turn.ts";
+import { openJobs, SCHEDULE_LIMITS } from "./jobs.ts";
+import { jobView, scheduleInput, scheduleTaskTool, scheduleView } from "./tasks.ts";
+import { startResearchTool } from "./research.ts";
 
 const store = await openStore(config.mongoUrl);
 const ledger = await openLedger(config.mongoUrl);
 const projects = await openProjects(config.mongoUrl);
 const shares = await openShares(config.mongoUrl);
+const { schedules, jobs } = await openJobs(config.mongoUrl);
+const turnDeps: TurnDeps = { store, ledger, projects, tools: (user, conversation, projectId) => [scheduleTaskTool(schedules, user, projectId), startResearchTool(jobs, user, conversation, projectId)] };
 
 /** Deleting a conversation also deletes its share links and their file copies. */
 async function removeShares(user: string, conversation: string) {
@@ -43,37 +45,6 @@ function userOf(req: IncomingMessage): string {
 	const u = (req.headers["x-user-oid"] as string | undefined) ?? config.devUser;
 	if (!u || !ID.test(u)) throw Object.assign(new Error("unauthenticated"), { status: 401 });
 	return u;
-}
-
-async function mcpServersFor(user: string): Promise<McpServer[]> {
-	const servers: McpServer[] = [];
-	// App-level key (optional: Context7 also serves anonymous clients at a lower rate limit).
-	servers.push({
-		name: "context7",
-		url: "https://mcp.context7.com/mcp",
-		description: "Up-to-date documentation and code examples for software libraries and frameworks.",
-		headers: config.context7ApiKey ? { CONTEXT7_API_KEY: config.context7ApiKey } : undefined,
-	});
-	// In-cluster Brave Search MCP (the API key lives in that pod, not here).
-	if (config.braveMcpUrl)
-		servers.push({
-			name: "brave",
-			url: config.braveMcpUrl,
-			description: "Web and news search (Brave): current facts, statistics, sources and LLM-ready page context for research.",
-		});
-	// CrawlForge (H60): shared app key from Key Vault. Its sync calls run up to ~120 s.
-	if (config.crawlforge.url && config.crawlforge.apiKey)
-		servers.push({
-			name: "crawlforge",
-			url: config.crawlforge.url,
-			description:
-				"Web crawling and research (CrawlForge): scrape a URL to markdown/tables/links (also PDFs and JS-heavy pages), web search, extract structured data from a page with a schema, grounded answers with sources (ask), multi-step research (agent_run, research). Use it when a page must be read in full or a question needs several searches; keep agent_run and research for questions that need several sources (they take up to two minutes). Both return a finished report with sources: answer from it, and do not re-scrape its sources one by one.",
-			headers: { "x-api-key": config.crawlforge.apiKey },
-			timeout: 150,
-		});
-	// Per-user connectors (GitHub, ...): token from the sealed vault, never from the workspace.
-	servers.push(...(await connectedServers(user)));
-	return servers;
 }
 
 async function body(req: IncomingMessage, limit: number): Promise<Buffer> {
@@ -89,22 +60,6 @@ async function body(req: IncomingMessage, limit: number): Promise<Buffer> {
 
 function json(res: ServerResponse, status: number, data: unknown) {
 	res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(data));
-}
-
-/** First words of the first message, cut at a word boundary. */
-function titleOf(message: string): string {
-	const t = message.replace(/\s+/g, " ").replace(/\(arquivos anexados:[^)]*\)/, "").trim() || "Nova conversa";
-	if (t.length <= 60) return t;
-	const cut = t.slice(0, 60);
-	return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 30)).replace(/[,.;:]$/, "")}…`;
-}
-
-/** Retrieved memory for this turn; tells the portal what was used ("memória usada" chip). */
-async function memoryContext(user: string, message: string, id: string, facts: FactGraph | undefined, used: (v: unknown) => void): Promise<string> {
-	const [{ prompt, used: u }, core] = await Promise.all([retrieve(user, message, id, store, facts), coreEntries(user).catch(() => ({ user: [], memory: [] }))]);
-	u.core = core.user.length + core.memory.length;
-	if (u.core || u.facts.length || u.conversations.length) used(u);
-	return prompt;
 }
 
 /** AG-UI RunAgentInput (the portal) or the original { conversationId, message } shape. */
@@ -129,152 +84,30 @@ const lastUserText = (msgs: ChatInput["messages"]): string | undefined => {
 async function chat(req: IncomingMessage, res: ServerResponse, user: string) {
 	const input = JSON.parse((await body(req, 1_000_000)).toString()) as ChatInput;
 	const id = input.threadId ?? input.conversationId ?? randomUUID();
-	const skills = input.forwardedProps?.skills ?? input.skills;
-	const edit = input.forwardedProps?.edit ?? input.edit ?? false;
 	if (!ID.test(id)) return json(res, 400, { error: "bad request" });
-	// Project (H71): a conversation keeps the project it was created in or moved to; a new one takes
-	// the project the portal was showing. Its files are mounted read-only under project/.
-	const before = await store.get(user, id);
-	const wanted = before ? before.projectId : input.forwardedProps?.projectId;
-	const project = wanted && PROJECT_ID.test(wanted) ? await projects.get(user, wanted) : undefined;
-	const projectFiles = project ? await listProjectFiles(user, project.id) : [];
-	// Lease + fresh workspace from Blob; 409 before streaming when another turn holds it.
-	const turn = await openTurn(user, id, project ? [{ prefix: projectPrefix(user, project.id), as: "project" }] : []);
-	const memoryOn = config.memory.enabled && !!config.connectors.masterKey;
-	const facts = memoryOn ? new FactGraph(user, id) : undefined;
-	const mySkills = memoryOn ? await materializeSkills(user) : undefined;
-	let finished = false;
-	try {
-		const existing = await store.get(user, id);
-		// A resume answers the interrupts saved with the conversation (any replica can serve it).
-		let message = input.message ?? lastUserText(input.messages);
-		const gate = new Gate();
-		let resumed: ReturnType<typeof resumeMessage> | undefined;
-		if (input.resume?.length) {
-			resumed = resumeMessage(existing?.pending ?? [], input.resume);
-			message = resumed.message;
-		}
-		if (!message) return json(res, 400, { error: "bad request: no user message" });
-		res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
-		const run = new AguiRun((e) => res.write(`data: ${JSON.stringify(e)}\n\n`), id, input.runId as string | undefined);
-		const savedByAgent: string[] = [];
-		const sources = new SourceList();
-		const onEvent = (e: { type: string; [k: string]: unknown }) => {
-			if (e.type === "delta") run.text(String(e.text));
-			else if (e.type === "thinking") run.reasoning(String(e.text));
-			else if (e.type === "tool") {
-				if (e.name === "memory" || e.name === "remember") savedByAgent.push(JSON.stringify(e.args));
-				run.toolStart(String(e.id), String(e.name), e.args);
-			} else if (e.type === "tool_end") {
-				const text = resultText(e.result);
-				run.toolResult(String(e.id), text, !!e.isError);
-				// Web pages a search/crawl returned: listed under the reply (H62).
-				if (!e.isError && isSourceTool(String(e.name)) && sources.add(String(e.name), text)) run.custom("sources", sources.list());
-			}
-			else if (e.type === "error") run.custom("model_error", { message: e.message });
-		};
-		const abort = new AbortController();
-		res.on("close", () => abort.abort());
-		run.started();
-		try {
-			// Approved actions run here, exactly as approved; the model only reports the outcome.
-			if (resumed) {
-				const hidden = [...resumed.hidden];
-				if (resumed.approved.length) {
-					const servers = await mcpServersFor(user);
-					for (const a of resumed.approved) {
-						const [, server, tool] = /^mcp__(.+?)__(.+)$/.exec(a.toolName) ?? [];
-						const target = servers.find((x) => x.name === server);
-						const callId = `approved-${a.interruptId}`;
-						run.toolStart(callId, a.toolName, a.input);
-						const out = target ? await callMcpTool(target, tool, a.input).catch((e) => ({ text: (e as Error).message, isError: true })) : { text: `connector ${server} is not connected`, isError: true };
-						run.toolResult(callId, out.text, out.isError);
-						console.log(`[approval] ${a.toolName} ${out.isError ? "failed" : "ran"}`);
-						hidden.push(
-							out.isError
-								? `The approved action ${a.toolName} was executed by the system and FAILED: ${out.text.slice(0, 1500)}. Tell the user in one or two sentences what failed and what they can do. Do not retry it yourself.`
-								: `The approved action ${a.toolName} was already executed by the system, exactly as approved. Result: ${out.text.slice(0, 3000)}. Report the outcome in one or two sentences (IDs, names, links). Do not call it again.`,
-						);
-					}
-				}
-				message = withHidden(message, hidden);
-			}
-			const canvas = canvasTool(turn.dir, (c) => run.custom("canvas", c));
-			const projectAppend = project ? projectPrompt(project, projectFiles) : "";
-			const uiTools = [planTool((steps) => run.activity(`plan-${run.runId}`, "plan", { steps })), showUiTool((s) => run.activity(`a2ui-${s.surfaceId}`, "a2ui-surface", { surfaceId: s.surfaceId, title: s.title, a2ui_operations: s.messages }))];
-			const result = await runTurn({
-				workspace: turn.dir,
-				// edit/regenerate: replay from before the last user message (the old answer is replaced).
-				entries: edit ? beforeLastUserMessage(existing?.entries ?? []) : (existing?.entries ?? []),
-				message,
-				pinnedSkills: skills,
-				model: input.forwardedProps?.model,
-				effort: input.forwardedProps?.effort,
-				mcpServers: await mcpServersFor(user),
-				gate,
-				...(memoryOn && facts
-					? { systemAppend: projectAppend + (await corePrompt(user)) + (await memoryContext(user, message, id, facts, (v) => run.custom("memory_used", v))), extraTools: [...memoryTools(user), ...graphTools(facts), ...skillTools(user, id), sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas, ...uiTools], userSkillsDir: mySkills?.dir }
-					: { systemAppend: projectAppend || undefined, extraTools: [sessionSearchTool(user, id, store), ...libraryTools(user, turn.dir, store), askUserTool(), canvas, ...uiTools] }),
-				onEvent,
-				signal: abort.signal,
-			});
-			if (gate.tripped && !result.text.trim()) {
-				// The breaker stopped a looping model before it wrote anything: tell the user plainly.
-				run.text("Não consegui concluir: entrei em repetição ao usar as ferramentas e parei para não fazer nada errado. Tente de novo; se repetir, descreva o pedido em outras palavras.");
-			}
-			const files = await turn.finish();
-			finished = true;
-			let summary = existing?.summary;
-			const userWords = stripHidden(message);
-			// The answer is already on screen; the curator runs before RUN_FINISHED so the panel refreshes.
-			if (memoryOn && config.memory.curator && config.memory.curatorMode === "inline") {
-				const cur = await curate({ user, userMessage: userWords, assistantReply: result.text, alreadySaved: savedByAgent, previousSummary: existing?.summary }, facts).catch((e) => {
-					console.warn(`[curator] ${(e as Error).message}`);
-					return { saved: [] as string[], summary: undefined };
-				});
-				summary = cur.summary ?? summary;
-				if (cur.saved.length) run.custom("memory_saved", cur.saved);
-			}
-			// Cost (H58): recorded before saving the conversation, so a save conflict does not lose it.
-			await ledger.add(user, id, result.usage).catch((e) => console.warn(`[usage] ${(e as Error).message}`));
-			const [convSpend, monthSpend] = await Promise.all([ledger.conversation(user, id), ledger.month(user)]).catch(() => [undefined, undefined]);
-			if (convSpend && monthSpend) run.custom("usage", { turn: { usd: result.usage.usd, brl: result.usage.usd * config.usdBrl, model: result.usage.model, input: result.usage.input + result.usage.cacheRead, output: result.usage.output }, conversation: convSpend, month: monthSpend });
-			await store.save({
-				id,
-				user,
-				title: existing?.title ?? titleOf(userWords),
-				entries: result.entries,
-				updatedAt: new Date(),
-				summary,
-				curatedAt: existing?.curatedAt,
-				pending: gate.interrupts.length ? gate.interrupts : undefined,
-				version: existing?.version,
-				projectId: existing ? existing.projectId : project?.id,
-			});
-			if (memoryOn && config.memory.curator && config.memory.curatorMode === "async" && !input.resume?.length) {
-				// After the answer, off the request path; the nightly job catches anything this misses.
-				const later = { user, userMessage: userWords, assistantReply: result.text, alreadySaved: savedByAgent, previousSummary: existing?.summary };
-				setImmediate(() => {
-					const g = new FactGraph(user, id);
-					void curate(later, g)
-						.then((r) => store.markCurated(user, id, r.summary, new Date()))
-						.catch((e) => console.warn(`[curator] async: ${(e as Error).message}`))
-						.finally(() => g.dispose().catch(() => undefined));
-				});
-			}
-			run.custom("files", userVisible(files));
-			run.finished(gate.interrupts.map(({ id: iid, reason, message: msg, toolCallId, responseSchema, toolName, input: args, questions }) => ({ id: iid, reason, message: msg, toolCallId, responseSchema, metadata: { toolName, input: args, questions } })));
-		} catch (e) {
-			run.error((e as Error).message);
-		}
-		res.end();
-	} finally {
-		// Files the turn already wrote are kept even on error; only a turn that never reached
-		// finish() is abandoned (local copy deleted, lease released).
-		if (!finished) await turn.finish().catch(() => turn.abandon());
-		await facts?.dispose().catch((e) => console.warn(`[graph] dispose: ${(e as Error).message}`));
-		await mySkills?.cleanup();
-	}
+	const abort = new AbortController();
+	res.on("close", () => abort.abort());
+	const out = await executeTurn(
+		turnDeps,
+		{
+			user,
+			id,
+			message: input.message ?? lastUserText(input.messages),
+			resume: input.resume,
+			skills: input.forwardedProps?.skills ?? input.skills,
+			edit: input.forwardedProps?.edit ?? input.edit ?? false,
+			model: input.forwardedProps?.model,
+			effort: input.forwardedProps?.effort,
+			projectId: input.forwardedProps?.projectId,
+			signal: abort.signal,
+		},
+		() => {
+			res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+			return new AguiRun((e) => res.write(`data: ${JSON.stringify(e)}\n\n`), id, input.runId as string | undefined);
+		},
+	);
+	if (!out.ok && !res.headersSent) return json(res, 400, { error: out.error });
+	res.end();
 }
 
 const TYPES: Record<string, string> = {
@@ -308,6 +141,10 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 	const pj = url.pathname.match(/^\/api\/projects(?:\/([a-f0-9-]{36})(?:\/files\/([^/]+))?)?$/);
 	if (pj) return projectRoute(req, res, user, pj[1], pj[2] && decodeURIComponent(pj[2]));
 	if (url.pathname === "/api/chat" && req.method === "POST") return chat(req, res, user);
+	const sc = url.pathname.match(/^\/api\/schedules(?:\/([a-f0-9-]{36})(\/run)?)?$/);
+	if (sc) return scheduleRoute(req, res, user, sc[1], !!sc[2]);
+	const jb = url.pathname.match(/^\/api\/jobs(?:\/([a-f0-9-]{36})(\/stop)?)?$/);
+	if (jb) return jobRoute(req, res, user, url, jb[1], !!jb[2]);
 	if (url.pathname === "/api/skills" && req.method === "GET") {
 		const mine = config.connectors.masterKey ? await listSkills(user).catch(() => []) : [];
 		return json(res, 200, [...(await companySkills()), ...mine.map((s) => ({ name: `my-${s.name}`, label: `Meu: ${s.name.replace(/-/g, " ")}`, description: s.description, personal: true }))]);
@@ -512,6 +349,69 @@ async function shareRoute(req: IncomingMessage, res: ServerResponse, user: strin
 }
 
 const inlineRequested = (req: IncomingMessage) => new URL(req.url ?? "/", "http://x").searchParams.get("inline") === "1";
+
+/** Scheduled tasks (H69): list with the last run's cost, create, edit, pause, delete, run now. */
+async function scheduleRoute(req: IncomingMessage, res: ServerResponse, user: string, id?: string, runNow = false) {
+	if (!id) {
+		if (req.method === "GET") {
+			// The latest run of each, scheduled or "run now".
+			const list = await schedules.list(user);
+			return json(res, 200, await Promise.all(list.map(async (s) => scheduleView(s, (await jobs.list(user, { scheduleId: s.id }, 1))[0]))));
+		}
+		if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
+		const b = JSON.parse((await body(req, 20_000)).toString() || "{}") as Record<string, unknown>;
+		const v = scheduleInput(b);
+		if ((await schedules.list(user)).filter((s) => s.active).length >= SCHEDULE_LIMITS.perUser) return json(res, 409, { error: `at most ${SCHEDULE_LIMITS.perUser} active tasks` });
+		const projectId = typeof b.projectId === "string" && PROJECT_ID.test(b.projectId) && (await projects.get(user, b.projectId)) ? b.projectId : undefined;
+		const s = await schedules.create({ user, title: v.title!, prompt: v.prompt!, kind: v.kind!, when: v.when!, capUsd: v.capUsd!, model: v.model, projectId });
+		if (!s.nextRunAt) {
+			await schedules.remove(user, s.id);
+			return json(res, 400, { error: "when: that date and time already passed" });
+		}
+		return json(res, 201, scheduleView(s));
+	}
+	const s = await schedules.get(user, id);
+	if (!s) return json(res, 404, { error: "task not found" });
+	if (runNow) {
+		if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
+		const j = await jobs.enqueue({ user, kind: s.kind, title: s.title, prompt: s.prompt, conversation: s.conversation, scheduleId: s.id, projectId: s.projectId, model: s.model, capUsd: s.capUsd });
+		console.log(`[schedule] ${s.id} run now: job ${j.id}`);
+		return json(res, 201, jobView(j));
+	}
+	if (req.method === "GET") return json(res, 200, scheduleView(s, (await jobs.list(user, { scheduleId: s.id }, 1))[0]));
+	if (req.method === "PATCH") {
+		const b = JSON.parse((await body(req, 20_000)).toString() || "{}") as Record<string, unknown>;
+		const v = scheduleInput({ ...b, kind: s.kind }, true);
+		const u = await schedules.update(user, id, { ...v, active: typeof b.active === "boolean" ? b.active : undefined });
+		return json(res, 200, scheduleView(u!));
+	}
+	if (req.method === "DELETE") {
+		// The conversation and the history of runs (with their costs) stay.
+		await jobs.dropQueued(user, id);
+		await schedules.remove(user, id);
+		return json(res, 200, { ok: true });
+	}
+	json(res, 405, { error: "method not allowed" });
+}
+
+/** Runs: a schedule's or a conversation's history, one run live, stop. Each with its cost (H68). */
+async function jobRoute(req: IncomingMessage, res: ServerResponse, user: string, url: URL, id?: string, stop = false) {
+	if (!id) {
+		if (req.method !== "GET") return json(res, 405, { error: "method not allowed" });
+		const scheduleId = url.searchParams.get("schedule") ?? undefined;
+		const conversation = url.searchParams.get("conversation") ?? undefined;
+		if ((scheduleId && !/^[a-f0-9-]{36}$/.test(scheduleId)) || (conversation && !ID.test(conversation))) return json(res, 400, { error: "schedule or conversation" });
+		return json(res, 200, (await jobs.list(user, { scheduleId, conversation }, 30)).map(jobView));
+	}
+	if (stop) {
+		if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
+		const j = await jobs.requestStop(user, id);
+		return j ? json(res, 200, jobView(j)) : json(res, 404, { error: "run not found" });
+	}
+	if (req.method !== "GET") return json(res, 405, { error: "method not allowed" });
+	const j = await jobs.get(user, id);
+	return j ? json(res, 200, jobView(j)) : json(res, 404, { error: "run not found" });
+}
 
 /** Projects (H71): list, create, edit, delete, and their reference files. */
 async function projectRoute(req: IncomingMessage, res: ServerResponse, user: string, id?: string, file?: string) {

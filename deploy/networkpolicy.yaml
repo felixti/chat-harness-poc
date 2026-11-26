@@ -61,7 +61,7 @@ spec:
   podSelector: {matchLabels: {app: parser}}
   policyTypes: [Ingress, Egress]
   ingress:
-  - from: [{podSelector: {matchLabels: {app: chat-api}}}]
+  - from: [{podSelector: {matchLabels: {app: chat-api}}}, {podSelector: {matchLabels: {app: chat-worker}}}]
     ports: [{port: 8080}]
   egress: []   # no network at all
 ---
@@ -74,7 +74,7 @@ spec:
   podSelector: {matchLabels: {app: ferretdb}}
   policyTypes: [Ingress, Egress]
   ingress:
-  - from: [{podSelector: {matchLabels: {app: chat-api}}}, {podSelector: {matchLabels: {app: memory-curator}}}]
+  - from: [{podSelector: {matchLabels: {app: chat-api}}}, {podSelector: {matchLabels: {app: memory-curator}}}, {podSelector: {matchLabels: {app: chat-worker}}}]
     ports: [{port: 27017}]
   egress:
   - to: [{podSelector: {matchLabels: {app: chat-pg}}}]
@@ -102,7 +102,7 @@ spec:
   podSelector: {matchLabels: {app: brave-mcp}}
   policyTypes: [Ingress, Egress]
   ingress:
-  - from: [{podSelector: {matchLabels: {app: chat-api}}}]
+  - from: [{podSelector: {matchLabels: {app: chat-api}}}, {podSelector: {matchLabels: {app: chat-worker}}}]
     ports: [{port: 8080}]
   egress:
   - to:     # api.search.brave.com only needs HTTPS out
@@ -128,6 +128,33 @@ spec:
       podSelector: {matchLabels: {gateway.envoyproxy.io/owning-gateway-name: llm-gateway}}
     ports: [{port: 10080}]
   - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+    ports: [{port: 443}]
+---
+# Background worker (H69): same egress as chat-api, no ingress at all (kubelet probes are host traffic).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chat-worker
+  namespace: chat
+spec:
+  podSelector: {matchLabels: {app: chat-worker}}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+  - to: [{podSelector: {matchLabels: {app: ferretdb}}}]
+    ports: [{port: 27017}]
+  - to: [{podSelector: {matchLabels: {app: parser}}}]
+    ports: [{port: 8080}]
+  - to: [{podSelector: {matchLabels: {app: brave-mcp}}}]
+    ports: [{port: 8080}]
+  - to:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: envoy-gateway-system}}
+      podSelector: {matchLabels: {gateway.envoyproxy.io/owning-gateway-name: llm-gateway}}
+    ports: [{port: 10080}]
+  - to:     # HTTPS out: Blob, Entra (workload identity), MCP servers (Context7, CrawlForge, connectors)
     - ipBlock:
         cidr: 0.0.0.0/0
         except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]

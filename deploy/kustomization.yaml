@@ -7,5 +7,6 @@ resources:
 - parser.yaml
 - brave-mcp.yaml
 - chat-api.yaml
+- chat-worker.yaml
 - route.yaml
 - memory-curator.yaml

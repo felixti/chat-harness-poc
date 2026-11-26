@@ -122,7 +122,8 @@ Related documents:
  │  ├ describe/query_data     ├ generate_pdf          ├ session_search     ├ GitHub      (per user)     │
  │  ├ my_files/attach_file    ├ generate_dashboard    ├ skill_save         ├ Azure DevOps(per user)     │
  │  ├ canvas                  └ generate_image        └ curator (async)    └ OneDrive    (per user)     │
- │  └ ask_user                                                                                          │
+ │  ├ ask_user                                                                                          │
+ │  └ schedule_task / start_research ──► jobs ──► chat-worker (same turn runner, cost cap per run)      │
  │                                                                                                      │
  │  Cross-cutting: Gate (approvals + loop breaker) · usage ledger · cross-model history · skills        │
  └──────┬──────────────────┬─────────────────────┬────────────────────┬──────────────────┬──────────────┘
@@ -451,6 +452,38 @@ Claude Projects or Gemini Gems.
    6. chart  → ECharts option in an ```echarts block the model pastes into its reply
    7. close, delete the scratch folder
  portal: ```echarts → EChart.tsx (sanitized option, theme colors, pt-BR numbers, PNG download)
+```
+
+### 3.16 Scheduled tasks and the cost of each run (H68, H69)
+
+```
+ portal "Tarefas" / agent schedule_task ──► schedules (FerretDB)
+   when: once | daily | weekdays | weekly | monthly at HH:MM (São Paulo, UTC-3) → cron · cap R$ · conversation
+ chat-worker (Deployment, same image, src/jobs/worker.ts, 2 jobs at a time)
+   every 30 s  tick: due schedule → CAS nextRunAt → insert job (one per run, even with 2 workers)
+   every 5 s   claim: findOneAndUpdate {queued & runAt ≤ now | running & leaseUntil < now} → running, lease 90 s
+   run         executeTurn (turn.ts, same as /api/chat) in the task's conversation, hidden "background" note,
+               no ask_user/show_ui, no curator · onUsage after each model call → cap → stop "budget"
+   every 20 s  heartbeat: lease + live cost + step; cancel flag → stop "user"; lost lease → stop, other worker resumes
+   busy conversation (Blob lease) → back to the queue in 60 s, attempt not counted
+   end         cost = ledger.run(runId) · status done | failed | stopped
+ portal: run card above the composer (step, R$ x of R$ cap, Parar) · Tarefas page (next run, last run + cost,
+         history table with one row per run and the total)
+ ledger rows: { user, conv, runId, kind: turn | job, usd, tokens, calls, images, at }
+```
+
+### 3.17 Deep research (H73)
+
+```
+ chat: clarify (ask_user ≤ 3) → start_research {topic, 3-8 sub-questions, audience, format, cap} → job "research"
+ worker:
+   1 read    per sub-question: runTurn in /tmp/chat/research/<run>/q<i>, LLM_MODEL, Brave + CrawlForge (direct),
+             ≤ 4 searches · ≤ 5 pages → notes [S1].. → checkpoint (a failed one = gap, not a failed run)
+   2 write   RESEARCH_WRITER_MODEL from the notes only: Resumo, sections, Limitações, [n] citations, Fontes
+   3 check   LLM_MODEL: claims not supported by the notes → JSON list → checkpoint
+   4 deliver executeTurn in the conversation: "Relatório da pesquisa: <topic>" + hidden report and fixes;
+             docx/pdf in outputs/ when asked. Busy conversation → retry from step 4.
+ every step writes usage rows with runId = job id → live cost, cap, final amount
 ```
 
 ## 4. Non-functional architecture

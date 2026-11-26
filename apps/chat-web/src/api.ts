@@ -35,6 +35,60 @@ export interface ShareView {
 	skipped?: number;
 	mine: boolean;
 }
+/** When a scheduled task runs (H69), São Paulo time. */
+export interface When {
+	freq: "once" | "daily" | "weekdays" | "weekly" | "monthly";
+	time: string;
+	weekday?: number;
+	day?: number;
+	date?: string;
+}
+/** One background run (a scheduled task or a deep research) with its own cost (H68). */
+export interface Job {
+	id: string;
+	kind: "prompt" | "research";
+	title: string;
+	conversation: string;
+	scheduleId?: string;
+	status: "queued" | "running" | "done" | "failed" | "stopped";
+	stopReason?: "budget" | "user" | "attempts";
+	stopping?: boolean;
+	error?: string;
+	progress?: string;
+	waiting?: boolean;
+	runAt: string;
+	createdAt: string;
+	startedAt?: string;
+	endedAt?: string;
+	attempts: number;
+	cost: { usd: number; calls: number };
+	costBrl: number;
+	capBrl: number;
+}
+export interface Schedule {
+	id: string;
+	title: string;
+	prompt: string;
+	kind: "prompt" | "research";
+	when: When;
+	whenText: string;
+	projectId?: string;
+	conversation: string;
+	capBrl: number;
+	active: boolean;
+	nextRunAt?: string;
+	lastRunAt?: string;
+	lastJob?: string;
+	createdAt: string;
+	last?: Job;
+}
+export interface ScheduleInput {
+	title: string;
+	prompt: string;
+	when: When;
+	capBrl: number;
+	projectId?: string;
+}
 export interface ProjectFile {
 	name: string;
 	size: number;
@@ -233,6 +287,13 @@ export const api = {
 	createShare: (id: string, p: { canvas?: string; days: number }) => req<ShareSummary>(`api/conversations/${id}/shares`, send("POST", p)),
 	revokeShare: (sid: string) => req(`api/shares/${sid}`, send("DELETE")),
 	share: (sid: string) => req<ShareView>(`api/shares/${sid}`),
+	schedules: () => req<Schedule[]>("api/schedules"),
+	createSchedule: (p: ScheduleInput) => req<Schedule>("api/schedules", send("POST", p)),
+	updateSchedule: (id: string, p: Partial<ScheduleInput> & { active?: boolean }) => req<Schedule>(`api/schedules/${id}`, send("PATCH", p)),
+	deleteSchedule: (id: string) => req(`api/schedules/${id}`, send("DELETE")),
+	runSchedule: (id: string) => req<Job>(`api/schedules/${id}/run`, send("POST")),
+	jobs: (f: { schedule?: string; conversation?: string }) => req<Job[]>(`api/jobs?${new URLSearchParams(f as Record<string, string>)}`),
+	stopJob: (id: string) => req<Job>(`api/jobs/${id}/stop`, send("POST")),
 	move: (id: string, projectId: string | null) => req(`api/conversations/${id}`, send("PATCH", { projectId })),
 	projects: () => req<Project[]>("api/projects"),
 	project: (id: string) => req<ProjectDetail>(`api/projects/${id}`),

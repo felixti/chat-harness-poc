@@ -648,3 +648,65 @@ dialog.share-dlg { width: min(560px, calc(100vw - 32px)); height: fit-content; m
 .canvas-shared iframe { width: 100%; height: 100%; border: 0; }
 @media (max-width: 860px) { .canvas-shared { padding: 0 12px 12px; } }
 .echart { width: 100%; height: 320px; padding: 8px 4px 4px; }
+
+/* Scheduled tasks and background runs (H68, H69, H73) */
+.run-card { display: flex; align-items: center; gap: 12px; max-width: 768px; width: calc(100% - 48px); margin: 0 auto 10px; box-sizing: border-box; padding: 10px 10px 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raised); color: var(--fg-2); font-size: 13.5px; }
+.run-card.live { border-color: color-mix(in oklab, var(--accent) 45%, var(--line)); }
+.run-card > svg { flex-shrink: 0; color: var(--accent); }
+.run-card .t { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.run-card .t strong { color: var(--fg); font-weight: 600; font-size: 13.5px; }
+.run-card .hint { font-size: 12.5px; color: var(--fg-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.run-card.live .hint::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; animation: run-pulse 1.4s ease-in-out infinite; }
+@keyframes run-pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .run-card.live .hint::before { animation: none; } }
+.run-cost { display: grid; gap: 4px; justify-items: end; font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default; }
+.run-cost strong { color: var(--fg); font-weight: 600; }
+.run-cost .bar { width: 96px; height: 4px; border-radius: 2px; background: var(--bg-active); overflow: hidden; }
+.run-cost .bar span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.tasks-page { flex: 1; overflow: auto; }
+.tasks-inner { max-width: 768px; margin: 0 auto; padding: 0 24px 40px; }
+.tasks-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 28px; }
+.tasks-page .runs .hint { margin: 0; text-align: left; max-width: none; }
+.tasks-head h1 { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 600; margin: 0; }
+.tasks-inner > .hint { max-width: none; margin-top: 8px; margin-bottom: 18px; font-size: 13px; color: var(--fg-3); line-height: 1.5; text-align: left; }
+.tasks-page .empty { color: var(--fg-3); font-size: 14px; }
+.task-form { display: grid; gap: 12px; padding: 16px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raised); }
+.task-form label { display: grid; gap: 4px; font-size: 12.5px; font-weight: 500; color: var(--fg-2); }
+.task-form input, .task-form select, .task-form textarea { font: inherit; font-size: 14px; color: var(--fg); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 10px; }
+.task-form textarea { resize: vertical; line-height: 1.45; }
+.task-form :is(input, select, textarea):focus { outline: none; border-color: var(--accent); }
+.task-form .when { display: flex; flex-wrap: wrap; gap: 10px; }
+.task-form .when label { min-width: 120px; }
+.task-form .cap input { width: 120px; }
+.task-form .actions { display: flex; justify-content: flex-end; gap: 8px; }
+.task-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.task-list > li { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raised); }
+.task-list > li.paused { background: transparent; }
+.task-list > li.paused strong { color: var(--fg-2); }
+.task-list .row { display: flex; align-items: center; gap: 4px; padding: 6px 8px 6px 4px; }
+.task-list .expand { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left; padding: 6px; border-radius: 8px; color: var(--fg-3); }
+.task-list .expand:hover { background: var(--bg-hover); }
+.task-list .expand .t { min-width: 0; display: grid; gap: 1px; }
+.task-list .expand strong { color: var(--fg); font-weight: 600; font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.task-list .hint { font-size: 12.5px; color: var(--fg-3); margin: 0; max-width: none; text-align: left; }
+.task-list .last { font-size: 12.5px; color: var(--fg-2); font-variant-numeric: tabular-nums; white-space: nowrap; margin-right: 6px; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+.task-list .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--fg-3); }
+.task-list .dot.done { background: var(--ok); }
+.task-list .dot.failed { background: var(--danger); }
+.task-list .dot.running, .task-list .dot.queued { background: var(--accent); }
+.task-list .detail { padding: 0 14px 14px 38px; display: grid; gap: 10px; }
+.task-list .prompt { margin: 0; font-size: 13.5px; color: var(--fg-2); white-space: pre-wrap; line-height: 1.45; }
+.runs { display: grid; gap: 10px; justify-items: start; }
+.runs table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.runs th { text-align: left; font-weight: 500; color: var(--fg-3); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.runs td { padding: 6px; border-bottom: 1px solid var(--line); color: var(--fg-2); }
+.runs tfoot td { border-bottom: 0; color: var(--fg); font-weight: 600; }
+.runs .num { text-align: right; white-space: nowrap; }
+@media (max-width: 640px) {
+	.run-card { width: calc(100% - 32px); flex-wrap: wrap; }
+	.run-card .t { flex-basis: calc(100% - 40px); }
+	.run-cost { justify-items: start; flex: 1; }
+	.tasks-inner { padding: 0 16px 32px; }
+	.task-list .last { display: none; }
+	.task-list .detail { padding-left: 14px; }
+}

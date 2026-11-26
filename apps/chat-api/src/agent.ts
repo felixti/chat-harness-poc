@@ -105,6 +105,8 @@ export interface TurnInput {
 	model?: string;
 	effort?: Effort;
 	onEvent: (event: { type: string; [k: string]: unknown }) => void;
+	/** Cost so far, after each model call and image (H68: a background run stops at its cap). */
+	onUsage?: (u: { usd: number; calls: number }) => void;
 	signal?: AbortSignal;
 }
 
@@ -278,6 +280,8 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 		customTools: [...guardedFileTools(cwd, [config.skillsDir, ...(input.userSkillsDir ? [input.userSkillsDir] : [])]), bashTool(cwd), generatePdfTool(cwd), parseDocumentTool(cwd), analyzeDataTool(cwd), ...officeTools(cwd), ...(input.extraTools ?? [])].map(withUnquotedArgs),
 	});
 
+	// Billed amounts when the provider reported them, else the price-list estimate; images on top.
+	const soFar = () => ({ usd: Math.max(billed.usd, usage.usd) + imagesUsd, calls: usage.calls });
 	const unsubscribe = session.subscribe((event) => {
 		if (event.type === "message_end" && event.message.role === "assistant") {
 			const u = (event.message as { usage?: { input?: number; output?: number; cacheRead?: number; cost?: { total?: number } } }).usage;
@@ -286,11 +290,12 @@ export async function runTurn(input: TurnInput): Promise<{ entries: unknown[]; t
 			usage.output += u?.output ?? 0;
 			usage.cacheRead += u?.cacheRead ?? 0;
 			usage.usd += u?.cost?.total ?? 0;
+			input.onUsage?.(soFar());
 		}
 		if (event.type === "tool_execution_end" && event.toolName === "generate_image" && !event.isError) {
 			// The image tool reports the provider's cost in its result ("US$0.021").
 			const cost = /US\$([\d.]+)/.exec(JSON.stringify(event.result ?? ""))?.[1];
-			if (cost) (imagesUsd += Number(cost), usage.images++);
+			if (cost) (imagesUsd += Number(cost), usage.images++, input.onUsage?.(soFar()));
 		}
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 			input.onEvent({ type: "delta", text: event.assistantMessageEvent.delta });

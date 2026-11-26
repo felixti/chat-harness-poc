@@ -4,6 +4,8 @@
 // generated images at the cost the provider reported. Rows stay when a
 // conversation is deleted or an answer regenerated: the money was spent. Shown in BRL at a
 // configured rate (USD_BRL); the memory curator's background calls are not counted here.
+// Rows carry the run that spent the money (H68): a chat turn (`turn`) or a background job (`job`),
+// so each task or research run shows its own cost by runId.
 import { MongoClient, type Collection } from "mongodb";
 import { config } from "./config.ts";
 
@@ -19,7 +21,13 @@ export interface TurnUsage {
 
 export const emptyUsage = (model: string): TurnUsage => ({ usd: 0, input: 0, output: 0, cacheRead: 0, calls: 0, images: 0, model });
 
-interface Row extends TurnUsage {
+export type RunKind = "turn" | "job";
+export interface RunTag {
+	runId?: string;
+	kind?: RunKind;
+}
+
+interface Row extends TurnUsage, RunTag {
 	user: string;
 	conv: string;
 	at: Date;
@@ -32,8 +40,10 @@ export interface Spend {
 }
 
 export interface UsageLedger {
-	add(user: string, conv: string, u: TurnUsage, at?: Date): Promise<void>;
+	add(user: string, conv: string, u: TurnUsage, tag?: RunTag, at?: Date): Promise<void>;
 	conversation(user: string, conv: string): Promise<Spend>;
+	/** What one run (a turn or a job, all its model calls and images) cost. */
+	run(user: string, runId: string): Promise<Spend>;
 	month(user: string, now?: Date): Promise<Spend>;
 }
 
@@ -45,11 +55,14 @@ const toSpend = (rows: { usd: number }[]): Spend => {
 
 class MemoryLedger implements UsageLedger {
 	rows: Row[] = [];
-	async add(user: string, conv: string, u: TurnUsage, at = new Date()) {
-		this.rows.push({ ...u, user, conv, at });
+	async add(user: string, conv: string, u: TurnUsage, tag: RunTag = {}, at = new Date()) {
+		this.rows.push({ ...u, ...tag, user, conv, at });
 	}
 	async conversation(user: string, conv: string) {
 		return toSpend(this.rows.filter((r) => r.user === user && r.conv === conv));
+	}
+	async run(user: string, runId: string) {
+		return toSpend(this.rows.filter((r) => r.user === user && r.runId === runId));
 	}
 	async month(user: string, now = new Date()) {
 		const from = monthStart(now);
@@ -67,13 +80,17 @@ class MongoLedger implements UsageLedger {
 		const col = client.db().collection<Row>("usage");
 		await col.createIndex({ user: 1, at: -1 });
 		await col.createIndex({ user: 1, conv: 1 });
+		await col.createIndex({ runId: 1 });
 		return new MongoLedger(col);
 	}
-	async add(user: string, conv: string, u: TurnUsage, at = new Date()) {
-		await this.col.insertOne({ ...u, user, conv, at });
+	async add(user: string, conv: string, u: TurnUsage, tag: RunTag = {}, at = new Date()) {
+		await this.col.insertOne({ ...u, ...tag, user, conv, at });
 	}
 	async conversation(user: string, conv: string) {
 		return toSpend(await this.col.find({ user, conv }, { projection: { usd: 1 } }).toArray());
+	}
+	async run(user: string, runId: string) {
+		return toSpend(await this.col.find({ runId, user }, { projection: { usd: 1 } }).toArray());
 	}
 	async month(user: string, now = new Date()) {
 		return toSpend(await this.col.find({ user, at: { $gte: monthStart(now) } }, { projection: { usd: 1 } }).toArray());

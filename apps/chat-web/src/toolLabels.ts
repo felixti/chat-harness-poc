@@ -32,6 +32,10 @@ export function toolLabel(name: string, args: unknown): string {
 			return `Analisando ${file}`;
 		case "query_data":
 			return "Consultando os dados";
+		case "schedule_task":
+			return "Agendando a tarefa";
+		case "start_research":
+			return "Iniciando a pesquisa aprofundada";
 		case "analyze_data":
 			return (args as { sql?: string } | undefined)?.sql ? "Consultando os dados com SQL" : "Vendo as tabelas disponíveis";
 		case "generate_pptx":
@@ -85,7 +89,7 @@ export function toolDone(name: string): string {
 	if (name.startsWith("mcp__")) return "Usou um conector";
 	const DONE: Record<string, string> = {
 		read: "Leu arquivos", write: "Escreveu arquivos", edit: "Editou arquivos", ls: "Listou arquivos", bash: "Processou os dados",
-		parse_document: "Leu o documento", tool_search: "Escolheu as ferramentas", describe_data: "Analisou os dados", query_data: "Consultou os dados", analyze_data: "Analisou os dados com SQL",
+		parse_document: "Leu o documento", tool_search: "Escolheu as ferramentas", describe_data: "Analisou os dados", query_data: "Consultou os dados", analyze_data: "Analisou os dados com SQL", schedule_task: "Agendou a tarefa", start_research: "Iniciou a pesquisa aprofundada",
 		generate_pptx: "Montou a apresentação", generate_docx: "Gerou o documento Word", generate_xlsx: "Gerou a planilha", generate_pdf: "Gerou o PDF",
 		generate_dashboard: "Montou o dashboard", generate_image: "Criou uma imagem", memory: "Atualizou a memória", remember: "Guardou um fato",
 		recall: "Consultou a memória", forget: "Esqueceu um fato", session_search: "Buscou conversas anteriores", skill_save: "Salvou o procedimento",

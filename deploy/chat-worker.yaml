@@ -1,0 +1,81 @@
+# Background jobs (docs/design.md H69, H73): scheduled tasks and deep research. Same image and
+# identity as chat-api, other entrypoint, so a chat-api rollout does not kill a long run. It claims
+# jobs from FerretDB with a lease; a pod that dies leaves its job to be resumed by the next one.
+# No Service and no ingress: it only calls out (database, LLM gateway, search, parser, Blob).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-worker
+  namespace: chat
+spec:
+  replicas: 1   # jobs are leased in FerretDB: more replicas just run more jobs at once
+  strategy:
+    type: Recreate   # the old pod finishes or hands back its jobs (SIGTERM, 60 s) before the new one starts
+  selector: {matchLabels: {app: chat-worker}}
+  template:
+    metadata:
+      labels:
+        app: chat-worker
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: chat-api
+      nodeSelector: {agentplatform.io/pool: platform}
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: chat-worker
+        image: ghcr.io/felixti/chat-harness-chat-api:3cbcc189a31da7c7fe95df93216b11e6440fed80
+        args: ["--experimental-strip-types", "src/jobs/worker.ts"]
+        env:
+        - {name: MONGO_URL, value: "mongodb://ferret@ferretdb:27017/chat"}   # password from /var/run/secrets/chat/db-password
+        - {name: BLOB_ACCOUNT_URL, value: "https://stagentpocjt75.blob.core.windows.net"}
+        - {name: BLOB_CONTAINER, value: chat-workspaces}
+        - {name: PARSER_URL, value: "http://parser"}
+        - {name: LLM_BASE_URL, value: "http://llm-gateway.envoy-gateway-system.svc/api/v1"}
+        - {name: LLM_MODEL, value: "deepseek/deepseek-v4.1-flash-1017"}   # default; users pick others in the portal (LLM_MODELS, H57)
+        - {name: USD_BRL, value: "5.40"}   # cost shown in the portal (H58); update with the month's rate
+        - {name: IMAGE_MODEL, value: "minimax/minimax-h3-image"}   # generate_image at 1K; fallback google/gemini-3.1-flash-lite-image
+        - {name: BRAVE_MCP_URL, value: "http://brave-mcp/mcp"}
+        - {name: CRAWLFORGE_MCP_URL, value: "https://crawlforge.felixtek.cloud/mcp"}   # key: Key Vault crawlforge-api-key (H60)
+        - {name: PUBLIC_URL, value: "https://chat.20-121-208-105.sslip.io"}
+        - {name: CONNECTORS_CONTAINER, value: chat-credentials}
+        - {name: MEMORY_CONTAINER, value: chat-memory}
+        - {name: GITHUB_CLIENT_ID, value: "Ov23lipiqkWBqCka0Sgk"}   # GitHub OAuth App client ID (public)
+        - {name: AZDO_CLIENT_ID, value: "350bddb7-1b60-4df7-b643-4b7d6461b851"}   # Entra app chat-harness-azure-devops (single tenant)
+        - {name: AZDO_TENANT, value: "5f9bf155-4fca-4d0c-8201-ca5e6100f66e"}
+        - {name: AZDO_ORG, value: "felix-demo"}
+        - {name: AZDO_MCP_READONLY, value: "false"}   # write scopes; every write waits for the user's approval (H46)
+        - {name: MICROSOFT_CLIENT_ID, value: "0ea6ada6-2ef2-43fe-b6f2-ba6433182343"}   # Entra app chat-harness-microsoft-files (work + personal accounts)
+        - {name: WORKER_CONCURRENCY, value: "2"}
+        - {name: RESEARCH_WRITER_MODEL, value: "anthropic/claude-haiku-5.5"}   # report writing (H73); reading uses LLM_MODEL
+        livenessProbe:
+          httpGet: {path: /healthz, port: 8080}
+          periodSeconds: 30
+        resources:
+          requests: {cpu: 50m, memory: 320Mi}
+          limits: {memory: 1536Mi}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}
+        volumeMounts:
+        - {name: tmp, mountPath: /tmp}
+        - {name: secrets, mountPath: /var/run/secrets/chat, readOnly: true}
+      volumes:
+      - name: secrets
+        projected:
+          defaultMode: 0440   # group-readable: fsGroup 65532 is the app user
+          sources:
+          - secret:
+              name: chat-db
+              items: [{key: password, path: db-password}]
+          - secret:
+              name: chat-connectors
+              optional: true
+              items: [{key: master-key, path: connectors-master-key}, {key: github-client-secret, path: github-client-secret}, {key: microsoft-client-secret, path: microsoft-client-secret}, {key: azuredevops-client-secret, path: azuredevops-client-secret}, {key: crawlforge-api-key, path: crawlforge-api-key}]
+      # Scratch for one turn at a time; Blob is the truth, losing the pod loses nothing.
+      - {name: tmp, emptyDir: {sizeLimit: 4Gi}}

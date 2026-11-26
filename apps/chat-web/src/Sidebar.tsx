@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Check, Folder, FolderInput, FolderMinus, FolderOpen, FolderPlus, Keyboard, ListChecks, Monitor, Moon, MoreHorizontal, PanelLeft, Pencil, Plug, Search, SquarePen, Sun, Trash2 } from "lucide-react";
+import { AlarmClock, Brain, Check, Folder, FolderInput, FolderMinus, FolderOpen, FolderPlus, Keyboard, ListChecks, Monitor, Moon, MoreHorizontal, PanelLeft, Pencil, Plug, Search, SquarePen, Sun, Trash2 } from "lucide-react";
 import { isTyping } from "./vim";
 import { Logo } from "./Logo";
 import { setThemePref, themePref, type ThemePref } from "./theme";
@@ -31,6 +31,8 @@ export function Sidebar({
 	onDelete,
 	onDeleteMany,
 	onDrawer,
+	tasksOpen,
+	onTasks,
 	drawer,
 	selecting,
 	setSelecting,
@@ -67,6 +69,8 @@ export function Sidebar({
 	onMove: (id: string, projectId: string | null) => void;
 	searchRef: React.RefObject<HTMLInputElement | null>;
 	onDrawer: (t: DrawerTab) => void;
+	tasksOpen: boolean;
+	onTasks: () => void;
 	drawer?: DrawerTab;
 }) {
 	const [q, setQ] = useState("");
@@ -324,6 +328,9 @@ export function Sidebar({
 				))}
 			</div>
 			<div className="side-foot">
+				<button type="button" className="side-link" aria-pressed={tasksOpen} onClick={onTasks}>
+					<AlarmClock size={17} /> Tarefas
+				</button>
 				<button type="button" className="side-link" aria-pressed={drawer === "memory"} onClick={() => onDrawer("memory")}>
 					<Brain size={17} /> Memória
 				</button>

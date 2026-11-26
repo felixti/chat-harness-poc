@@ -20,6 +20,7 @@ import { fmtBrl, fmtUsd, type Spend } from "./cost";
 import { Logo, LogoMark } from "./Logo";
 import { ProjectView } from "./ProjectView";
 import { ShareDialog, SharedPage } from "./Share";
+import { RunCard, TasksView } from "./Tasks";
 
 const STARTERS = [
 	{ title: "Montar uma apresentação", hint: "Deck no padrão da empresa, com gráficos e fontes", text: "Crie uma apresentação de 8 slides para a diretoria sobre " },
@@ -37,6 +38,8 @@ export function App() {
 	const [project, setProject] = useState<string>();
 	// Share links (H72): the link being viewed (#s/<id>) and the open "Compartilhar" dialog.
 	const [shared, setShared] = useState<string>();
+	// "Tarefas" page (#t): scheduled tasks and the cost of each run (H68, H69).
+	const [tasks, setTasks] = useState(false);
 	const [sharing, setSharing] = useState<{ canvas?: string; title?: string }>();
 	const [conv, setConv] = useState<string>();
 	const convRef = useRef<string | undefined>(undefined);
@@ -138,7 +141,8 @@ export function App() {
 		if (relogin?.draft) setSeed({ text: relogin.draft, n: Date.now() });
 		const c = location.hash.slice(1) || after?.conv || relogin?.conv;
 		// A new conversation that only had attachments does not exist on the server yet: keep its id.
-		if (c?.startsWith("p/")) openProject(c.slice(2));
+		if (c === "t") openTasks();
+		else if (c?.startsWith("p/")) openProject(c.slice(2));
 		else if (c?.startsWith("s/")) setShared(c.slice(2));
 		else if (c) void open(c, () => (pendingConv.current = c));
 		if (after?.picker && p.get("status") === "ok") {
@@ -168,6 +172,7 @@ export function App() {
 			setTitle(d.title);
 			setProject(d.projectId);
 			setShared(undefined);
+			setTasks(false);
 			const msgs = d.messages;
 			const lastA = msgs.map((m) => m.role).lastIndexOf("assistant");
 			if (d.interrupts?.length && lastA >= 0 && msgs[lastA].role === "assistant") {
@@ -221,10 +226,17 @@ export function App() {
 		}
 	}
 
+	function openTasks() {
+		startNew();
+		setTasks(true);
+		history.replaceState(null, "", "#t");
+	}
+
 	function startNew() {
 		abort.current?.abort();
 		setProject(undefined);
 		setShared(undefined);
+		setTasks(false);
 		setCanvas(undefined);
 		setConv(undefined);
 		setTitle("");
@@ -558,6 +570,8 @@ export function App() {
 				onOpenProject={openProject}
 				onNewProject={() => void newProject()}
 				onMove={(id, pid) => void moveConv(id, pid)}
+				tasksOpen={tasks}
+				onTasks={openTasks}
 				onDrawer={(t) => {
 					setCanvas(undefined);
 					setDrawer((d) => (d === t ? undefined : t));
@@ -610,7 +624,9 @@ export function App() {
 						</div>
 					</div>
 				)}
-				{shared ? (
+				{tasks ? (
+					<TasksView onOpen={(id) => void open(id)} notify={notify} />
+				) : shared ? (
 					<SharedPage id={shared} onClose={startNew} />
 				) : empty && project && !busy ? (
 					<ProjectView
@@ -688,6 +704,7 @@ export function App() {
 								)}
 							</div>
 						</div>
+						{conv && <RunCard conv={conv} busy={busy} onFinished={() => void open(conv)} notify={notify} />}
 						{composer}
 					</>
 				)}
