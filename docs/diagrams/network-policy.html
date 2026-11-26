@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Harness · Network policy</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--paper:#f8f8f7;--paper-2:#efefed;--ink:#141413;--muted:#4a4a47;--soft:#5f5f5b;--rule:rgba(20,20,19,.12);--accent:#1d5fd1;--link:#0f766e;--sans:'Geist',system-ui,sans-serif;--serif:'Instrument Serif',serif;--mono:'Geist Mono',ui-monospace,monospace}
+    body{min-height:100vh;padding:3rem 2rem;background:var(--paper);color:var(--ink);font-family:var(--sans)}
+    .container{max-width:1360px;margin:0 auto}.header{margin-bottom:2.5rem}
+    .header-eyebrow,.card .eyebrow{color:var(--muted);font-family:var(--mono);font-weight:500;letter-spacing:.18em;text-transform:uppercase}
+    .header-eyebrow{margin-bottom:.75rem;font-size:.66rem}
+    h1{margin-bottom:.5rem;font:400 clamp(1.75rem,3vw + 1rem,2.5rem)/1.1 var(--serif);letter-spacing:-.02em}
+    .subtitle{max-width:68ch;color:var(--muted);font-size:1rem;line-height:1.55}
+    .diagram-container{width:100%;overflow-x:auto;padding:1.5rem;background:var(--paper-2);border:1px solid var(--rule);border-radius:8px}
+    svg{display:block;width:100%;min-width:1248px}
+    @media print{.diagram-container{overflow-x:visible}svg{min-width:0}}
+    svg .component-head,svg .component{fill:#fff;stroke:rgba(20,20,19,.12);stroke-width:.8}
+    svg .role{fill:#141413}
+    svg .head-name,svg .component-name,svg .role-name,svg .value{font-family:'Geist',sans-serif}
+    svg .head-name,svg .component-name,svg .role-name{font-size:11px;font-weight:600}
+    svg .head-name,svg .component-name{fill:#141413}
+    svg .role-name,svg .role-code{fill:#f8f8f7}
+    svg .head-sub,svg .role-code,svg .hint,svg .legend-text,svg .focal-sub{font-family:'Geist Mono',monospace}
+    svg .head-sub,svg .hint,svg .legend-text{fill:#4a4a47}
+    svg .head-sub,svg .role-code,svg .hint{font-size:9px}
+    svg .role-code{opacity:.85}
+    svg .cell{stroke:rgba(20,20,19,.12);stroke-width:.6}
+    svg .full{fill:rgba(20,20,19,.08)}svg .read{fill:#ffffff}svg .none{fill:#f8f8f7}
+    svg .value{font-size:10px}
+    svg .value.full-text{fill:#141413;font-weight:600}svg .value.read-text{fill:#4a4a47}svg .value.none-text{fill:#5f5f5b}
+    svg .focal{fill:rgba(29,95,209,.07);stroke:#1d5fd1;stroke-width:1.4}
+    svg .focal-text{fill:#1d5fd1;font-weight:600}svg .focal-sub{fill:#1d5fd1;font-size:8px;opacity:.85}
+    svg .legend-text{font-size:9px}
+    .cards{display:grid;grid-template-columns:1.1fr 1fr .9fr;gap:1rem;margin-top:1.5rem}
+    @media(max-width:820px){body{padding:2rem 1rem}.cards{grid-template-columns:1fr}}
+    .card{padding:1.25rem;background:#fff;border:1px solid var(--rule);border-radius:6px}
+    .card .eyebrow{margin-bottom:.5rem;font-size:.5rem}
+    .card-header{display:flex;align-items:center;gap:.6rem;margin-bottom:.875rem;padding-bottom:.875rem;border-bottom:1px solid rgba(20,20,19,.08)}
+    .card-dot{width:7px;height:7px;flex:0 0 auto;border-radius:50%}.card-dot.coral{background:var(--accent)}.card-dot.ink{background:var(--ink)}.card-dot.muted{background:var(--muted)}
+    .card h2{font-size:.875rem;font-weight:600}
+    .card p,.card ul{color:var(--muted);font-size:.8125rem;line-height:1.55;list-style:none}
+    .card li{position:relative;margin-bottom:.3rem;padding-left:.875rem}.card li::before{content:'—';position:absolute;left:0;color:rgba(20,20,19,.25)}
+    .card code{font-family:var(--mono);font-size:.75rem}
+    .footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-top:2rem;padding-top:1.5rem;color:var(--soft);border-top:1px solid rgba(20,20,19,.10);font:400 .72rem/1.4 var(--mono);letter-spacing:.06em}
+    .footer a{color:var(--link)}
+  </style>
+</head>
+<body><main class="container">
+  <header class="header">
+    <p class="header-eyebrow">Network policy · Chat Harness PoC</p>
+    <h1>Who may open a connection to whom</h1>
+    <p class="subtitle">Namespace <code>chat</code> starts from default-deny for ingress and egress. Each row is a pod that opens a connection; each column is a destination and its port. Every allowed cell is one rule in <code>deploy/networkpolicy.yaml</code>; every pod may also reach kube-dns on port 53.</p>
+  </header>
+  <div class="diagram-container">
+  <svg viewBox="0 0 1248 520" role="img" aria-labelledby="network-policy-title network-policy-desc" xmlns="http://www.w3.org/2000/svg">
+    <title id="network-policy-title">Chat Harness network policy matrix</title>
+    <desc id="network-policy-desc">Matrix of allowed connections in the chat namespace: only Envoy reaches chat-api; chat-api and chat-worker reach parser, brave-mcp, FerretDB, the LLM gateway and public HTTPS; the curator reaches FerretDB, the LLM gateway and HTTPS; FerretDB alone reaches chat-pg; parser and chat-pg open no connections.</desc>
+<rect width="1248" height="520" fill="#f8f8f7"/>
+<rect class="component-head" x="12" y="72" width="208" height="52" rx="6"/><text class="head-name" x="116" y="96" text-anchor="middle">Source pod</text><text class="head-sub" x="116" y="112" text-anchor="middle">opens a connection to</text>
+<rect class="role" x="232" y="72" width="148" height="52" rx="6"/><text class="role-name" x="306" y="92" text-anchor="middle">chat-api</text><text class="role-code" x="306" y="108" text-anchor="middle">:8080 · ingress</text>
+<rect class="role" x="396" y="72" width="148" height="52" rx="6"/><text class="role-name" x="470" y="92" text-anchor="middle">parser · brave-mcp</text><text class="role-code" x="470" y="108" text-anchor="middle">:8080</text>
+<rect class="role" x="560" y="72" width="148" height="52" rx="6"/><text class="role-name" x="634" y="92" text-anchor="middle">FerretDB</text><text class="role-code" x="634" y="108" text-anchor="middle">:27017</text>
+<rect class="role" x="724" y="72" width="148" height="52" rx="6"/><text class="role-name" x="798" y="92" text-anchor="middle">chat-pg</text><text class="role-code" x="798" y="108" text-anchor="middle">:5432</text>
+<rect class="role" x="888" y="72" width="148" height="52" rx="6"/><text class="role-name" x="962" y="92" text-anchor="middle">LLM gateway</text><text class="role-code" x="962" y="108" text-anchor="middle">:10080 · egw ns</text>
+<rect class="role" x="1052" y="72" width="148" height="52" rx="6"/><text class="role-name" x="1126" y="92" text-anchor="middle">Internet</text><text class="role-code" x="1126" y="108" text-anchor="middle">:443 · public IPs</text>
+<rect class="component" x="12" y="140" width="208" height="36" rx="4"/><text class="component-name" x="24" y="162">Envoy public</text><text class="hint" x="208" y="162" text-anchor="end">other ns</text>
+<rect class="focal" x="232" y="140" width="148" height="36" rx="4"/><text class="value focal-text" x="306" y="158" text-anchor="middle">Allow</text><text class="focal-sub" x="306" y="170" text-anchor="middle">the only way in</text>
+<rect class="cell none" x="396" y="140" width="148" height="36" rx="4"/><text class="value none-text" x="470" y="162" text-anchor="middle">Deny</text>
+<rect class="cell none" x="560" y="140" width="148" height="36" rx="4"/><text class="value none-text" x="634" y="162" text-anchor="middle">Deny</text>
+<rect class="cell none" x="724" y="140" width="148" height="36" rx="4"/><text class="value none-text" x="798" y="162" text-anchor="middle">Deny</text>
+<rect class="cell none" x="888" y="140" width="148" height="36" rx="4"/><text class="value none-text" x="962" y="162" text-anchor="middle">n/a</text>
+<rect class="cell none" x="1052" y="140" width="148" height="36" rx="4"/><text class="value none-text" x="1126" y="162" text-anchor="middle">n/a</text>
+<rect class="component" x="12" y="180" width="208" height="36" rx="4"/><text class="component-name" x="24" y="202">chat-api</text><text class="hint" x="208" y="202" text-anchor="end">Deployment ×2</text>
+<rect class="cell none" x="232" y="180" width="148" height="36" rx="4"/><text class="value none-text" x="306" y="202" text-anchor="middle">Deny</text>
+<rect class="cell full" x="396" y="180" width="148" height="36" rx="4"/><text class="value full-text" x="470" y="202" text-anchor="middle">Allow</text>
+<rect class="cell full" x="560" y="180" width="148" height="36" rx="4"/><text class="value full-text" x="634" y="202" text-anchor="middle">Allow</text>
+<rect class="cell none" x="724" y="180" width="148" height="36" rx="4"/><text class="value none-text" x="798" y="202" text-anchor="middle">Deny</text>
+<rect class="cell full" x="888" y="180" width="148" height="36" rx="4"/><text class="value full-text" x="962" y="202" text-anchor="middle">Allow</text>
+<rect class="cell read" x="1052" y="180" width="148" height="36" rx="4"/><text class="value read-text" x="1126" y="202" text-anchor="middle">443 out</text>
+<rect class="component" x="12" y="220" width="208" height="36" rx="4"/><text class="component-name" x="24" y="242">chat-worker</text><text class="hint" x="208" y="242" text-anchor="end">Deployment</text>
+<rect class="cell none" x="232" y="220" width="148" height="36" rx="4"/><text class="value none-text" x="306" y="242" text-anchor="middle">Deny</text>
+<rect class="cell full" x="396" y="220" width="148" height="36" rx="4"/><text class="value full-text" x="470" y="242" text-anchor="middle">Allow</text>
+<rect class="cell full" x="560" y="220" width="148" height="36" rx="4"/><text class="value full-text" x="634" y="242" text-anchor="middle">Allow</text>
+<rect class="cell none" x="724" y="220" width="148" height="36" rx="4"/><text class="value none-text" x="798" y="242" text-anchor="middle">Deny</text>
+<rect class="cell full" x="888" y="220" width="148" height="36" rx="4"/><text class="value full-text" x="962" y="242" text-anchor="middle">Allow</text>
+<rect class="cell read" x="1052" y="220" width="148" height="36" rx="4"/><text class="value read-text" x="1126" y="242" text-anchor="middle">443 out</text>
+<rect class="component" x="12" y="260" width="208" height="36" rx="4"/><text class="component-name" x="24" y="282">memory-curator</text><text class="hint" x="208" y="282" text-anchor="end">CronJob</text>
+<rect class="cell none" x="232" y="260" width="148" height="36" rx="4"/><text class="value none-text" x="306" y="282" text-anchor="middle">Deny</text>
+<rect class="cell none" x="396" y="260" width="148" height="36" rx="4"/><text class="value none-text" x="470" y="282" text-anchor="middle">Deny</text>
+<rect class="cell full" x="560" y="260" width="148" height="36" rx="4"/><text class="value full-text" x="634" y="282" text-anchor="middle">Allow</text>
+<rect class="cell none" x="724" y="260" width="148" height="36" rx="4"/><text class="value none-text" x="798" y="282" text-anchor="middle">Deny</text>
+<rect class="cell full" x="888" y="260" width="148" height="36" rx="4"/><text class="value full-text" x="962" y="282" text-anchor="middle">Allow</text>
+<rect class="cell read" x="1052" y="260" width="148" height="36" rx="4"/><text class="value read-text" x="1126" y="282" text-anchor="middle">443 out</text>
+<rect class="component" x="12" y="300" width="208" height="36" rx="4"/><text class="component-name" x="24" y="322">brave-mcp</text><text class="hint" x="208" y="322" text-anchor="end">Brave key</text>
+<rect class="cell none" x="232" y="300" width="148" height="36" rx="4"/><text class="value none-text" x="306" y="322" text-anchor="middle">Deny</text>
+<rect class="cell none" x="396" y="300" width="148" height="36" rx="4"/><text class="value none-text" x="470" y="322" text-anchor="middle">Deny</text>
+<rect class="cell none" x="560" y="300" width="148" height="36" rx="4"/><text class="value none-text" x="634" y="322" text-anchor="middle">Deny</text>
+<rect class="cell none" x="724" y="300" width="148" height="36" rx="4"/><text class="value none-text" x="798" y="322" text-anchor="middle">Deny</text>
+<rect class="cell none" x="888" y="300" width="148" height="36" rx="4"/><text class="value none-text" x="962" y="322" text-anchor="middle">Deny</text>
+<rect class="cell read" x="1052" y="300" width="148" height="36" rx="4"/><text class="value read-text" x="1126" y="322" text-anchor="middle">443 out</text>
+<rect class="component" x="12" y="340" width="208" height="36" rx="4"/><text class="component-name" x="24" y="362">FerretDB</text><text class="hint" x="208" y="362" text-anchor="end">Mongo wire</text>
+<rect class="cell none" x="232" y="340" width="148" height="36" rx="4"/><text class="value none-text" x="306" y="362" text-anchor="middle">Deny</text>
+<rect class="cell none" x="396" y="340" width="148" height="36" rx="4"/><text class="value none-text" x="470" y="362" text-anchor="middle">Deny</text>
+<rect class="cell none" x="560" y="340" width="148" height="36" rx="4"/><text class="value none-text" x="634" y="362" text-anchor="middle">Deny</text>
+<rect class="cell full" x="724" y="340" width="148" height="36" rx="4"/><text class="value full-text" x="798" y="362" text-anchor="middle">Allow</text>
+<rect class="cell none" x="888" y="340" width="148" height="36" rx="4"/><text class="value none-text" x="962" y="362" text-anchor="middle">Deny</text>
+<rect class="cell none" x="1052" y="340" width="148" height="36" rx="4"/><text class="value none-text" x="1126" y="362" text-anchor="middle">Deny</text>
+<rect class="component" x="12" y="380" width="208" height="36" rx="4"/><text class="component-name" x="24" y="402">parser</text><text class="hint" x="208" y="402" text-anchor="end">egress: []</text>
+<rect class="cell none" x="232" y="380" width="148" height="36" rx="4"/><text class="value none-text" x="306" y="402" text-anchor="middle">Deny</text>
+<rect class="cell none" x="396" y="380" width="148" height="36" rx="4"/><text class="value none-text" x="470" y="402" text-anchor="middle">Deny</text>
+<rect class="cell none" x="560" y="380" width="148" height="36" rx="4"/><text class="value none-text" x="634" y="402" text-anchor="middle">Deny</text>
+<rect class="cell none" x="724" y="380" width="148" height="36" rx="4"/><text class="value none-text" x="798" y="402" text-anchor="middle">Deny</text>
+<rect class="cell none" x="888" y="380" width="148" height="36" rx="4"/><text class="value none-text" x="962" y="402" text-anchor="middle">Deny</text>
+<rect class="cell none" x="1052" y="380" width="148" height="36" rx="4"/><text class="value none-text" x="1126" y="402" text-anchor="middle">Deny</text>
+<rect class="component" x="12" y="420" width="208" height="36" rx="4"/><text class="component-name" x="24" y="442">chat-pg</text><text class="hint" x="208" y="442" text-anchor="end">egress: []</text>
+<rect class="cell none" x="232" y="420" width="148" height="36" rx="4"/><text class="value none-text" x="306" y="442" text-anchor="middle">Deny</text>
+<rect class="cell none" x="396" y="420" width="148" height="36" rx="4"/><text class="value none-text" x="470" y="442" text-anchor="middle">Deny</text>
+<rect class="cell none" x="560" y="420" width="148" height="36" rx="4"/><text class="value none-text" x="634" y="442" text-anchor="middle">Deny</text>
+<rect class="cell none" x="724" y="420" width="148" height="36" rx="4"/><text class="value none-text" x="798" y="442" text-anchor="middle">Deny</text>
+<rect class="cell none" x="888" y="420" width="148" height="36" rx="4"/><text class="value none-text" x="962" y="442" text-anchor="middle">Deny</text>
+<rect class="cell none" x="1052" y="420" width="148" height="36" rx="4"/><text class="value none-text" x="1126" y="442" text-anchor="middle">Deny</text>
+<line x1="12" y1="476" x2="1236" y2="476" stroke="rgba(20,20,19,.12)" stroke-width=".8"/><text class="legend-text" x="12" y="500" letter-spacing=".14em">LEGEND</text>
+<rect class="cell full" x="96" y="488" width="16" height="12" rx="2"/><text class="legend-text" x="120" y="500">Allowed in the cluster</text>
+<rect class="cell read" x="272" y="488" width="16" height="12" rx="2"/><text class="legend-text" x="296" y="500">443 out to public IPs (RFC1918 excluded)</text>
+<rect class="cell none" x="548" y="488" width="16" height="12" rx="2"/><text class="legend-text" x="572" y="500">Denied by default-deny, or not governed here (n/a)</text>
+<rect class="focal" x="880" y="488" width="16" height="12" rx="2"/><text class="legend-text" x="904" y="500">Ingress: Envoy public only</text>
+  </svg>
+  </div>
+  <section class="cards" aria-label="Policy notes">
+    <article class="card"><p class="eyebrow">The headline</p><div class="card-header"><span class="card-dot coral"></span><h2>Envoy is the only way in</h2></div><p>chat-api accepts port 8080 only from the public Envoy Gateway pods, which sign the user in with Entra and overwrite <code>x-user-oid</code> from the token. No other pod, and nothing outside the cluster, can call chat-api directly. chat-worker has no ingress at all.</p></article>
+    <article class="card"><div class="card-header"><span class="card-dot ink"></span><h2>Pods that never call out</h2></div><ul><li>parser converts documents with <code>egress: []</code>: a hostile file cannot reach the network.</li><li>chat-pg answers only FerretDB on 5432 and opens nothing.</li><li>Only brave-mcp holds the Brave key; the chat reaches it over MCP.</li></ul></article>
+    <article class="card"><div class="card-header"><span class="card-dot muted"></span><h2>443 out, public IPs only</h2></div><p>HTTPS egress is <code>0.0.0.0/0</code> minus 10/8, 172.16/12, 192.168/16 and 169.254/16: Blob (service endpoint), Entra, OpenRouter through the gateway, CrawlForge and per-user connectors. Model calls go through the LLM gateway on 10080, which injects the key.</p></article>
+  </section>
+  <footer class="footer"><span>chat-harness-poc · deploy/networkpolicy.yaml · 2026-11-25</span><span>overview: <a href="architecture-overview.html">architecture-overview.html</a></span></footer>
+</main></body>
+</html>
