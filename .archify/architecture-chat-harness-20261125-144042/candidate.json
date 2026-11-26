@@ -12,7 +12,7 @@
       "url": "https://github.com/felixti/chat-harness-poc.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "3cbcc189a31da7c7fe95df93216b11e6440fed80"
+      "revision": "fd1e3b110520765e12ece5e4de4c11776256e0ff"
     },
     "views": [
       {
@@ -40,7 +40,8 @@
           "chat_pg",
           "curator",
           "envoy",
-          "llm_gw"
+          "llm_gw",
+          "worker"
         ],
         "note": "Only Envoy public reaches chat-api; parser and chat-pg have no egress; 443 out only to public IPs"
       },
@@ -54,21 +55,25 @@
           "chat_api",
           "ferret",
           "chat_pg",
-          "curator"
+          "curator",
+          "worker"
         ],
         "note": "Blob is the source of truth; FerretDB holds history and usage; Key Vault → ESO → files"
       },
       {
         "id": "tools",
-        "label": "Tools and MCP",
+        "label": "Tools, MCP and background runs",
         "focus": [
           "chat_api",
           "parser",
           "brave_mcp",
           "brave_api",
-          "remote_mcp"
+          "remote_mcp",
+          "worker",
+          "ferret",
+          "llm_gw"
         ],
-        "note": "In-process tools plus parser, brave-mcp and remote MCP with sealed per-user tokens"
+        "note": "In-process tools, parser, brave-mcp and remote MCP; tasks and research run in chat-worker under a cost cap per run"
       },
       {
         "id": "delivery",
@@ -378,7 +383,7 @@
       "id": "ferret",
       "type": "database",
       "label": "FerretDB 2.7",
-      "sublabel": "Mongo wire · chats · projects · usage",
+      "sublabel": "Mongo wire · chats · jobs · usage",
       "pos": [
         1045,
         590
@@ -621,6 +626,41 @@
           "label": "image tag"
         }
       ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "chat-worker",
+      "sublabel": "jobs · schedules · research",
+      "pos": [
+        1055,
+        494
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "tag": "lease",
+      "sources": [
+        {
+          "path": "deploy/chat-worker.yaml",
+          "line": 5,
+          "end_line": 60,
+          "label": "Deployment, same image"
+        },
+        {
+          "path": "apps/chat-api/src/jobs.ts",
+          "line": 403,
+          "end_line": 411,
+          "label": "claim: findOneAndUpdate"
+        },
+        {
+          "path": "apps/chat-api/src/job-runner.ts",
+          "line": 1,
+          "end_line": 40,
+          "label": "cap per runId"
+        }
+      ]
     }
   ],
   "boundaries": [
@@ -641,7 +681,8 @@
         "ferret",
         "chat_pg",
         "curator",
-        "llm_gw"
+        "llm_gw",
+        "worker"
       ],
       "pad": 26
     },
@@ -660,7 +701,8 @@
         "ferret",
         "chat_pg",
         "curator",
-        "llm_gw"
+        "llm_gw",
+        "worker"
       ],
       "pad": 18
     },
@@ -673,7 +715,8 @@
         "brave_mcp",
         "ferret",
         "chat_pg",
-        "curator"
+        "curator",
+        "worker"
       ],
       "pad": 14
     }
@@ -798,6 +841,16 @@
       "to": "chat_api",
       "label": "sync",
       "variant": "dashed"
+    },
+    {
+      "from": "worker",
+      "to": "ferret",
+      "label": "lease :27017"
+    },
+    {
+      "from": "worker",
+      "to": "llm_gw",
+      "label": ":10080 runId"
     }
   ],
   "cards": [
@@ -849,6 +902,16 @@
         "Projects (shared instructions + read-only files) and share links (frozen copies); memory: core, episodic, graph, skills",
         "Connectors: OAuth + PKCE (GitHub, Azure DevOps, Microsoft Graph)",
         "Gate: approvals + loop breaker; cost ledger in BRL"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Background runs (tasks, research)",
+      "items": [
+        "Every 30 s: due schedule → compare-and-set nextRunAt → one job",
+        "Claim with findOneAndUpdate; lease 90 s, renewed 20 s; lost lease → resumed",
+        "Same turn as the chat; cost per runId live, stops at the cap",
+        "Research: reader per sub-question → writer → checker → post"
       ]
     }
   ]
